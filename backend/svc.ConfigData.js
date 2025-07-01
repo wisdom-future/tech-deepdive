@@ -1,14 +1,6 @@
-// ==================================================================================================
+// =======================================================================
 //  【最终完整版】ConfigDataService - 请替换 backend/svc.ConfigData.gs 的全部内容
-// ==================================================================================================
-
-/** @global CONFIG */
-/** @global DataService */
-/** @global DateUtils */
-/** @global logDebug */
-/** @global logInfo */
-/** @global logWarning */
-/** @global logError */
+// =======================================================================
 
 /**
  * @file 配置数据服务，负责从Config_DB中读取各种配置信息。
@@ -22,12 +14,17 @@ const ConfigDataService = {
    * @returns {string | any} - 如果是Date对象，返回格式化后的字符串；否则返回原值。
    */
   _formatDateToString: function(dateValue) {
-    return DateUtils.formatDate(dateValue); // Use centralized DateUtils
+    if (dateValue instanceof Date) {
+      // toISOString() 返回 "YYYY-MM-DDTHH:mm:ss.sssZ"
+      // .split('T')[0] 取出 "YYYY-MM-DD" 部分
+      return dateValue.toISOString().split('T')[0];
+    }
+    return dateValue; // 如果不是Date对象，直接返回原值
   },
 
-  //==========================================
+  //================================================
   // 统计函数 (STATS)
-  //==========================================
+  //================================================
 
   getTechnologyDomainStats() {
     try {
@@ -36,7 +33,6 @@ const ConfigDataService = {
       const active = techRegistry.filter(item => String(item.monitoring_status || '').toLowerCase() === 'active').length;
       return { total, active };
     } catch (e) {
-      logError(`[ConfigDataService] 获取技术领域统计失败: ${e.message}\n${e.stack}`);
       throw new Error(`获取技术领域统计失败: ${e.message}`);
     }
   },
@@ -51,7 +47,6 @@ const ConfigDataService = {
       }).length;
       return { total, focus };
     } catch (e) {
-      logError(`[ConfigDataService] 获取业界标杆统计失败: ${e.message}\n${e.stack}`);
       throw new Error(`获取业界标杆统计失败: ${e.message}`);
     }
   },
@@ -63,15 +58,13 @@ const ConfigDataService = {
       const monitoring = conferenceRegistry.filter(item => String(item.monitoring_status || '').toLowerCase() === 'active').length;
       return { total, monitoring };
     } catch (e) {
-      logError(`[ConfigDataService] 获取学术顶会统计失败: ${e.message}\n${e.stack}`);
       throw new Error(`获取学术顶会统计失败: ${e.message}`);
     }
   },
 
-
-//==========================================
+  //================================================
   // 详情获取函数 (DETAILS)
-  //==========================================
+  //================================================
   getTechnologyDomainDetails() {
     try {
       const rawData = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
@@ -87,7 +80,7 @@ const ConfigDataService = {
       }));
     } catch (e) {
       const errorMessage = `获取技术领域详情时发生服务器错误: ${e.message}`;
-      logError(errorMessage + `\n${e.stack}`);
+      Logger.log(errorMessage + `\n${e.stack}`);
       throw new Error(errorMessage);
     }
   },
@@ -112,7 +105,7 @@ const ConfigDataService = {
       }));
     } catch (e) {
       const errorMessage = `获取业界标杆详情时发生服务器错误: ${e.message}`;
-      logError(errorMessage + `\n${e.stack}`);
+      Logger.log(errorMessage + `\n${e.stack}`);
       throw new Error(errorMessage);
     }
   },
@@ -135,43 +128,43 @@ const ConfigDataService = {
       }));
     } catch (e) {
       const errorMessage = `获取学术顶会详情时发生服务器错误: ${e.message}`;
-      logError(errorMessage + `\n${e.stack}`);
+      Logger.log(errorMessage + `\n${e.stack}`);
       throw new Error(errorMessage);
     }
   }
 };
 
-// ==================================================================================================
+// =======================================================================
 //  测试函数 (保持不变)
-// ==================================================================================================
+// =======================================================================
 
 /**
  * [DEBUG] 统一测试 ConfigDataService 的所有统计函数
  */
 function test_All_ConfigDataService_Stats() {
-  logInfo("====== 开始测试 ConfigDataService (统计) ======");
+  Logger.log("====== 开始测试 ConfigDataService (统计) ======");
   try {
     const techStats = ConfigDataService.getTechnologyDomainStats();
-    logInfo(`✅ 技术领域统计: ${JSON.stringify(techStats)}`);
+    Logger.log(`✅ 技术领域统计: ${JSON.stringify(techStats)}`);
   } catch (e) {
-    logError(`❌ 获取技术领域统计失败: ${e.message}`);
+    Logger.log(`❌ 获取技术领域统计失败: ${e.message}`);
   }
   // ... 其他统计测试
-  logInfo("====== ConfigDataService (统计) 测试结束 ======");
+  Logger.log("====== ConfigDataService (统计) 测试结束 ======");
 }
 
 /**
  * [DEBUG] 统一测试 ConfigDataService 的所有详情函数
  */
 function test_All_ConfigDataService_Details() {
-  logInfo("====== 开始测试 ConfigDataService (详情) ======");
+  Logger.log("====== 开始测试 ConfigDataService (详情) ======");
   try {
     const details = ConfigDataService.getConferenceDetails();
-    logInfo(`✅ 获取到的会议详情数据 (${details.length} 条):`);
-    logInfo(JSON.stringify(details.slice(0, 3), null, 2)); 
+    Logger.log(`✅ 获取到的会议详情数据 (${details.length} 条):`);
+    Logger.log(JSON.stringify(details.slice(0, 3), null, 2)); 
   } catch (e) {
-    logError(`❌ 获取会议详情失败: ${e.message}`);
+    Logger.log(`❌ 获取会议详情失败: ${e.message}`);
   }
   // ... 其他详情测试
-  logInfo("====== ConfigDataService (详情) 测试结束 ======");
+  Logger.log("====== ConfigDataService (详情) 测试结束 ======");
 }

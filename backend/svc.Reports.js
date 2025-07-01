@@ -1,18 +1,5 @@
 // 文件名: backend/svc.Reports.gs
 
-/** @global CONFIG */
-/** @global DataService */
-/** @global DateUtils */
-/** @global Utilities */
-/** @global Session */
-/** @global MailApp */
-/** @global DriveApp */
-/** @global MimeType */
-/** @global logDebug */
-/** @global logInfo */
-/** @global logWarning */
-/** @global logError */
-
 /**
  * @file 报告生成服务
  * 负责根据不同类型和周期生成技术洞察报告。
@@ -37,88 +24,86 @@ const ReportsService = {
    */
   generateReport: function(reportType, reportTitle, periodStartStr, periodEndStr, techAreas, targetAudience, reportOwner, userReportSummary, additionalRecipientEmail, aiOptions = {}) {
     const today = new Date();
-    const periodStart = DateUtils.parseDate(periodStartStr); // Use DateUtils
-    const periodEnd = DateUtils.parseDate(periodEndStr); // Use DateUtils
-    periodEnd.setHours(23, 59, 59, 999); // Ensure end of day
+    const periodStart = new Date(periodStartStr + 'T00:00:00Z');
+    const periodEnd = new Date(periodEndStr + 'T23:59:59Z');
+    const generatedBy = Session.getActiveUser().getEmail() || 'Manual_User'; // 自动化任务将显示脚本拥有者邮箱
+    const outputFormat = 'html'; // 报告将生成HTML格式
+    const reportId = `REPORT_${Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyyMMddHHmmss')}_${reportType.toUpperCase()}`;
 
-    const generatedBy = Session.getActiveUser().getEmail() || 'Manual_User'; // Automation tasks will show script owner's email
-    const outputFormat = 'html'; // Report will be generated in HTML format
-    const reportId = `REPORT_${DateUtils.formatDate(today, true, 'yyyyMMddHHmmss')}_${reportType.toUpperCase()}`;
-
-    logInfo(`[ReportsService] Generating ${reportType} report '${reportTitle}' from ${periodStartStr} to ${periodEndStr} by ${generatedBy}`);
+    Logger.log(`[ReportsService] Generating ${reportType} report '${reportTitle}' from ${periodStartStr} to ${periodEndStr} by ${generatedBy}`);
 
     try {
-      // 1. Aggregate required data based on report type and period, and pass AI options
+      // 1. 根据报告类型和周期，聚合所需数据，并传递AI选项
       const reportData = this._aggregateReportData(reportType, periodStart, periodEnd, techAreas, userReportSummary, aiOptions);
-      logInfo(`[ReportsService] Data aggregated for ${reportType} report.`);
+      Logger.log(`[ReportsService] Data aggregated for ${reportType} report.`);
 
-      // 2. Get email recipient list
+      // 2. 获取邮件接收者列表
       const recipientEmails = this._getReportRecipients(reportType, additionalRecipientEmail);
-      logInfo(`[ReportsService] Recipient emails: ${recipientEmails.join(', ')}`);
+      Logger.log(`[ReportsService] Recipient emails: ${recipientEmails.join(', ')}`);
 
-      // 3. Generate report content (HTML format)
+      // 3. 生成报告内容 (HTML格式)
       const reportContentHtml = this._generateReportContentHtml(reportType, reportTitle, periodStartStr, periodEndStr, reportData, techAreas, targetAudience, reportOwner, userReportSummary);
-      logInfo(`[ReportsService] HTML content generated for ${reportType} report.`);
+      Logger.log(`[ReportsService] HTML content generated for ${reportType} report.`);
 
-      // 4. Save report content to Google Drive
+      // 4. 将报告内容保存到Google Drive
       const reportFileName = this._generateReportFileName(reportTitle, outputFormat);
       const driveFile = this._saveReportToDrive(reportFileName, reportContentHtml, outputFormat);
-      logInfo(`[ReportsService] Report saved to Drive: ${driveFile.getName()}, ID: ${driveFile.getId()}`);
+      Logger.log(`[ReportsService] Report saved to Drive: ${driveFile.getName()}, ID: ${driveFile.getId()}`);
 
-      // 5. Record report generation history
+      // 5. 记录报告生成历史
       const reportMetadata = {
         report_id: reportId,
         report_name: reportTitle,
         report_type: reportType,
-        generation_date: DateUtils.formatDate(today, true), // Use DateUtils
-        report_period_start: DateUtils.formatDate(periodStart), // Use DateUtils
-        report_period_end: DateUtils.formatDate(periodEnd), // Use DateUtils
+        generation_date: Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+        report_period_start: Utilities.formatDate(periodStart, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+        report_period_end: Utilities.formatDate(periodEnd, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
         generated_by: generatedBy,
         drive_file_id: driveFile.getId(),
         download_url: driveFile.getUrl(),
         status: 'Generated',
-        recipients: recipientEmails.join(','), // Record actual emails sent
-        created_timestamp: DateUtils.formatDate(today, true), // Use DateUtils
-        updated_timestamp: DateUtils.formatDate(today, true) // Use DateUtils
+        recipients: recipientEmails.join(', '), // 记录实际发送的邮箱列表
+        created_timestamp: Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+        updated_timestamp: Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
       };
       this._recordReportHistory(reportMetadata);
-      logInfo(`[ReportsService] Report history recorded.`);
+      Logger.log(`[ReportsService] Report history recorded.`);
 
-      // 6. Send email
+      // 6. 发送邮件
       if (recipientEmails.length > 0 && MailApp) {
         try {
           MailApp.sendEmail({
             to: recipientEmails.join(','),
             subject: `[技术洞察报告] ${reportTitle} - ${reportType} (${periodStartStr}至${periodEndStr})`,
             htmlBody: reportContentHtml,
-            name: 'TechInsight AI Engine' // Sender name
+            name: 'TechInsight AI Engine' // 发件人名称
           });
-          logInfo(`[ReportsService] Report email sent to ${recipientEmails.join(', ')}.`);
+          Logger.log(`[ReportsService] Report email sent to ${recipientEmails.join(', ')}.`);
         } catch (mailError) {
-          logError(`[ReportsService] Failed to send email: ${mailError.message}\n${mailError.stack}`);
-          this._updateReportHistoryStatus(reportId, 'Generated_Email_Failed'); // Update status to indicate email failure
+          Logger.log(`[ReportsService] Failed to send email: ${mailError.message}`);
+          this._updateReportHistoryStatus(reportId, 'Generated_Email_Failed'); // 更新状态表示邮件发送失败
         }
       }
 
       return { success: true, message: `Report '${reportTitle}' generated successfully.`, downloadUrl: driveFile.getUrl() };
 
     } catch (e) {
-      logError(`[ReportsService] Error generating ${reportType} report '${reportTitle}': ${e.message}\n${e.stack}`);
-      // Record failed report history
+      Logger.log(`[ReportsService] Error generating ${reportType} report '${reportTitle}': ${e.message}\n${e.stack}`);
+      // 记录失败的报告历史
       const reportMetadata = {
         report_id: reportId,
         report_name: reportTitle,
         report_type: reportType,
-        generation_date: DateUtils.formatDate(today, true), // Use DateUtils
-        report_period_start: DateUtils.formatDate(periodStart), // Use DateUtils
-        report_period_end: DateUtils.formatDate(periodEnd), // Use DateUtils
+        generation_date: Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+        report_period_start: Utilities.formatDate(periodStart, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+        report_period_end: Utilities.formatDate(periodEnd, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
         generated_by: generatedBy,
         drive_file_id: '',
         download_url: '',
         status: 'Failed',
-        recipients: additionalRecipientEmail || userReportSummary, // Record passed email or summary
-        created_timestamp: DateUtils.formatDate(today, true), // Use DateUtils
-        updated_timestamp: DateUtils.formatDate(today, true) // Use DateUtils
+        recipients: additionalRecipientEmail || userReportSummary, // 记录传入的邮箱或摘要
+        created_timestamp: Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'),
+        updated_timestamp: Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
       };
       this._recordReportHistory(reportMetadata);
       throw new Error(`Failed to generate ${reportType} report '${reportTitle}': ${e.message}`);
@@ -126,57 +111,62 @@ const ReportsService = {
   },
 
   /**
-   * 获取所有报告历史记录，支持分页和排序。
-   * @param {number} page - Current page number (1-based).
-   * @param {number} limit - Records per page.
-   * @returns {{records: Array<object>, totalRecords: number}} Report history list and total count.
+   * 获取所有报告历史记录。
+   * @returns {Array<object>} 报告历史记录列表。
    */
-  getReportsHistory: function(page = 1, limit = 15) { // Default page 1, 15 records per page
+    /**
+   * 获取所有报告历史记录，支持分页和排序。
+   * @param {number} page - 当前页码 (从1开始)。
+   * @param {number} limit - 每页记录数。
+   * @returns {{records: Array<object>, totalRecords: number}} 报告历史记录列表及总数。
+   */
+  getReportsHistory: function(page = 1, limit = 15) { // 默认页码1，每页15条
     try {
       const dbId = CONFIG.DATABASE_IDS.OPERATIONS_DB;
       const sheetName = CONFIG.SHEET_NAMES.REPORTS_HISTORY;
       const history = DataService.getDataAsObjects(dbId, sheetName);
 
-      // 1. Format dates and deep copy to avoid modifying original data
+      // 1. 格式化日期并进行深度复制，避免修改原始数据
       const formattedHistory = history.map(record => ({
         report_id: record.report_id,
         report_name: record.report_name,
         report_type: record.report_type,
-        generation_date: DateUtils.formatDate(record.generation_date, true), // Ensure full string with time
-        report_period_start: DateUtils.formatDate(record.report_period_start),
-        report_period_end: DateUtils.formatDate(record.report_period_end),
+        generation_date: this._formatDate(record.generation_date, true), // 确保是包含时间的完整字符串
+        report_period_start: this._formatDate(record.report_period_start),
+        report_period_end: this._formatDate(record.report_period_end),
         generated_by: record.generated_by,
         drive_file_id: record.drive_file_id,
         download_url: record.download_url,
         status: record.status,
         recipients: record.recipients,
-        created_timestamp: DateUtils.formatDate(record.created_timestamp, true),
-        updated_timestamp: DateUtils.formatDate(record.updated_timestamp, true)
+        created_timestamp: this._formatDate(record.created_timestamp, true),
+        updated_timestamp: this._formatDate(record.updated_timestamp, true)
       }));
 
-      // 2. Sort in descending order by generation_date (newest on top)
+      // 2. 按 generation_date 倒序排序 (最新在最上面)
+      // 使用 new Date() 进行可靠的日期比较
       formattedHistory.sort((a, b) => {
-        const dateA = DateUtils.parseDate(a.generation_date); // Use DateUtils
-        const dateB = DateUtils.parseDate(b.generation_date); // Use DateUtils
-        return dateB.getTime() - dateA.getTime(); // Descending order
+        const dateA = new Date(a.generation_date);
+        const dateB = new Date(b.generation_date);
+        return dateB.getTime() - dateA.getTime(); // 倒序
       });
 
-      // 3. Calculate start and end indices for pagination
+      // 3. 计算分页所需的起始和结束索引
       const totalRecords = formattedHistory.length;
       const startIndex = (page - 1) * limit;
       const endIndex = Math.min(startIndex + limit, totalRecords);
 
-      // 4. Get data for the current page
+      // 4. 获取当前页的数据
       const recordsOnPage = formattedHistory.slice(startIndex, endIndex);
 
-      logDebug(`[ReportsService] Fetched reports history: page ${page}, limit ${limit}. Total: ${totalRecords}, Returning: ${recordsOnPage.length}`);
+      Logger.log(`[ReportsService] Fetched reports history: page ${page}, limit ${limit}. Total: ${totalRecords}, Returning: ${recordsOnPage.length}`);
 
       return {
         records: recordsOnPage,
         totalRecords: totalRecords
       };
     } catch (e) {
-      logError(`[ReportsService] Error getting reports history with pagination: ${e.message}\n${e.stack}`);
+      Logger.log(`[ReportsService] Error getting reports history with pagination: ${e.message}\n${e.stack}`);
       throw new Error(`Failed to retrieve reports history with pagination: ${e.message}`);
     }
   },
@@ -186,16 +176,16 @@ const ReportsService = {
    * 用于前端页面初始化时填充技术领域复选框。
    * @returns {Array<string>} 活跃技术名称数组。
    */
-  getAllActiveTechNames: function() { // ✅ New method
+  getAllActiveTechNames: function() { // ✅ 新增此方法
     try {
       const allTechnologies = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
       const activeTechs = allTechnologies
         .filter(t => t.monitoring_status && String(t.monitoring_status).toLowerCase() === 'active')
         .map(t => t.tech_name);
-      logDebug(`[ReportsService] Fetched ${activeTechs.length} active tech names.`);
+      Logger.log(`[ReportsService] Fetched ${activeTechs.length} active tech names.`);
       return activeTechs;
     } catch (e) {
-      logError(`[ReportsService] Error getting all active tech names: ${e.message}\n${e.stack}`);
+      Logger.log(`[ReportsService] Error getting all active tech names: ${e.message}\n${e.stack}`);
       throw new Error(`Failed to retrieve active technology names: ${e.message}`);
     }
   },
@@ -206,24 +196,23 @@ const ReportsService = {
    * @param {string} periodEndStr - 周期结束日期 (YYYY-MM-DD)
    * @returns {Array<string>} 在指定时间范围内有洞察数据的技术名称数组。
    */
-  getTechAreasWithInsightsInPeriod: function(periodStartStr, periodEndStr) { // ✅ New method
+  getTechAreasWithInsightsInPeriod: function(periodStartStr, periodEndStr) { // ✅ 新增此方法
     try {
-      const periodStart = DateUtils.parseDate(periodStartStr); // Use DateUtils
-      const periodEnd = DateUtils.parseDate(periodEndStr); // Use DateUtils
-      periodEnd.setHours(23, 59, 59, 999); // Ensure end of day
+      const periodStart = new Date(periodStartStr + 'T00:00:00Z');
+      const periodEnd = new Date(periodEndStr + 'T23:59:59Z');
 
-      const allInsights = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.INTELLIGENCE_DB, CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER); // ✅ Semantic change
+      const allInsights = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.INTELLIGENCE_DB, CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER); // ✅ 语义修改
       const allTechnologies = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
 
       const techIdsWithInsights = new Set();
       allInsights.forEach(insight => {
-        const insightDate = DateUtils.parseDate(insight.created_timestamp); // Use DateUtils
-        // Ensure date is valid and within range
+        const insightDate = new Date(insight.created_timestamp);
+        // 确保日期有效且在范围内
         if (!isNaN(insightDate.getTime()) && insightDate >= periodStart && insightDate <= periodEnd) {
-          if (insight.tech_id) { // Prefer tech_id for association
+          if (insight.tech_id) { // 优先使用 tech_id 进行关联
             techIdsWithInsights.add(insight.tech_id);
-          } else if (insight.tech_keyword) { // If no tech_id, try tech_keyword
-            // Note: tech_keyword can be multiple, need to split and associate with Technology_Registry
+          } else if (insight.tech_keyword) { // 如果没有 tech_id，尝试使用 tech_keyword
+            // 注意：tech_keyword 可能是多个，需要拆分并与 Technology_Registry 关联
             const insightKeywords = String(insight.tech_keyword).toLowerCase().split(',').map(k => k.trim());
             allTechnologies.forEach(tech => {
                 const techKeywords = String(tech.tech_keywords || '').toLowerCase().split(',').map(k => k.trim());
@@ -239,57 +228,67 @@ const ReportsService = {
         .filter(tech => tech.monitoring_status && String(tech.monitoring_status).toLowerCase() === 'active' && techIdsWithInsights.has(tech.tech_id))
         .map(tech => tech.tech_name);
 
-      logDebug(`[ReportsService] Fetched ${relevantTechNames.length} tech names with insights in period ${periodStartStr} to ${periodEndStr}.`);
+      Logger.log(`[ReportsService] Fetched ${relevantTechNames.length} tech names with insights in period ${periodStartStr} to ${periodEndStr}.`);
       return relevantTechNames;
     } catch (e) {
-      logError(`[ReportsService] Error getting tech areas with insights in period: ${e.message}\n${e.stack}`);
+      Logger.log(`[ReportsService] Error getting tech areas with insights in period: ${e.message}\n${e.stack}`);
       throw new Error(`Failed to retrieve tech areas with insights: ${e.message}`);
     }
   },
 
   /**
-   * Helper function: Format date.
+   * 辅助函数：格式化日期。
    * @param {Date|string} dateValue
    * @param {boolean} includeTime
-   * @returns {string} Formatted date string
+   * @returns {string} 格式化后的日期字符串
    */
   _formatDate: function(dateValue, includeTime = false) {
-    return DateUtils.formatDate(dateValue, includeTime); // Use centralized DateUtils
+    if (!dateValue) return 'N/A';
+    let dateObj;
+    if (dateValue instanceof Date) {
+      dateObj = dateValue;
+    } else {
+      dateObj = new Date(dateValue);
+    }
+    if (isNaN(dateObj.getTime())) return String(dateValue); // Return original if invalid date
+
+    const format = includeTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd';
+    return Utilities.formatDate(dateObj, Session.getScriptTimeZone(), format);
   },
 
   /**
-   * Helper function: Call external AI service to generate text.
-   * @param {string} promptText - Prompt to pass to the AI model.
-   * @param {string} purpose - Purpose of the AI call (e.g., 'summary', 'title_generation', 'key_findings').
-   * @returns {string} AI-generated text.
+   * 辅助函数：调用外部AI服务生成文本。
+   * @param {string} promptText - 传递给AI模型的Prompt。
+   * @param {string} purpose - AI调用的目的 (e.g., 'summary', 'title_generation', 'key_findings').
+   * @returns {string} AI生成的文本。
    */
   _callAI: function(promptText, purpose) {
-    logDebug(`[ReportsService] Calling external AI for purpose: ${purpose}. Prompt snippet: ${promptText.substring(0, Math.min(promptText.length, 100))}...`);
+    Logger.log(`[ReportsService] Calling external AI for purpose: ${purpose}. Prompt snippet: ${promptText.substring(0, Math.min(promptText.length, 100))}...`);
     try {
-      // **IMPORTANT: Store your AI API Key in Apps Script's Project Properties**
-      // Steps: In the Apps Script editor, click the 'Project settings' icon (gear).
-      // Find the 'Script properties' section, click 'Add script property'.
-      // For Key, enter: `OPENAI_API_KEY` (or any name you choose)
-      // For Value, enter: Your actual OpenAI API Key
+      // **重要：请将您的AI API Key存储在Apps Script的Project Properties中**
+      // 步骤：在Apps Script编辑器中，点击左侧的“项目设置”图标（齿轮），
+      // 找到“脚本属性”部分，点击“添加脚本属性”，
+      // 键 (Property) 填写：`OPENAI_API_KEY` (或您选择的任何名称)
+      // 值 (Value) 填写：您的实际 OpenAI API Key
       const OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY'); 
 
       if (!OPENAI_API_KEY) {
-        throw new Error("AI API Key is not configured. Please set it in Apps Script project properties.");
+        throw new Error("AI API Key未配置。请在Apps Script项目属性中设置。");
       }
 
-      // Adjust model and parameters based on AI call purpose
-      let model = "gpt-4o-mini"; // Default to the latest small model
+      // 根据AI调用目的调整模型和参数
+      let model = "gpt-4o-mini"; // 默认使用最新的小模型
       let max_tokens = 500;
       let temperature = 0.7;
 
       if (purpose === 'summary') {
-        max_tokens = 300; // Summaries can be shorter
+        max_tokens = 300; // 摘要可以短一些
       } else if (purpose === 'key_findings' || purpose === 'actionable_recommendations') {
-        max_tokens = 400; // Findings and recommendations might be longer
-        temperature = 0.5; // Less creativity, more factual
+        max_tokens = 400; // 发现和建议可能长一些
+        temperature = 0.5; // 创造性可以低一些，更注重事实
       } else if (purpose === 'title_generation') {
-        max_tokens = 50; // Titles are short
-        temperature = 0.9; // Titles need more creativity
+        max_tokens = 50; // 标题很短
+        temperature = 0.9; // 标题需要更多创造性
       }
 
       const payload = {
@@ -306,7 +305,7 @@ const ReportsService = {
           "Authorization": "Bearer " + OPENAI_API_KEY,
         },
         payload: JSON.stringify(payload),
-        muteHttpExceptions: true // Prevent HTTP errors from throwing exceptions directly
+        muteHttpExceptions: true // 防止HTTP错误直接抛出异常
       };
 
       const response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", options);
@@ -316,50 +315,50 @@ const ReportsService = {
         if (jsonResponse.choices && jsonResponse.choices.length > 0 && jsonResponse.choices[0].message) {
           return jsonResponse.choices[0].message.content.trim();
         } else {
-          logWarning(`[ReportsService] AI API Response Missing Content: ${JSON.stringify(jsonResponse)}`);
+          Logger.log(`AI API Response Missing Content: ${JSON.stringify(jsonResponse)}`);
           return "AI生成失败：响应内容为空。";
         }
       } else {
-        logError(`[ReportsService] AI API Error: ${response.getResponseCode()} - ${JSON.stringify(jsonResponse)}`);
+        Logger.log(`AI API Error: ${response.getResponseCode()} - ${JSON.stringify(jsonResponse)}`);
         return `AI生成失败：API错误 (${response.getResponseCode()})。`;
       }
     } catch (e) {
-      logError(`[ReportsService] _callAI failed: ${e.message}\n${e.stack}`);
+      Logger.log(`[ReportsService] _callAI failed: ${e.message}\n${e.stack}`);
       return `AI生成失败：连接或解析错误 (${e.message})。`;
     }
   },
 
   /**
-   * Generate HTML content for the report based on aggregated data.
-   * Embed more AI-generated content.
+   * 根据聚合数据生成HTML格式的报告内容。
+   * 嵌入更多AI生成的内容。
    * @param {string} reportType
    * @param {string} reportTitle
    * @param {string} periodStartStr
    * @param {string} periodEndStr
-   * @param {object} reportData - Report data object containing all aggregated data and AI-generated content
+   * @param {object} reportData - 包含所有聚合数据和AI生成内容的报告数据对象
    * @param {Array<string>} techAreas
    * @param {string} targetAudience
    * @param {string} reportOwner
-   * @param {string} userReportSummary - User-provided summary
-   * @returns {string} Report content (HTML format)
+   * @param {string} userReportSummary - 用户输入的摘要
+   * @returns {string} 报告内容 (HTML格式)
    */
   _generateReportContentHtml: function(reportType, reportTitle, periodStartStr, periodEndStr, reportData, techAreas, targetAudience, reportOwner, userReportSummary) {
-    // Helper function: Generate star ratings
+    // 辅助函数：生成星级评分
     const _generateStars = (score) => {
       const parsedScore = parseFloat(score);
       if (isNaN(parsedScore)) return '';
-      const fullStars = Math.floor(parsedScore / 2); // Assuming 1-10 points, one star per 2 points
-      const halfStar = parsedScore % 2 >= 1 ? '★' : ''; // Half star if remainder is >= 1
+      const fullStars = Math.floor(parsedScore / 2); // 假设1-10分，每2分一颗星
+      const halfStar = parsedScore % 2 >= 1 ? '★' : ''; // 半颗星，如果余数大于等于1
       const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
       return '★'.repeat(fullStars) + halfStar + '☆'.repeat(emptyStars);
     };
 
     let htmlContent = `
     <!DOCTYPE html>
-    <html lang=\"zh-CN\">
+    <html lang="zh-CN">
     <head>
-        <meta charset=\"UTF-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${reportTitle}</title>
         <style>
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f8f9fa; }
@@ -378,7 +377,7 @@ const ReportsService = {
             .insight-card h3 { color: #007bff; margin-top: 0; margin-bottom: 10px; }
             .insight-card p { margin-bottom: 5px; }
             .insight-card strong { color: #007bff; }
-            .star-rating { color: #FFD700; font-size: 1.2em; } /* Gold stars */
+            .star-rating { color: #FFD700; font-size: 1.2em; } /* 金黄色星星 */
             .footer { padding: 20px 40px; text-align: center; font-size: 0.9em; color: #777; background-color: #f0f0f0; border-top: 1px solid #eee; }
             .disclaimer { margin-top: 20px; font-size: 0.8em; color: #a0a0a0; }
             .metric-box { display: flex; justify-content: space-around; text-align: center; margin-bottom: 20px; }
@@ -388,44 +387,43 @@ const ReportsService = {
         </style>
     </head>
     <body>
-        <div class=\"container\">
-            <div class=\"header\">
+        <div class="container">
+            <div class="header">
                 <h1>${reportTitle}</h1>
                 <p><strong>报告类型:</strong> ${reportType} &nbsp; | &nbsp; <strong>报告周期:</strong> ${periodStartStr} 至 ${periodEndStr}</p>
                 <p><strong>覆盖技术领域:</strong> ${techAreas.length > 0 ? techAreas.join(', ') : '所有领域'} &nbsp; | &nbsp; <strong>目标受众:</strong> ${targetAudience}</p>
                 <p><strong>报告负责人:</strong> ${reportOwner}</p>
             </div>
 
-            <div class=\"section\">
+            <div class="section">
                 <h2>深度洞察 (Executive Summary)</h2>
                 <p>${userReportSummary}</p>
-                ${reportData.aiExecutiveSummary ? `
-                    <p><strong>AI智能摘要:</strong> ${reportData.aiExecutiveSummary}</p>` : ''}
+                ${reportData.aiExecutiveSummary ? `<p><strong>AI智能摘要:</strong> ${reportData.aiExecutiveSummary}</p>` : ''}
             </div>
 
-            <div class=\"section\">
+            <div class="section">
                 <h2>核心数据概览</h2>
-                <div class=\"metric-box\">
+                <div class="metric-box">
                     <div>
-                        <div class=\"value\">${reportData.newSignalCount}</div>
-                        <div class=\"label\">新增线索</div>
+                        <div class="value">${reportData.newSignalCount}</div>
+                        <div class="label">新增线索</div>
                     </div>
                     <div>
-                        <div class=\"value\">${reportData.verifiedInsightCount}</div>
-                        <div class=\"label\">已验证洞察</div>
+                        <div class="value">${reportData.verifiedInsightCount}</div>
+                        <div class="label">已验证洞察</div>
                     </div>
                     <div>
-                        <div class=\"value\">${reportData.completedAnalysisCount}</div>
-                        <div class=\"label\">已完成分析</div>
+                        <div class="value">${reportData.completedAnalysisCount}</div>
+                        <div class="label">已完成分析</div>
                     </div>
                 </div>
             </div>
     `;
 
-    // Dynamically add AI-generated Key Findings
+    // 动态添加AI生成的关键发现
     if (reportData.aiKeyFindings && reportData.aiKeyFindings.length > 0) {
       htmlContent += `
-      <div class=\"section\">
+      <div class="section">
           <h2>关键发现 (Key Findings)</h2>
           <ul>
               ${reportData.aiKeyFindings.map(finding => `<li>${finding}</li>`).join('')}
@@ -434,10 +432,10 @@ const ReportsService = {
       `;
     }
 
-    // Dynamically add AI-generated Actionable Recommendations
+    // 动态添加AI生成的行动建议
     if (reportData.aiActionableRecommendations && reportData.aiActionableRecommendations.length > 0) {
       htmlContent += `
-      <div class=\"section\">
+      <div class="section">
           <h2>行动建议 (Actionable Recommendations)</h2>
           <ul>
               ${reportData.aiActionableRecommendations.map(rec => `<li>${rec}</li>`).join('')}
@@ -446,10 +444,10 @@ const ReportsService = {
       `;
     }
 
-    // Dynamically add AI-generated Trend Analysis (if returned by ReportsService._aggregateReportData)
+    // 动态添加AI生成的趋势分析（如果ReportsService._aggregateReportData返回了）
     if (reportData.aiTrendAnalysis) {
         htmlContent += `
-        <div class=\"section\">
+        <div class="section">
             <h2>趋势分析 (Trend Analysis)</h2>
             <p>${reportData.aiTrendAnalysis}</p>
         </div>
@@ -458,23 +456,23 @@ const ReportsService = {
 
     if (reportData.topHighValueInsights && reportData.topHighValueInsights.length > 0) {
       htmlContent += `
-            <div class=\"section\">
+            <div class="section">
                 <h2>高价值洞察 (Top ${reportData.topHighValueInsights.length})</h2>
       `;
       reportData.topHighValueInsights.forEach((insight, index) => {
         htmlContent += `
-                <div class=\"insight-card\">
+                <div class="insight-card">
                     <h3>${index + 1}. ${insight.title}</h3>
                     <p><strong>来源:</strong> ${insight.trigger_source || '未知'} &nbsp; | &nbsp; <strong>数据类型:</strong> ${insight.data_type || '未知'}</p>
-                    <p><strong>商业价值评分:</strong> ${insight.commercial_value_score || 'N/A'} <span class=\"star-rating\">${_generateStars(insight.commercial_value_score)}</span></p>
-                    <p><strong>信号强度:</strong> ${insight.signal_strength || 'N/A'} <span class=\"star-rating\">${_generateStars(insight.signal_strength)}</span></p>
-                    <p><strong>突破性评分:</strong> ${insight.breakthrough_score || 'N/A'} <span class=\"star-rating\">${_generateStars(insight.breakthrough_score)}</span></p>
+                    <p><strong>商业价值评分:</strong> ${insight.commercial_value_score || 'N/A'} <span class="star-rating">${_generateStars(insight.commercial_value_score)}</span></p>
+                    <p><strong>信号强度:</strong> ${insight.signal_strength || 'N/A'} <span class="star-rating">${_generateStars(insight.signal_strength)}</span></p>
+                    <p><strong>突破性评分:</strong> ${insight.breakthrough_score || 'N/A'} <span class="star-rating">${_generateStars(insight.breakthrough_score)}</span></p>
                     <p><strong>摘要:</strong> ${insight.content_summary || '无'}</p>
                     ${insight.breakthrough_reason ? `<p><strong>突破性分析理由:</strong> ${insight.breakthrough_reason}</p>` : ''}
                     ${insight.value_proposition ? `<p><strong>价值主张:</strong> ${insight.value_proposition}</p>` : ''}
                     ${insight.key_innovations ? `<p><strong>关键创新点:</strong> ${insight.key_innovations}</p>` : ''}
                     ${insight.target_industries ? `<p><strong>目标行业:</strong> ${insight.target_industries}</p>` : ''}
-                    ${insight.source_url ? `<p><strong>原始链接:</strong> <a href=\"${insight.source_url}\" target=\"_blank\">${insight.source_url}</a></p>` : ''}
+                    ${insight.source_url ? `<p><strong>原始链接:</strong> <a href="${insight.source_url}" target="_blank">${insight.source_url}</a></p>` : ''}
                 </div>
         `;
       });
@@ -485,7 +483,7 @@ const ReportsService = {
 
     if (reportData.activeTechDomains && reportData.activeTechDomains.length > 0) {
       htmlContent += `
-            <div class=\"section\">
+            <div class="section">
                 <h2>活跃技术领域 (Top ${reportData.activeTechDomains.length})</h2>
                 <ul>
       `;
@@ -501,11 +499,11 @@ const ReportsService = {
     }
 
     htmlContent += `
-            <div class=\"footer\">
-                <p>报告生成时间: ${DateUtils.formatDate(new Date(), true, 'yyyy年MM月dd日 HH:mm:ss')}</p>
+            <div class="footer">
+                <p>报告生成时间: ${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy年MM月dd日 HH:mm:ss')}</p>
                 <p>系统版本: TechInsight智能洞察决策引擎 v2.0</p>
                 <p>数据来源: 集成多个权威技术数据库，AI自动分析生成</p>
-                <p class=\"disclaimer\">本报告内容仅供内部决策参考，请勿外传</p>
+                <p class="disclaimer">本报告内容仅供内部决策参考，请勿外传</p>
             </div>
         </div>
     </body>
@@ -522,28 +520,28 @@ const ReportsService = {
    * @param {Date} periodStart
    * @param {Date} periodEnd
    * @param {Array<string>} techAreas
-   * @param {string} userReportSummary - User-provided summary, may be overwritten by AI summary
-   * @param {object} aiOptions - AI feature flags {aiSummaryEnabled: boolean, aiKeyFindingsEnabled: boolean, aiRecommendationsEnabled: boolean}
-   * @returns {object} Aggregated data
+   * @param {string} userReportSummary - 用户输入的摘要，可能会被AI摘要覆盖
+   * @param {object} aiOptions - AI功能启用标志 {aiSummaryEnabled: boolean, aiKeyFindingsEnabled: boolean, aiRecommendationsEnabled: boolean}
+   * @returns {object} 聚合后的数据
    */
   _aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, userReportSummary, aiOptions) {
     const data = {
       periodStart: periodStart,
       periodEnd: periodEnd,
       techAreas: techAreas,
-      userReportSummary: userReportSummary, // Original user summary
-      aiExecutiveSummary: '', // Placeholder for AI summary
-      aiKeyFindings: [],     // AI-generated key findings
-      aiActionableRecommendations: [], // AI-generated actionable recommendations
-      aiTrendAnalysis: '', // AI-generated trend analysis
+      userReportSummary: userReportSummary, // 原始用户摘要
+      aiExecutiveSummary: '', // 预留AI摘要字段
+      aiKeyFindings: [],     // AI生成的关键发现
+      aiActionableRecommendations: [], // AI生成的行动建议
+      aiTrendAnalysis: '', // AI生成的趋势分析
     };
 
-    // Example: Get Tech_Insights_Master data
+    // 示例：获取Tech_Insights_Master数据
     const allInsights = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.INTELLIGENCE_DB, CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
     
-    // Filter by time range and technology area
+    // 过滤时间范围和技术领域
     const insightsInPeriod = allInsights.filter(item => {
-      const itemDate = DateUtils.parseDate(item.created_timestamp); 
+      const itemDate = new Date(item.created_timestamp); 
       const isWithinPeriod = itemDate >= periodStart && itemDate <= periodEnd;
       
       const itemTechKeywords = String(item.tech_keyword || '').toLowerCase().split(',').map(k => k.trim());
@@ -557,24 +555,24 @@ const ReportsService = {
     data.verifiedInsightCount = insightsInPeriod.filter(i => String(i.processing_status).includes('evidence_verified')).length;
     data.completedAnalysisCount = insightsInPeriod.filter(i => String(i.processing_status).includes('completed')).length;
 
-    // Example: Get high-value insights (Top 5 by commercial_value_score)
+    // 示例：获取高价值洞察 (Top 5 by commercial_value_score)
     data.topHighValueInsights = insightsInPeriod
       .sort((a, b) => (parseFloat(b.commercial_value_score) || 0) - (parseFloat(a.commercial_value_score) || 0))
       .slice(0, 5);
 
-    // Example: Get active technology domains (from Technology_Registry, calculate relevant insight count)
+    // 示例：获取活跃技术领域 (从Technology_Registry获取，并计算相关洞察数量)
     const allTechnologies = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
     data.activeTechDomains = allTechnologies.filter(t => t.monitoring_status && String(t.monitoring_status).toLowerCase() === 'active' && 
-                                                      (techAreas.length === 0 || techAreas.includes(t.tech_name))) // Only active and within selected tech areas
+                                                      (techAreas.length === 0 || techAreas.includes(t.tech_name))) // 仅活跃且在选定技术领域内
                                          .map(t => {
       const relevantInsights = insightsInPeriod.filter(i => i.tech_id === t.tech_id);
       return {
         tech_name: t.tech_name,
         insight_count: relevantInsights.length,
-        avg_signal_strength: relevantInsights.length > 0 ?
+        avg_signal_strength: relevantInsights.length > 0 ? 
                                 relevantInsights.reduce((sum, i) => sum + (parseFloat(i.signal_strength) || 0), 0) / relevantInsights.length : 0
       };
-    }).sort((a, b) => b.insight_count - a.insight_count).slice(0, 5); // Only take top 5
+    }).sort((a, b) => b.insight_count - a.insight_count).slice(0, 5); // 只取前5个
 
     // **根据aiOptions动态调用AI功能**
     const insightsDataForAI = data.topHighValueInsights.map(i => ({
@@ -600,7 +598,7 @@ const ReportsService = {
       const findingsPrompt = `基于以下数据，请提取3-5条关键技术发现。数据：${JSON.stringify(insightsDataForAI)}`;
       const rawFindings = this._callAI(findingsPrompt, 'key_findings');
       // 尝试解析为列表，如果AI返回的是逗号或分号分隔的文本，可能需要更复杂的解析
-      data.aiKeyFindings = rawFindings.split(/\n|;；]+/).map(s => s.trim()).filter(s => s.length > 0); 
+      data.aiKeyFindings = rawFindings.split(/[\n;；]+/).map(s => s.trim()).filter(s => s.length > 0); 
     }
 
     // AI生成行动建议
@@ -608,7 +606,7 @@ const ReportsService = {
       const recommendationsPrompt = `针对以下关键发现（${data.aiKeyFindings.join('；')}），请提出3-5条具体的行动建议。`;
       const rawRecommendations = this._callAI(recommendationsPrompt, 'actionable_recommendations');
       // 尝试解析为列表
-      data.aiActionableRecommendations = rawRecommendations.split(/\n|;；]+/).map(s => s.trim()).filter(s => s.length > 0);
+      data.aiActionableRecommendations = rawRecommendations.split(/[\n;；]+/).map(s => s.trim()).filter(s => s.length > 0);
     }
 
     // TODO: AI趋势分析可以类似地实现，需要从InsightsService获取周期性趋势数据
@@ -623,27 +621,27 @@ const ReportsService = {
   },
 
   /**
-   * Save report content to Google Drive.
-   * @param {string} fileName - File name (without path)
-   * @param {string} content - Report content
-   * @param {string} format - File format (html)
-   * @returns {GoogleAppsScript.Drive.File} Saved file object
+   * 将报告内容保存到Google Drive。
+   * @param {string} fileName - 文件名 (不含路径)
+   * @param {string} content - 报告内容
+   * @param {string} format - 文件格式 (html)
+   * @returns {GoogleAppsScript.Drive.File} 保存的文件对象
    */
   _saveReportToDrive: function(fileName, content, format) {
-    // ✅ Replaced with your Google Drive report folder ID from Config.gs
-    const parentFolderId = CONFIG.DRIVE_FOLDERS.REPORTS_OUTPUT; 
+    // ✅ 替换为你的Google Drive报告文件夹ID
+    const parentFolderId = '1fkVdmHmnuQnSdzorka0UPw4l6MapKhxo'; // 确保ID正确且大小写一致
     
-    // Check if folder ID is set, or if it's an invalid default placeholder
+    // 检查文件夹ID是否已设置，或是否是无效的默认占位符
     if (!parentFolderId || parentFolderId === 'YOUR_REPORT_FOLDER_ID_IN_DRIVE') {
-        throw new Error("Google Drive 报告文件夹ID未设置。请在 Config.gs 中配置 'DRIVE_FOLDERS.REPORTS_OUTPUT'。");
+        throw new Error("Google Drive 报告文件夹ID未设置。请在 backend/svc.Reports.gs 中配置 'parentFolderId'。");
     }
 
     const parentFolder = DriveApp.getFolderById(parentFolderId);
     
     let file;
-    if (format === 'html') { // Save as HTML file
+    if (format === 'html') { // 保存为HTML文件
       file = parentFolder.createFile(fileName, content, MimeType.HTML);
-    } else { // Default to plain text as a fallback
+    } else { // 默认作为纯文本保存，以防万一
       file = parentFolder.createFile(fileName, content, MimeType.PLAIN_TEXT);
     }
     
@@ -651,21 +649,21 @@ const ReportsService = {
   },
 
   /**
-   * Generate report file name.
-   * @param {string} reportTitle - Report title, used in file name
-   * @param {string} outputFormat - File format (html)
-   * @returns {string} File name
+   * 生成报告的文件名。
+   * @param {string} reportTitle - 报告标题，用于文件名
+   * @param {string} outputFormat - 文件格式 (html)
+   * @returns {string} 文件名
    */
   _generateReportFileName: function(reportTitle, outputFormat) {
-    // Clean special characters from title to ensure valid file name
+    // 清理标题中的特殊字符，确保文件名合法
     const cleanTitle = reportTitle.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5 -]/g, '').trim();
-    const timestamp = DateUtils.formatDate(new Date(), true, 'yyyyMMdd_HHmmss'); // Use DateUtils
+    const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
     return `${cleanTitle}_${timestamp}.${outputFormat}`;
   },
 
   /**
-   * Record report metadata to Reports_History table.
-   * @param {object} metadata - Report metadata object
+   * 将报告元数据记录到 Reports_History 表。
+   * @param {object} metadata - 报告元数据对象
    */
   _recordReportHistory: function(metadata) {
     const dbId = CONFIG.DATABASE_IDS.OPERATIONS_DB; // TechInsight_Operations_DB
@@ -673,12 +671,12 @@ const ReportsService = {
 
     const sheet = SpreadsheetApp.openById(dbId).getSheetByName(sheetName);
     if (!sheet) {
-      logError(`[ReportsService] Error: Sheet "${sheetName}" not found in DB "${dbId}". Report history not recorded.`);
+      Logger.log(`[ReportsService] Error: Sheet "${sheetName}" not found in DB "${dbId}". Report history not recorded.`);
       return;
     }
 
-    // Ensure data is written in the correct column order
-    // Adjust based on the actual column order of Reports_History table
+    // 确保数据按正确的列顺序写入
+    // 根据 Reports_History 表的实际列顺序调整
     sheet.appendRow([
       metadata.report_id,
       metadata.report_name,
@@ -697,71 +695,71 @@ const ReportsService = {
   },
 
   /**
-   * Update report status in Reports_History table.
-   * Used to update email delivery failures etc.
-   * @param {string} reportId - Report ID
-   * @param {string} newStatus - New status
+   * 更新 Reports_History 表中的报告状态。
+   * 用于更新邮件发送失败等情况。
+   * @param {string} reportId - 报告ID
+   * @param {string} newStatus - 新状态
    */
   _updateReportHistoryStatus: function(reportId, newStatus) {
     const dbId = CONFIG.DATABASE_IDS.OPERATIONS_DB;
     const sheetName = CONFIG.SHEET_NAMES.REPORTS_HISTORY;
     const sheet = SpreadsheetApp.openById(dbId).getSheetByName(sheetName);
     if (!sheet) {
-      logError(`[ReportsService] Error: Sheet "${sheetName}" not found for status update.`);
+      Logger.log(`[ReportsService] Error: Sheet "${sheetName}" not found for status update.`);
       return;
     }
 
     const data = sheet.getDataRange().getValues();
-    const headers = data[0]; // Assume first row is English headers
+    const headers = data[0]; // 假设第一行是英文表头
     const statusColIndex = headers.indexOf('status');
     const reportIdColIndex = headers.indexOf('report_id');
 
     if (statusColIndex === -1 || reportIdColIndex === -1) {
-      logError(`[ReportsService] Error: 'status' or 'report_id' column not found in ${sheetName}.`);
+      Logger.log(`[ReportsService] Error: 'status' or 'report_id' column not found in ${sheetName}.`);
       return;
     }
 
-    for (let i = 2; i < data.length; i++) { // Start searching from the third row
+    for (let i = 2; i < data.length; i++) { // 从第三行开始查找数据
       if (data[i][reportIdColIndex] === reportId) {
         sheet.getRange(i + 1, statusColIndex + 1).setValue(newStatus);
-        logDebug(`[ReportsService] Report ${reportId} status updated to ${newStatus}.`);
+        Logger.log(`[ReportsService] Report ${reportId} status updated to ${newStatus}.`);
         return;
       }
     }
-    logWarning(`[ReportsService] Report ${reportId} not found for status update.`);
+    Logger.log(`[ReportsService] Report ${reportId} not found for status update.`);
   },
 
   /**
-   * Get list of report recipients.
-   * @param {string} reportType - Report type (Daily, Weekly, Monthly, Annual, Default)
-   * @param {string} [additionalRecipientEmail] - Additional recipient email, if provided, appended to the list
-   * @returns {Array<string>} List of recipient emails
+   * 获取报告接收者列表。
+   * @param {string} reportType - 报告类型 (Daily, Weekly, Monthly, Annual, Default)
+   * @param {string} [additionalRecipientEmail] - 额外接收者邮箱，如果提供则追加到列表
+   * @returns {Array<string>} 接收者邮箱列表
    */
   _getReportRecipients: function(reportType, additionalRecipientEmail) {
-    const recipients = new Set(); // Use Set for uniqueness
+    const recipients = new Set(); // 使用Set去重
 
     try {
-      const dbId = CONFIG.DATABASE_IDS.CONFIG_DB; // Recipient config in Config_DB
-      const sheetName = CONFIG.SHEET_NAMES.REPORT_RECIPIENTS; // New recipient sheet name
+      const dbId = CONFIG.DATABASE_IDS.CONFIG_DB; // 接收者配置在Config_DB
+      const sheetName = CONFIG.SHEET_NAMES.REPORT_RECIPIENTS; // 新增的接收者表名
 
       const allRecipients = DataService.getDataAsObjects(dbId, sheetName);
 
-      // Add recipients for specific report type and default type
+      // 添加特定报告类型和默认类型的接收者
       allRecipients.forEach(record => {
         if (record.is_active && (String(record.is_active).toLowerCase() === 'true' || record.is_active === true)) {
           if (record.report_type === reportType || record.report_type === 'Default') {
-            if (record.recipient_email && Utilities.validateEmail(record.recipient_email)) { // Validate email format
+            if (record.recipient_email && Utilities.validateEmail(record.recipient_email)) { // 验证邮箱格式
               recipients.add(record.recipient_email.toLowerCase());
             }
           }
         }
       });
     } catch (e) {
-      logError(`[ReportsService] Error fetching recipients from config: ${e.message}`);
-      // If fetching config fails, don't stop, continue with additional email
+      Logger.log(`[ReportsService] Error fetching recipients from config: ${e.message}`);
+      // 如果获取配置失败，不中断，继续使用额外邮箱
     }
 
-    // Add additional recipient email (if provided and valid)
+    // 添加额外接收者邮箱（如果提供且有效）
     if (additionalRecipientEmail && String(additionalRecipientEmail).trim().length > 0) {
       recipients.add(additionalRecipientEmail.toLowerCase());
     }
@@ -769,15 +767,50 @@ const ReportsService = {
     return Array.from(recipients);
   },
 
-  // ✅ Helper function: Call external AI service to generate summary (placeholder)
-  // You need to replace the implementation here to call actual AI API (e.g., OpenAI, Gemini)
-  // This typically involves UrlFetchApp to send HTTP requests to the AI service API endpoint
-  _callAI: function(prompt, purpose) {
-    // This is a simulated implementation; you need to replace it with an actual AI API call
-    // For example, using UrlFetchApp.fetch()
-    logDebug(`[ReportsService] Calling external AI with prompt: ${prompt.substring(0, 100)}...`);
+  /**
+   * 获取所有活跃自动化报告任务的最新运行状态。
+   * @returns {Array<object>} 活跃任务的状态列表。
+   */
+  getScheduledReportsStatus: function() {
     try {
-        // const OPENAI_API_KEY = "sk-proj"; // Store in Apps Script's User Properties for better security
+      const dbId = CONFIG.DATABASE_IDS.CONFIG_DB;
+      const sheetName = CONFIG.SHEET_NAMES.SCHEDULED_REPORTS_CONFIG;
+      const configs = DataService.getDataAsObjects(dbId, sheetName);
+
+      if (!configs || configs.length === 0) {
+        Logger.log("[ReportsService] No scheduled report configurations found.");
+        return [];
+      }
+
+      // 过滤出活跃的任务，并提取关键状态信息
+      const activeTasksStatus = configs.filter(c => String(c.is_active).toLowerCase() === 'true')
+                                       .map(c => ({
+                                           job_id: c.job_id,
+                                           report_type: c.report_type,
+                                           report_title_template: c.report_title_template,
+                                           last_run_timestamp: this._formatDate(c.last_run_timestamp, true), // 包含时间
+                                           last_run_status: c.last_run_status,
+                                           description: c.description // 包含任务描述，用于显示错误详情
+                                       }));
+      
+      Logger.log(`[ReportsService] Fetched ${activeTasksStatus.length} active scheduled report statuses.`);
+      return activeTasksStatus;
+
+    } catch (e) {
+      Logger.log(`[ReportsService] Error getting scheduled reports status: ${e.message}\n${e.stack}`);
+      throw new Error(`Failed to retrieve scheduled reports status: ${e.message}`);
+    }
+  },
+
+  // ✅ 辅助函数：调用外部AI服务生成摘要 (占位符)
+  // 你需要替换这里的实现，调用实际的AI API (如OpenAI, Gemini等)
+  // 这通常涉及到 UrlFetchApp 来发送 HTTP 请求到 AI 服务的 API 端点
+  _callExternalAIForSummary: function(prompt) {
+    // 这是一个模拟实现，你需要替换为实际的AI API调用
+    // 例如，使用 UrlFetchApp.fetch()
+    Logger.log(`[ReportsService] Calling external AI with prompt: ${prompt.substring(0, 100)}...`);
+    try {
+        // const OPENAI_API_KEY = "sk-proj"; // 存储在Apps Script的User Properties中更安全
         // const response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", {
         //     method: "post",
         //     headers: {
@@ -785,23 +818,23 @@ const ReportsService = {
         //         "Content-Type": "application/json",
         //     },
         //     payload: JSON.stringify({
-        //         model: "gpt-3.5-turbo", // Or other models
+        //         model: "gpt-3.5-turbo", // 或其他模型
         //         messages: [{ role: "user", content: prompt }],
         //         max_tokens: 200,
         //         temperature: 0.7,
         //     }),
-        //     muteHttpExceptions: true // Prevent HTTP errors from throwing exceptions directly
+        //     muteHttpExceptions: true // 防止HTTP错误直接抛出异常
         // });
         // const jsonResponse = JSON.parse(response.getContentText());
         // if (response.getResponseCode() === 200) {
         //     return jsonResponse.choices[0].message.content.trim();
         // } else {
-        //     logError(`AI API Error: ${response.getResponseCode()} - ${jsonResponse.error.message}`);
+        //     Logger.log(`AI API Error: ${response.getResponseCode()} - ${jsonResponse.error.message}`);
         //     return "AI摘要生成失败：API错误。";
         // }
-        return "AI智能摘要：本期报告聚焦前沿技术发展，识别出高价值洞察，主要集中在人工智能和智能体领域。建议密切关注智能体互联网和AI驱动威胁检测技术，其商业价值和信号强度均显示出较高潜力。系统整体运行平稳，数据质量良好。"; // Simulate AI summary
+        return "AI智能摘要：本期报告聚焦前沿技术发展，识别出高价值洞察，主要集中在人工智能和智能体领域。建议密切关注智能体互联网和AI驱动威胁检测技术，其商业价值和信号强度均显示出较高潜力。系统整体运行平稳，数据质量良好。"; // 模拟AI摘要
     } catch (e) {
-        logError(`[ReportsService] _callExternalAIForSummary failed: ${e.message}\n${e.stack}`);
+        Logger.log(`[ReportsService] _callExternalAIForSummary failed: ${e.message}`);
         return "AI摘要生成失败：连接或解析错误。";
     }
   }

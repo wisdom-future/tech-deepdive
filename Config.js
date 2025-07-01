@@ -17,14 +17,6 @@ const CONFIG = {
   },
   
   /**
-   * Google Drive中特定文件夹的ID。
-   * 务必将占位符替换为您的真实ID。
-   */
-  DRIVE_FOLDERS: {
-    REPORTS_OUTPUT: '1fkVdmHmnuQnSdzorka0UPw4l6MapKhxo' // 替换为你的报告输出文件夹ID
-  },
-
-  /**
    * 数据库中各个表的标准名称。
    */
   SHEET_NAMES: {
@@ -36,12 +28,12 @@ const CONFIG = {
     SCHEDULED_REPORTS_CONFIG: 'Scheduled_Reports_Config',
 
     // Raw Data DB
-    RAW_ACADEMIC_PAPERS: 'Raw_Academic_Papers', // New
-    RAW_PATENT_DATA: 'Raw_Patent_Data',         // New
-    RAW_OPENSOURCE_DATA: 'Raw_OpenSource_Data', // New
-    RAW_TECH_NEWS: 'Raw_Tech_News',             // New
-    RAW_INDUSTRY_DYNAMICS: 'Raw_Industry_Dynamics', // New
-    RAW_COMPETITOR_INTELLIGENCE: 'Raw_Competitor_Intelligence', // New
+    RAW_ACADEMIC_PAPERS: 'Raw_Academic_Papers', // 新增
+    RAW_PATENT_DATA: 'Raw_Patent_Data',         // 新增
+    RAW_OPENSOURCE_DATA: 'Raw_OpenSource_Data', // 新增
+    RAW_TECH_NEWS: 'Raw_Tech_News',             // 新增
+    RAW_INDUSTRY_DYNAMICS: 'Raw_Industry_Dynamics', // 新增
+    RAW_COMPETITOR_INTELLIGENCE: 'Raw_Competitor_Intelligence', // 新增
     
     // Intelligence DB
     TECH_INSIGHTS_MASTER: 'Tech_Intelligence_Master',
@@ -51,7 +43,7 @@ const CONFIG = {
     WORKFLOW_LOG: 'Workflow_Execution_Log',
     DATA_QUALITY_REPORTS: 'Data_Quality_Reports',
     REPORTS_HISTORY: 'Reports_History'
-    // ... Add other sheet names here
+    // ... 在此添加其他所有表名
   },
   
 
@@ -66,18 +58,9 @@ const CONFIG = {
   },
   
   /**
-   * Current running environment.
-   * 'DEVELOPMENT' mode may output more logs or use test data.
-   * 'PRODUCTION' mode will focus more on performance and error suppression.
+   * 当前运行环境。
+   * 'DEVELOPMENT' 模式下可能会输出更多日志或使用测试数据。
+   * 'PRODUCTION' 模式下会更注重性能和错误抑制。
    */
-  ENV: 'DEVELOPMENT', // Set to 'PRODUCTION' for deployment
-
-  /**
-   * Log level for backend functions. 
-   * 'DEBUG': Most verbose, includes development logs.
-   * 'INFO': Standard operational logs.
-   * 'WARNING': Potential issues.
-   * 'ERROR': Only critical errors.
-   */
-  LOG_LEVEL: 'DEBUG' // Can be 'INFO', 'WARNING', 'ERROR' in PRODUCTION
+  ENV: 'DEVELOPMENT' 
 };

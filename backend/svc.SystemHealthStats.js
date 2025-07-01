@@ -1,13 +1,5 @@
 // 文件名: backend/svc.SystemHealthStats.gs
 
-/** @global CONFIG */
-/** @global DataService */
-/** @global DateUtils */
-/** @global logDebug */
-/** @global logInfo */
-/** @global logWarning */
-/** @global logError */
-
 /**
  * @file 系统健康度统计服务。
  * 负责获取系统运行状态、工作流健康度、数据质量等信息。
@@ -21,31 +13,31 @@ const SystemHealthStatsService = {
    */
   getStats: function() {
     try {
-      // 1. Overall health (example algorithm: average success rate of all core processes in the last 24 hours / or custom health score)
+      // 1. 整体健康度（示例算法：所有核心流程近24小时成功率的均值/或自定义健康分数）
       const logs = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.OPERATIONS_DB, CONFIG.SHEET_NAMES.WORKFLOW_LOG);
-      // Only count logs from the last 24 hours
+      // 只统计最近24小时的日志
       const now = new Date();
       const oneDayAgo = new Date(now.getTime() - 24*60*60*1000);
       const recentLogs = logs.filter(log => {
-        const ts = DateUtils.parseDate(log.end_timestamp || log.start_timestamp || 0); // Use DateUtils
-        return ts && ts >= oneDayAgo;
+        const ts = new Date(log.end_timestamp || log.start_timestamp || 0);
+        return ts >= oneDayAgo;
       });
 
-      // 2. Count metrics
-      let total = recentLogs.length || 1; // Avoid division by zero
+      // 2. 统计各项指标
+      let total = recentLogs.length || 1;
       let completed = recentLogs.filter(log => String(log.execution_status).toLowerCase() === 'completed' || String(log.execution_status).toLowerCase() === 'success').length;
       let failed = recentLogs.filter(log => String(log.execution_status).toLowerCase() === 'failed').length;
       let warning = recentLogs.filter(log => String(log.execution_status).toLowerCase() === 'warning').length;
 
-      // Health score algorithm (you can customize, e.g., success rate * 100, failed/warning reduces score)
+      // 健康度分数算法（你可自定义，比如成功率*100，失败/警告降低分数）
       let overall = Math.round((completed / total) * 100 - failed * 5 - warning * 2);
       if (overall < 0) overall = 0;
       if (overall > 100) overall = 100;
 
-      // Workflow status (success rate)
+      // 工作流状态（成功率）
       let workflow = Math.round((completed / total) * 100);
 
-      // Data quality (can use the latest data quality report table, or ratio of valid data rows / total rows)
+      // 数据质量（可用最近一次的数据质量报告表，或用有效数据行/总行数的比例）
       let dataQuality = 100;
       try {
         const dqReports = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.OPERATIONS_DB, CONFIG.SHEET_NAMES.DATA_QUALITY_REPORTS);
@@ -53,11 +45,9 @@ const SystemHealthStatsService = {
           const latest = dqReports[dqReports.length - 1];
           dataQuality = parseInt(latest.overall_quality_score, 10) || 100;
         }
-      } catch (ex) {
-          logWarning(`[SystemHealthStatsService] Could not retrieve Data Quality Reports: ${ex.message}`);
-      }
+      } catch (ex) {}
 
-      // System alerts (if failed/warning, return alert, otherwise return good)
+      // 系统警报（如有失败/警告则返回警报，否则返回良好）
       let alerts = [];
       if (failed > 0) {
         alerts.push({
@@ -88,34 +78,35 @@ const SystemHealthStatsService = {
         alerts: alerts
       };
     } catch (e) {
-      logError(`[SystemHealthStatsService] SystemHealthStatsService.getStats error: ${e.message}\n${e.stack}`);
+      Logger.log("SystemHealthStatsService.getStats error: " + e.message);
       return { overall: 0, workflow: 0, dataQuality: 0, alerts: [{ type: "error", title: "健康度获取失败", message: e.message }] };
     }
   }
 };
 
-// ==================================================================================
+// ====================================================================
 //  T E S T   C O D E (保持不变)
-// ==================================================================================
+// ====================================================================
 
 /**
  * 测试 SystemHealthStatsService 核心功能。
  */
 function test_SystemHealthStatsService() {
-  logInfo("======== 开始测试 SystemHealthStatsService ========");
+  Logger.log("======== 开始测试 SystemHealthStatsService ========");
   try {
     const stats = SystemHealthStatsService.getStats();
-    logInfo("✅ 成功获取系统健康统计:");
-    logInfo(JSON.stringify(stats, null, 2));
+    Logger.log("✅ 成功获取系统健康统计:");
+    Logger.log(JSON.stringify(stats, null, 2));
     
     if (typeof stats.overall === 'number' && stats.overall >= 0) {
-      logInfo("✅ 统计数据格式正确。");
+      Logger.log("✅ 统计数据格式正确。");
     } else {
-      logInfo("❌ 统计数据格式不正确。");
+      Logger.log("❌ 统计数据格式不正确。");
     }
 
   } catch (e) {
-    logError(`❌ SystemHealthStatsService 测试失败: ${e.message} \n ${e.stack}`);
+    Logger.log(`❌ SystemHealthStatsService 测试失败: ${e.message} \n ${e.stack}`);
   }
-  logInfo("\n======== SystemHealthStatsService 测试结束 ========");
+  Logger.log("\n======== SystemHealthStatsService 测试结束 ========");
 }
+

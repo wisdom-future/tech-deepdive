@@ -1,16 +1,5 @@
 // 文件名: backend/jobs.gs
 
-/** @global CONFIG */
-/** @global DataService */
-/** @global ReportsService */
-/** @global DateUtils */
-/** @global Utilities */
-/** @global Session */
-/** @global logDebug */
-/** @global logInfo */
-/** @global logWarning */
-/** @global logError */
-
 /**
  * @file 自动化报告任务调度器。
  * 负责读取计划任务配置，计算报告周期，并触发报告生成。
@@ -21,7 +10,7 @@
  * 遍历Scheduled_Reports_Config表，触发所有活跃的自动化报告任务。
  */
 function scheduleAllReports() {
-  logInfo("--- 开始执行所有计划报告任务 ---");
+  Logger.log("--- 开始执行所有计划报告任务 ---");
   const scriptProperties = PropertiesService.getScriptProperties(); // 用于获取API Key等
 
   try {
@@ -31,7 +20,7 @@ function scheduleAllReports() {
     );
 
     if (!scheduledConfigs || scheduledConfigs.length === 0) {
-      logInfo("未找到任何计划报告配置。");
+      Logger.log("未找到任何计划报告配置。");
       return;
     }
 
@@ -39,11 +28,11 @@ function scheduleAllReports() {
       // 检查任务是否启用
       const isActive = String(config.is_active).toLowerCase() === 'true';
       if (!isActive) {
-        logDebug(`跳过任务 (未启用): ${config.job_id} - ${config.report_title_template}`);
+        Logger.log(`跳过任务 (未启用): ${config.job_id} - ${config.report_title_template}`);
         return;
       }
 
-      logInfo(`正在处理计划任务: ${config.job_id} - ${config.report_title_template}`);
+      Logger.log(`正在处理计划任务: ${config.job_id} - ${config.report_title_template}`);
       try {
         // 1. 计算报告周期日期
         const { periodStartStr, periodEndStr } = calculatePeriodDates(String(config.schedule_frequency || 'DAILY').toUpperCase());
@@ -81,18 +70,18 @@ function scheduleAllReports() {
 
         // 7. 更新任务的上次运行时间和状态
         updateScheduledReportStatus(config.job_id, 'SUCCESS');
-        logInfo(`✅ 报告任务 '${config.job_id}' 生成成功。`);
+        Logger.log(`✅ 报告任务 '${config.job_id}' 生成成功。`);
 
       } catch (e) {
-        logError(`❌ 报告任务 '${config.job_id}' 生成失败: ${e.message}\n${e.stack}`);
+        Logger.log(`❌ 报告任务 '${config.job_id}' 生成失败: ${e.message}\n${e.stack}`);
         updateScheduledReportStatus(config.job_id, 'FAILED', e.message); // 更新失败状态和错误信息
         // 可以在这里发送错误通知邮件给管理员
       }
     });
   } catch (e) {
-    logError(`❌ 调度器主函数发生严重错误: ${e.message}\n${e.stack}`);
+    Logger.log(`❌ 调度器主函数发生严重错误: ${e.message}\n${e.stack}`);
   }
-  logInfo("--- 计划报告任务执行完毕 ---");
+  Logger.log("--- 计划报告任务执行完毕 ---");
 }
 
 /**
@@ -167,9 +156,17 @@ function calculatePeriodDates(frequency) {
       break;
   }
 
+  // 格式化日期为 YYYY-MM-DD 字符串
+  const formatToYYYYMMDD = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
   return {
-    periodStartStr: DateUtils.formatDate(periodStart),
-    periodEndStr: DateUtils.formatDate(periodEnd)
+    periodStartStr: formatToYYYYMMDD(periodStart),
+    periodEndStr: formatToYYYYMMDD(periodEnd)
   };
 }
 
@@ -216,7 +213,7 @@ function updateScheduledReportStatus(jobId, status, errorMessage = '') {
     const sheet = SpreadsheetApp.openById(dbId).getSheetByName(sheetName);
 
     if (!sheet) {
-      logError(`[jobs] Error: Sheet "${sheetName}" not found for status update.`);
+      Logger.log(`Error: Sheet "${sheetName}" not found for status update.`);
       return;
     }
 
@@ -228,7 +225,7 @@ function updateScheduledReportStatus(jobId, status, errorMessage = '') {
     const descriptionColIndex = headers.indexOf('description'); // 假设description列也可以用于记录简要错误
 
     if (jobIdColIndex === -1 || lastRunTimestampColIndex === -1 || lastRunStatusColIndex === -1) {
-      logError(`[jobs] Error: Required columns not found in ${sheetName} for status update.`);
+      Logger.log(`Error: Required columns not found in ${sheetName} for status update.`);
       return;
     }
 
@@ -238,7 +235,7 @@ function updateScheduledReportStatus(jobId, status, errorMessage = '') {
         const rowValues = rowRange.getValues()[0];
 
         // 更新时间戳和状态
-        rowValues[lastRunTimestampColIndex] = DateUtils.formatDate(new Date(), true); // Use DateUtils
+        rowValues[lastRunTimestampColIndex] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
         rowValues[lastRunStatusColIndex] = status;
 
         // 如果是失败状态，可以在description或专门的错误信息列记录
@@ -247,12 +244,12 @@ function updateScheduledReportStatus(jobId, status, errorMessage = '') {
         }
 
         rowRange.setValues([rowValues]); // 写入更新后的行
-        logDebug(`[jobs] Task '${jobId}' status updated to ${status}.`);
+        Logger.log(`Task '${jobId}' status updated to ${status}.`);
         return;
       }
     }
-    logWarning(`[jobs] Task '${jobId}' not found for status update.`);
+    Logger.log(`Task '${jobId}' not found for status update.`);
   } catch (e) {
-    logError(`[jobs] Error updating scheduled report status for '${jobId}': ${e.message}\n${e.stack}`);
+    Logger.log(`Error updating scheduled report status for '${jobId}': ${e.message}\n${e.stack}`);
   }
 }

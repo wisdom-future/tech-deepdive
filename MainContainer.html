@@ -1,3 +1,5 @@
+<!-- 这是房子的主体框架（The House）。它包含了地基、承重墙、屋顶、水电总管路，以及所有房间的“空房间”结构。 -->
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -36,15 +38,6 @@
           boxShadow: {
             'card': '0 4px 15px rgba(0,0,0,0.08)',
             'card-hover': '0 6px 20px rgba(0,0,0,0.12)',
-          },
-          animation: {
-            spin: 'spin 1s linear infinite', // Ensure spin animation is defined
-          },
-          keyframes: {
-            spin: {
-              '0%': { transform: 'rotate(0deg)' },
-              '100%': { transform: 'rotate(360deg)' },
-            }
           }
         },
       }
@@ -76,7 +69,7 @@
   </style>
   
   <style>
-    /* Global Variables */
+    /* 全局变量 */
     :root {
       --header-height: 80px;
     }
@@ -85,12 +78,12 @@
       line-height: 1.6;
     }
 
-    /* Smooth Scrolling */
+    /* 平滑滚动 */
     html {
       scroll-behavior: smooth;
     }
     
-    /* Skeleton Screen Animation */
+    /* 骨架屏动画 */
     @keyframes shimmer {
       0% { background-position: -1000px 0 }
       100% { background-position: 1000px 0 }
@@ -102,7 +95,7 @@
       animation: shimmer 1.5s infinite linear;
     }
     
-    /* Page Transition Animation */
+    /* 页面切换动画 */
     .page-container {
       opacity: 1;
       transition: opacity 0.3s ease-in-out;
@@ -112,71 +105,19 @@
       opacity: 0;
     }
 
-    /* --- Responsive Table Styling --- */
-    /* Apply to tables that need to be responsive on small screens */
-    @media (max-width: 768px) { /* Adjust breakpoint as needed (e.g., md breakpoint in Tailwind) */
-      .responsive-table,
-      .responsive-table thead,
-      .responsive-table tbody,
-      .responsive-table th,
-      .responsive-table td,
-      .responsive-table tr {
-        display: block;
+    /* ✅ 新增：移动端表格样式 */
+    @media (max-width: 767px) {
+      #detailTable thead { display: none; }
+      #detailTable, #detailTable tbody, #detailTable tr, #detailTable td { display: block; width: 100%; }
+      #detailTable tr { margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.5rem; }
+      #detailTable td {
+        display: flex; justify-content: space-between; text-align: right;
+        padding-left: 50%; position: relative; border: none; padding-bottom: 0.5rem;
       }
-
-      .responsive-table thead tr {
-        position: absolute;
-        top: -9999px; /* Hide table headers (but not display: none;, for accessibility) */
-        left: -9999px;
-      }
-
-      .responsive-table tr {
-        border: 1px solid #e2e8f0; /* Tailwind border-gray-300 */
-        margin-bottom: 1rem; /* Tailwind mb-4 */
-        border-radius: 0.5rem; /* Tailwind rounded-lg */
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* Tailwind shadow-sm */
-        padding: 1rem;
-        background-color: #fff;
-      }
-
-      .responsive-table td {
-        border: none;
-        border-bottom: 1px solid #edf2f7; /* Tailwind border-gray-200 */
-        position: relative;
-        padding-left: 50%; /* Space for the data-label */
-        text-align: right;
-        white-space: normal; /* Allow text to wrap */
-      }
-
-      .responsive-table td:last-child {
-        border-bottom: 0;
-      }
-
-      .responsive-table td::before {
-        position: absolute;
-        top: 0.75rem; /* Padding-top of td */
-        left: 1rem; /* Padding-left of td */
-        width: 45%; /* Space for the label */
-        padding-right: 0.5rem;
-        white-space: nowrap;
-        text-align: left;
-        font-weight: 600; /* Tailwind font-semibold */
-        color: #4a5568; /* Tailwind text-gray-700 */
-        content: attr(data-label); /* Use the data-label attribute for content */
-      }
-    }
-
-    /* --- Modal Optimization for Mobile --- */
-    #detailModal, #historyDetailModal {
-      transition: opacity 0.3s ease-in-out;
-    }
-
-    /* On small screens, make modal almost full screen */
-    @media (max-width: 768px) {
-      #detailModal > div, #historyDetailModal > div {
-        max-width: 95vw; /* Slightly less than full width */
-        max-height: 95vh; /* Slightly less than full height */
-        margin: auto; /* Center it */
+      #detailTable td:before {
+        content: attr(data-label);
+        position: absolute; left: 0.5rem; width: 45%; padding-right: 0.5rem;
+        text-align: left; font-weight: 600; color: #374151;
       }
     }
   </style>
@@ -188,14 +129,10 @@
       <div style="font-size:1em;font-weight:800;">联接NEXT</div>
       <div style="font-size:1em;font-weight:800;">技术洞察智能引擎</div>
     </div>
-    
-    <!-- Hamburger menu button for small screens -->
-    <button id="mobile-menu-button" class="md:hidden text-white text-2xl ml-auto">
+    <button id="hamburger-menu-btn" class="text-white text-2xl p-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-600 md:hidden ml-auto">
       <i class="fa fa-bars"></i>
     </button>
-
-    <!-- Desktop Navigation -->
-    <nav class="hidden md:flex flex-wrap gap-2 md:gap-4">
+    <nav class="flex flex-wrap gap-2 md:gap-4">
       <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="home">
         <i class="fa fa-dashboard mr-2"></i>主仪表板
       </a>
@@ -211,33 +148,10 @@
       <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="reports">
         <i class="fa fa-file-text-o mr-2"></i>报告中心
       </a>
+      <!-- ✅ 新增：系统工作台导航链接 -->
+      <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20" data-page="system"><i class="fa fa-gears mr-2"></i>系统管理</a>
     </nav>
   </header>
-
-  <!-- Mobile Menu Overlay (initially hidden) -->
-  <div id="mobile-menu-overlay" class="fixed inset-0 bg-navDark/95 z-[100] hidden flex-col items-center justify-center p-4">
-    <button id="close-mobile-menu" class="absolute top-4 right-4 text-white text-3xl">
-      &times;
-    </button>
-    <nav class="flex flex-col gap-6 text-center">
-      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="home">
-        <i class="fa fa-dashboard mr-2"></i>主仪表板
-      </a>
-      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="collection">
-        <i class="fa fa-database mr-2"></i>数据采集
-      </a>
-      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="insights">
-        <i class="fa fa-lightbulb-o mr-2"></i>智能分析
-      </a>
-      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="actions">
-        <i class="fa fa-cogs mr-2"></i>决策行动
-      </a>
-      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="reports">
-        <i class="fa fa-file-text-o mr-2"></i>报告中心
-      </a>
-    </nav>
-  </div>
-
 
   <!-- 主内容区域 -->
   <main id="main-content" class="pt-[var(--header-height)] px-4 md:px-6 py-6 max-w-7xl mx-auto">
@@ -294,7 +208,7 @@
           <div class="kpi-main-stats flex items-baseline justify-between mb-4">
             <span class="kpi-value text-3xl font-bold text-primary skeleton" id="insightLeadTotal">--</span>
             <span class="kpi-sub-label text-gray-500">总量</span>
-            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="insightLeadTodayUpdate">今日采集: --</span>
+            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="insightLeadTodayUpdate">近7日采集: --</span>
           </div>
           <div class="kpi-categories grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 border-t border-gray-200" id="insightLeadCategories">
             <!-- 分类数据将由JS填充 -->
@@ -503,7 +417,7 @@
             <h3 class="text-xl font-bold text-gray-800">最近采集历史</h3>
           </div>
           <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 responsive-table"> <!-- Added responsive-table class -->
+            <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-100">
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">任务名称</th>
@@ -575,8 +489,8 @@
             <i class="fa fa-lightbulb-o text-primary mr-2"></i>最新洞察线索
           </h3>
           <div class="overflow-x-auto">
-            <!-- ✅ 修改：为 table 添加 responsive-table 类 -->
-            <table class="min-w-full divide-y divide-gray-200 table-fixed responsive-table">
+            <!-- ✅ 修改：为 table 添加 table-fixed 类 -->
+            <table class="min-w-full divide-y divide-gray-200 table-fixed">
               <thead class="bg-gray-100">
                 <tr>
                   <!-- ✅ 修改：为 th 添加宽度类 -->
@@ -732,55 +646,57 @@
                 </div>
               </div>
             </div>
-            
-            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-              <h3 class="text-xl font-semibold mb-4 flex items-center">
-                <i class="fa fa-line-chart text-primary mr-2"></i>关键绩效指标
-              </h3>
-              <div class="space-y-6">
-                <div>
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="text-sm font-medium">洞察转化率</span>
-                    <span class="text-sm font-medium">82%</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="bg-primary h-2.5 rounded-full" style="width: 82%"></div>
-                  </div>
+          </div>
+          
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h3 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fa fa-line-chart text-primary mr-2"></i>关键绩效指标
+            </h3>
+            <div class="space-y-6">
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-sm font-medium">洞察转化率</span>
+                  <span class="text-sm font-medium">82%</span>
                 </div>
-                
-                <div>
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="text-sm font-medium">技术建议采纳率</span>
-                    <span class="text-sm font-medium">67%</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="bg-primary h-2.5 rounded-full" style="width: 67%"></div>
-                  </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-primary h-2.5 rounded-full" style="width: 82%"></div>
                 </div>
-                
-                <div>
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="text-sm font-medium">决策响应时间</span>
-                    <span class="text-sm font-medium">9天</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="bg-primary h-2.5 rounded-full" style="width: 78%"></div>
-                  </div>
+              </div>
+              
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-sm font-medium">技术建议采纳率</span>
+                  <span class="text-sm font-medium">67%</span>
                 </div>
-                
-                <div>
-                  <div class="flex justify-between items-center mb-2">
-                    <span class="text-sm font-medium">技术实施成功率</span>
-                    <span class="text-sm font-medium">75%</span>
-                  </div>
-                  <div class="w-full bg-gray-200 rounded-full h-2.5">
-                    <div class="bg-primary h-2.5 rounded-full" style="width: 75%"></div>
-                  </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-primary h-2.5 rounded-full" style="width: 67%"></div>
+                </div>
+              </div>
+              
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-sm font-medium">决策响应时间</span>
+                  <span class="text-sm font-medium">9天</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-primary h-2.5 rounded-full" style="width: 78%"></div>
+                </div>
+              </div>
+              
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-sm font-medium">技术实施成功率</span>
+                  <span class="text-sm font-medium">75%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-primary h-2.5 rounded-full" style="width: 75%"></div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
 
     <!-- 报告中心页面 -->
     <div id="page-reports" class="page-container hidden">
@@ -809,13 +725,23 @@
           </div>
         </div>
         
+        <!-- **新增：自动化报告任务状态区域** -->
+        <div id="scheduledReportsStatus" class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <!-- 内容将由JS动态填充 -->
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fa fa-clock-o text-primary mr-2"></i>自动化报告任务状态
+          </h3>
+          <div class="p-4 text-gray-500">正在加载自动化任务状态...</div>
+        </div>
+        <!-- **新增区域结束** -->
+
         <!-- 报告历史记录 -->
         <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
           <h3 class="text-xl font-semibold mb-4 flex items-center">
             <i class="fa fa-history text-primary mr-2"></i>报告历史记录
           </h3>
           <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 responsive-table"> <!-- Added responsive-table class -->
+            <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-100">
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">报告名称</th>
@@ -957,9 +883,67 @@
       </div>
     </div>
 
-    <!-- =============================================================== -->
-    <!-- ================== Global Detail Modal (MODAL) ================== -->
-    <!-- =============================================================== -->
+     <!-- ✅ 新增：系统工作台页面容器 -->
+    <div id="page-system" class="page-container hidden">
+      <div class="p-6 bg-white rounded-xl shadow-lg">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-4 flex items-center"><i class="fa fa-gears text-primary mr-3"></i>系统管理</h2>
+        
+        <!-- ✅ 新增：页面内导航栏 -->
+        <div id="workbench-nav" class="sticky top-[var(--header-height)] bg-white/80 backdrop-blur-sm z-30 py-3 mb-6 rounded-lg shadow-sm">
+          <div class="max-w-7xl mx-auto px-2">
+            <nav class="flex justify-around items-center space-x-2 text-sm md:text-base">
+              <a href="#wf-section-1" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第一层: 采集</a>
+              <a href="#wf-section-2" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第二层: 识别</a>
+              <a href="#wf-section-3" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第三层: 验证</a>
+              <a href="#wf-section-4" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第四层: 分析</a>
+              <a href="#wf-section-5" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第五层: 决策</a>
+              <a href="#wf-section-6" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第六层: 监控</a>
+            </nav>
+          </div>
+        </div>
+
+        <!-- ✅ 修改：为每个层级的容器添加ID，作为导航锚点 -->
+        <!-- 第一层 -->
+        <div id="wf-section-1" class="mb-8">
+          <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第一层：精准数据采集 (并行)</h3>
+          <div id="wf-layer-1" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+
+        <!-- 第二层 -->
+        <div id="wf-section-2" class="mb-8">
+          <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第二层：分表信号识别 (串行)</h3>
+          <div id="wf-layer-2" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+
+        <!-- 第三层 -->
+        <div id="wf-section-3" class="mb-8">
+          <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第三层：统一证据验证 (统一处理)</h3>
+          <div id="wf-layer-3" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+        
+        <!-- 第四层 -->
+        <div id="wf-section-4" class="mb-8">
+          <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第四层：深度分析 (并行)</h3>
+          <div id="wf-layer-4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+
+        <!-- 第五层 -->
+        <div id="wf-section-5" class="mb-8">
+          <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第五层：决策支撑 (串行)</h3>
+          <div id="wf-layer-5" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+
+        <!-- 第六层 -->
+        <div id="wf-section-6" class="mb-8">
+          <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第六层：监控与维护 (独立运行)</h3>
+          <div id="wf-layer-6" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ============= 全局详情展示模态框 (MODAL) ================= -->
+    <!-- ============================================================ -->
     <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         <!-- Modal Header -->
@@ -972,7 +956,7 @@
         <div class="p-6 overflow-y-auto">
           <div id="noDataMessage" class="text-center text-gray-500 py-8 hidden">没有找到相关数据。</div>
           <div class="overflow-x-auto">
-              <table id="detailTable" class="min-w-full divide-y divide-gray-200 responsive-table"> <!-- Added responsive-table class -->
+              <table id="detailTable" class="min-w-full divide-y divide-gray-200">
                 <!-- thead and tbody will be generated by JS -->
               </table>
           </div>
@@ -988,9 +972,7 @@
         </div>
       </div>
     </div>
-        <!-- =============================================================== -->
-        <!-- ================== History Detail Specific Modal ================== -->
-        <!-- =============================================================== -->
+        <!-- ============= 历史记录详情专用模态框 ================= -->
     <div id="historyDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div class="flex justify-between items-center p-4 border-b">
@@ -1005,7 +987,7 @@
 
   </main>
 
-  <?!= include('frontend/main.js'); ?>
+  <?!= include('frontend/main.js.html'); ?>
 
 </body>
 </html>

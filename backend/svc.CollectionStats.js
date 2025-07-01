@@ -1,15 +1,6 @@
-// ==================================================================================================
+// =======================================================================
 //  【最终完整版 v43.0】CollectionStatsService - 彻底解决所有Date序列化问题
-// ==================================================================================================
-
-/** @global CONFIG */
-/** @global DataService */
-/** @global DateUtils */
-/** @global logDebug */
-/** @global logInfo */
-/** @global logWarning */
-/** @global logError */
-
+// =======================================================================
 function computeCollectionStats() {
   const dbId = CONFIG.DATABASE_IDS.OPERATIONS_DB;
   const sheetName = CONFIG.SHEET_NAMES.WORKFLOW_LOG;
@@ -21,8 +12,13 @@ function computeCollectionStats() {
   const lastMonth = month === 1 ? 12 : month - 1;
   const lastMonthYear = month === 1 ? year - 1 : year;
 
-  // Using DateUtils for parsing dates
-  const parseDate = (str) => DateUtils.parseDate(str);
+  function parseDate(str) {
+    if (!str) return null;
+    str = String(str);
+    if (str.includes('T')) return new Date(str);
+    // 尝试处理常见的日期格式，避免时区问题
+    return new Date(str.replace(/-/g, '/')); 
+  }
 
   const thisMonthLogs = logs.filter(log => {
     const d = parseDate(log.start_timestamp || log.created_timestamp);
@@ -64,10 +60,23 @@ const CollectionStatsService = {
    * @returns {Array<Object>} - 处理完日期后的新数组。
    */
   _formatDatesInArray: function(dataArray) {
-    return DateUtils.formatDatesInObjectsArray(dataArray); // Use centralized DateUtils
+    if (!Array.isArray(dataArray)) return [];
+    
+    return dataArray.map(row => {
+      const newRow = {};
+      for (const key in row) {
+        if (row[key] instanceof Date) {
+          newRow[key] = row[key].toISOString().split('T')[0];
+        } else {
+          newRow[key] = row[key];
+        }
+      }
+      return newRow;
+    });
   },
 
   getAcademicPapersDetails() {
+    // 替换为你的实际 RAWDATA_DB 和 SHEET_NAMES
     const dbId = CONFIG.DATABASE_IDS.RAWDATA_DB;
     const sheetName = CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS;
     const rows = DataService.getDataAsObjects(dbId, sheetName);
@@ -75,7 +84,7 @@ const CollectionStatsService = {
     return rows.map(r => ({
       TITLE: r.title || '',
       AUTHORS: r.authors || '',
-      PUBLICATION_DATE: DateUtils.formatDate(r.publication_date), // Use DateUtils
+      PUBLICATION_DATE: r.publication_date || '',
       PROCESSING_STATUS: r.processing_status || '',
       SOURCE_URL: r.source_url || ''
     }));
@@ -85,7 +94,7 @@ const CollectionStatsService = {
     try {
       return computeCollectionStats();
     } catch (e) {
-      logError('[CollectionStatsService] getCollectionStats error: ' + e.message);
+      Logger.log('getCollectionStats error: ' + e.message);
       return {
         monthlyVolume: 0,
         monthlyChange: 0,
@@ -109,42 +118,58 @@ const CollectionStatsService = {
       return [];
     }
 
+    // 辅助函数：用于统一格式化日期，处理N/A或无效日期
+    const formatForDisplay = (dateValue, includeTime = false) => {
+      if (!dateValue) return 'N/A';
+      let dateObj;
+      if (dateValue instanceof Date) {
+        dateObj = dateValue;
+      } else {
+        // 尝试解析字符串日期，处理可能的ISO格式或纯日期格式
+        dateObj = new Date(dateValue);
+      }
+      if (isNaN(dateObj.getTime())) return 'N/A'; // 处理无效日期字符串
+
+      const format = includeTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd';
+      return Utilities.formatDate(dateObj, Session.getScriptTimeZone(), format);
+    };
+
     // Step 1: 解析日期并准备用于排序
     const processedLogs = rawLogs.map(log => {
-      // Attempt to parse all possible timestamp fields into Date objects
-      const startTsObj = DateUtils.parseDate(log.start_timestamp);
-      const endTsObj = DateUtils.parseDate(log.end_timestamp);
-      const createdTsObj = DateUtils.parseDate(log.created_timestamp);
+      // 尝试解析所有可能的时间戳字段为Date对象
+      const startTsObj = log.start_timestamp ? new Date(log.start_timestamp) : null;
+      const endTsObj = log.end_timestamp ? new Date(log.end_timestamp) : null;
+      const createdTsObj = log.created_timestamp ? new Date(log.created_timestamp) : null;
 
-      // Collect all valid date objects
+      // 收集所有有效的日期对象
       const validDates = [];
       if (startTsObj && !isNaN(startTsObj.getTime())) validDates.push(startTsObj);
       if (endTsObj && !isNaN(endTsObj.getTime())) validDates.push(endTsObj);
       if (createdTsObj && !isNaN(createdTsObj.getTime())) validDates.push(createdTsObj);
 
-      // Determine the date for sorting: pick the latest among all valid dates
-      let sortableDate = new Date(0); // Default to a very early date
+      // 确定用于排序的日期：选取所有有效日期中最新的一个
+      let sortableDate = new Date(0); // 默认一个非常早的日期
       if (validDates.length > 0) {
           sortableDate = validDates.reduce((latest, current) =>
               current.getTime() > latest.getTime() ? current : latest,
-              new Date(0) // Initial value also set to epoch time
+              new Date(0) // 初始值也设为epoch time
           );
       }
 
       return {
-        sortableDate: sortableDate, // Date object for sorting
-        execution_id: log.execution_id || log.Execution_ID || null, // Ensure execution_id is available
+        sortableDate: sortableDate, // 用于排序的Date对象
+        execution_id: log.execution_id || log.Execution_ID || null, // 确保 execution_id 可用
         workflow_name: log.workflow_name || '未命名工作流',
-        start_timestamp: DateUtils.formatDate(log.start_timestamp, true), // Format for display
-        end_timestamp: DateUtils.formatDate(log.end_timestamp, false),   // Format for display
+        start_timestamp: formatForDisplay(log.start_timestamp, true), // 格式化为显示字符串
+        end_timestamp: formatForDisplay(log.end_timestamp, false),   // 格式化为显示字符串
         execution_status: log.execution_status || '未知'
       };
     });
 
-    // Core: Sort in descending order by sortableDate (newest on top)
+    // 核心：按 sortableDate 进行倒序排序 (最新的在最上面)
     processedLogs.sort((a, b) => b.sortableDate.getTime() - a.sortableDate.getTime());
 
-    // Truncate to the latest 'limit' records
+    // 截取最新的 'limit' 条记录
     const latestLogs = processedLogs.slice(0, limit);
 
     return latestLogs;
@@ -155,19 +180,22 @@ const CollectionStatsService = {
     const sheetName = CONFIG.SHEET_NAMES.WORKFLOW_LOG;
     const rows = DataService.getDataAsObjects(dbId, sheetName) || [];
     const row = rows.find(row => {
+      // 增加一个安全检查，防止 row.execution_id 本身为 null 或 undefined
       if (row.execution_id == null || executionId == null) {
         return false;
       }
-      return String(row.execution_id).trim() === String(executionId).trim();
+      // 使用非严格等于 (==) 来比较，它会自动处理数字和字符串之间的类型转换。
+      // 同时对两边都进行 trim()，去除可能存在的前后空格。
+      return String(row.execution_id).trim() == String(executionId).trim();
     });
     if (!row) {
       return { error: "未找到该执行记录", execution_id: executionId };
     }
-    // Convert all Date objects to ISO strings using DateUtils
+    // 把所有 Date 转换为字符串
     const detail = {};
     for (var k in row) {
       if (row[k] instanceof Date) {
-        detail[k] = DateUtils.formatDate(row[k], true); // Use DateUtils to format dates
+        detail[k] = row[k].toISOString();
       } else {
         detail[k] = row[k];
       }
@@ -197,9 +225,9 @@ const CollectionStatsService = {
           talentFlow: 'created_timestamp' 
       };
       // **修正点 2：将 todayStr 的定义移到函数顶部，在所有循环之外**
-      const todayStr = DateUtils.formatDate(new Date()); // Use DateUtils
+      const todayStr = new Date().toISOString().slice(0, 10); // 获取当前日期的 YYYY-MM-DD 字符串
 
-      logDebug("DEBUG: getCollectionPageData - 开始获取技术类数据源...");
+      Logger.log("DEBUG: getCollectionPageData - 开始获取技术类数据源...");
       // 1. 获取并处理技术类数据源
       pageData.techData = {
         academicPapers: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS),
@@ -215,32 +243,32 @@ const CollectionStatsService = {
 
         if (pageData.techData[key].length > 0) {
             const ingestionDateField = ingestionDateFieldMap[key] || 'created_timestamp'; // 确保这里使用了正确的映射
-            logDebug(`DEBUG: Checking todayCount for ${key}. TodayStr: ${todayStr}. Sample ingestion dates (first 5):`);
+            Logger.log(`DEBUG: Checking todayCount for ${key}. TodayStr: ${todayStr}. Sample ingestion dates (first 5):`);
             pageData.techData[key].slice(0, 5).forEach((item, idx) => {
                 const dateVal = item[ingestionDateField];
-                logDebug(`  [${idx}] ${ingestionDateField}: ${dateVal} (sliced: ${String(dateVal || '').slice(0, 10)})`);
+                Logger.log(`  [${idx}] ${ingestionDateField}: ${dateVal} (sliced: ${String(dateVal || '').slice(0, 10)})`);
             });
         }
 
         pageData.techData[key] = this._formatDatesInArray(pageData.techData[key]);
 
       // **新增调试日志：打印 _formatDatesInArray 处理后的 created_timestamp 值**
-      if (CONFIG.LOG_LEVEL === 'DEBUG' && pageData.techData.techNews && pageData.techData.techNews.length > 0) {
-          logDebug(`DEBUG_FORMATTED_DATES: TodayStr: ${todayStr}`);
-          logDebug(`DEBUG_FORMATTED_DATES: First 5 records of techNews AFTER _formatDatesInArray:`);
+      if (pageData.techData.techNews && pageData.techData.techNews.length > 0) {
+          Logger.log(`DEBUG_FORMATTED_DATES: TodayStr: ${todayStr}`);
+          Logger.log(`DEBUG_FORMATTED_DATES: First 5 records of techNews AFTER _formatDatesInArray:`);
           pageData.techData.techNews.slice(0, 5).forEach((item, idx) => {
               const createdTsVal = item.created_timestamp;
-              logDebug(`  [${idx}] created_timestamp: '${createdTsVal}' (Type: ${typeof createdTsVal})`);
-              logDebug(`  [${idx}] Sliced: '${String(createdTsVal || '').slice(0, 10)}'`);
-              logDebug(`  [${idx}] Match with TodayStr: ${String(createdTsVal || '').slice(0, 10) === todayStr}`);
+              Logger.log(`  [${idx}] created_timestamp: '${createdTsVal}' (Type: ${typeof createdTsVal})`);
+              Logger.log(`  [${idx}] Sliced: '${String(createdTsVal || '').slice(0, 10)}'`);
+              Logger.log(`  [${idx}] Match with TodayStr: ${String(createdTsVal || '').slice(0, 10) === todayStr}`);
           });
       }
       // **调试日志结束**
 
-        logDebug(`DEBUG:   - techData.${key} fetched: ${pageData.techData[key].length} records.`);
+        Logger.log(`DEBUG:   - techData.${key} fetched: ${pageData.techData[key].length} records.`);
       }
 
-      logDebug("DEBUG: getCollectionPageData - 开始获取标杆类数据源...");
+      Logger.log("DEBUG: getCollectionPageData - 开始获取标杆类数据源...");
       // 2. 获取并处理标杆类数据源
       pageData.benchmarkData = {
         industryDynamics: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS),
@@ -252,41 +280,41 @@ const CollectionStatsService = {
             throw new Error(`DataService returned null/undefined for benchmarkData.${key}. Check sheet name or ID.`);
         }
         pageData.benchmarkData[key] = this._formatDatesInArray(pageData.benchmarkData[key]);
-        logDebug(`DEBUG:   - benchmarkData.${key} fetched: ${pageData.benchmarkData[key].length} records.`);
+        Logger.log(`DEBUG:   - benchmarkData.${key} fetched: ${pageData.benchmarkData[key].length} records.`);
       }
 
-      logDebug("DEBUG: getCollectionPageData - 开始获取配置信息 (competitors)...");
+      Logger.log("DEBUG: getCollectionPageData - 开始获取配置信息 (competitors)...");
       // 3. 获取配置信息 (通常不含日期，无需处理)
       const rawCompetitors = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY);
       if (rawCompetitors === null || typeof rawCompetitors === 'undefined') {
           throw new Error(`DataService returned null/undefined for competitors. Check sheet name or ID.`);
       }
       pageData.competitors = rawCompetitors.map(c => ({ id: c.competitor_id, name: c.company_name }));
-      logDebug(`DEBUG:   - competitors fetched: ${pageData.competitors.length} records.`);
+      Logger.log(`DEBUG:   - competitors fetched: ${pageData.competitors.length} records.`);
       
-      logDebug("DEBUG: getCollectionPageData - 开始获取历史记录 (workflow logs)...");
+      Logger.log("DEBUG: getCollectionPageData - 开始获取历史记录 (workflow logs)...");
       // 4. 获取所有工作流日志，然后由 _formatHistoryLogs 进行排序和截取
       const historyLogsRaw = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.OPERATIONS_DB, CONFIG.SHEET_NAMES.WORKFLOW_LOG);
       if (historyLogsRaw === null || typeof historyLogsRaw === 'undefined') {
           throw new Error(`DataService returned null/undefined for historyLogsRaw. Check sheet name or ID.`);
       }
       pageData.history = this._formatHistoryLogs(historyLogsRaw); // _formatHistoryLogs 内部已经处理了排序和截取
-      logDebug(`DEBUG:   - history fetched: ${pageData.history.length} records (after format and slice).`);
+      Logger.log(`DEBUG:   - history fetched: ${pageData.history.length} records (after format and slice).`);
 
-      logDebug("DEBUG: getCollectionPageData - 开始获取采集统计数据...");
+      Logger.log("DEBUG: getCollectionPageData - 开始获取采集统计数据...");
       // 5. 获取统计数据
       pageData.overallStats = computeCollectionStats();
       if (pageData.overallStats === null || typeof pageData.overallStats === 'undefined') {
           throw new Error(`computeCollectionStats returned null/undefined.`);
       }
-      logDebug(`DEBUG:   - overallStats fetched: OK.`);
+      Logger.log(`DEBUG:   - overallStats fetched: OK.`);
 
-      logDebug("DEBUG: getCollectionPageData - 所有数据获取完成，准备返回 pageData。");
+      Logger.log("DEBUG: getCollectionPageData - 所有数据获取完成，准备返回 pageData。");
       // 核心：在返回之前将 pageData 序列化为 JSON 字符串
       return JSON.stringify(pageData); 
 
     } catch(e) {
-      logError(`ERROR in getCollectionPageData: ${e.message} \n ${e.stack}`);
+      Logger.log(`ERROR in getCollectionPageData: ${e.message} \n ${e.stack}`);
       // 即使在错误情况下，也返回一个可解析的JSON字符串，包含错误信息
       return JSON.stringify({ error: `获取采集页数据时发生服务器内部错误: ${e.message}. 请检查Apps Script日志获取更多详情。` });
     }
@@ -302,44 +330,53 @@ const CollectionStatsService = {
  * 旨在诊断为何前端未能显示最新数据。
  */
 function test_CollectionHistoryDataFlow() {
-  logInfo("--- 开始测试 Collection History 数据流 ---");
+  Logger.log("--- 开始测试 Collection History 数据流 ---");
   try {
     const dbId = CONFIG.DATABASE_IDS.OPERATIONS_DB;
     const sheetName = CONFIG.SHEET_NAMES.WORKFLOW_LOG;
 
-    logInfo(`1. 尝试从 DB: ${dbId}, Sheet: ${sheetName} 获取所有原始日志数据...`);
+    Logger.log(`1. 尝试从 DB: ${dbId}, Sheet: ${sheetName} 获取所有原始日志数据...`);
 
     const rawLogs = DataService.getDataAsObjects(dbId, sheetName);
 
     if (!rawLogs || rawLogs.length === 0) {
-      logError("❌ 错误: 未获取到任何原始日志数据，或数据为空。请检查 Google Sheet 是否有数据。");
+      Logger.log("❌ 错误: 未获取到任何原始日志数据，或数据为空。请检查 Google Sheet 是否有数据。");
       return;
     }
 
-    logInfo(`✅ 成功获取 ${rawLogs.length} 条原始日志数据。`);
+    Logger.log(`✅ 成功获取 ${rawLogs.length} 条原始日志数据。`);
+
+    // **修改点1：不再打印原始日志的最后5条，因为 _formatHistoryLogs 会处理排序**
+    // Logger.log("2. 原始日志数据示例 (从 DataService 获取，按Sheet原始顺序，打印最后5条):");
+    // rawLogs.slice(-5).forEach((log, index) => { // 打印最后5条，因为新数据通常在底部
+    //   Logger.log(`  [${rawLogs.length - 5 + index}] workflow_name: ${log.workflow_name || 'N/A'}, ` +
+    //              `execution_status: ${log.execution_status || 'N/A'}, ` +
+    //              `start_timestamp: ${log.start_timestamp || 'N/A'}, ` +
+    //              `end_timestamp: ${log.end_timestamp || 'N/A'}`);
+    // });
 
     // 调用 CollectionStatsService._formatHistoryLogs 进行排序和截取
     // 传入一个较大的 limit (例如 20)，以便观察排序效果
     const testLimit = 20; 
-    logInfo(`\n2. 调用 CollectionStatsService._formatHistoryLogs 函数，获取最新的 ${testLimit} 条日志 (应按最新日期倒序):`); // **修改日志说明**
+    Logger.log(`\n2. 调用 CollectionStatsService._formatHistoryLogs 函数，获取最新的 ${testLimit} 条日志 (应按最新日期倒序):`); // **修改日志说明**
     const formattedAndSortedLogs = CollectionStatsService._formatHistoryLogs(rawLogs, testLimit); 
 
     if (formattedAndSortedLogs.length > 0) {
       // **修改点2：直接打印格式化并排序后的结果**
       formattedAndSortedLogs.forEach((log, index) => {
-        logInfo(`  [${index}] workflow_name: ${log.workflow_name || 'N/A'}, ` +
+        Logger.log(`  [${index}] workflow_name: ${log.workflow_name || 'N/A'}, ` +
                    `status: ${log.execution_status || 'N/A'}, ` +
                    `start_timestamp: ${log.start_timestamp || 'N/A'}, ` +
                    `end_timestamp: ${log.end_timestamp || 'N/A'}, ` +
                    `sortableDate: ${log.sortableDate ? log.sortableDate.toISOString() : 'N/A'}`);
       });
-      logInfo(`\n✅ 格式化并排序后的日志数据已打印。请检查日期是否按倒序排列，并且最新数据是否在顶部。`);
+      Logger.log(`\n✅ 格式化并排序后的日志数据已打印。请检查日期是否按倒序排列，并且最新数据是否在顶部。`);
     } else {
-      logError("❌ 错误: 格式化后的日志数据为空。");
+      Logger.log("❌ 错误: 格式化后的日志数据为空。");
     }
 
   } catch (e) {
-    logError(`❌ 测试 Collection History 数据流失败: ${e.message}\n${e.stack}`);
+    Logger.log(`❌ 测试 Collection History 数据流失败: ${e.message}\n${e.stack}`);
   }
-  logInfo("--- 结束测试 Collection History 数据流 ---");
+  Logger.log("--- 结束测试 Collection History 数据流 ---");
 }

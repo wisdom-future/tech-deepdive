@@ -1,14 +1,5 @@
 // 文件名: backend/svc.RawDataStats.gs
 
-/** @global CONFIG */
-/** @global DataService */
-/** @global SpreadsheetApp */
-/** @global DateUtils */
-/** @global logDebug */
-/** @global logInfo */
-/** @global logWarning */
-/** @global logError */
-
 /**
  * @file 原始数据统计服务。
  * 负责从原始数据表中获取各种统计信息。
@@ -16,11 +7,8 @@
  */
 
 const RawDataStatsService = {
-  /**
+    /**
    * 安全地获取工作表数据行数（不包含两行表头）。
-   * 这是解决Apps Script "Argument too large"的关键策略。
-   * 对于非常大的表，Apps Script不适合直接读取并计数。
-   * 长期方案：Make工作流预计算并将统计结果写入一个小的、Apps Script可读的汇总表。
    * @param {string} dbId - 数据库ID。
    * @param {string} sheetName - 表名。
    * @returns {number} 工作表的数据行数。
@@ -30,17 +18,49 @@ const RawDataStatsService = {
       const spreadsheet = SpreadsheetApp.openById(dbId);
       const sheet = spreadsheet.getSheetByName(sheetName);
       if (!sheet) {
-        logWarning(`[RawDataStatsService] _getSheetDataRowCount: Sheet "${sheetName}" not found in DB. Returning 0 rows.`);
+        Logger.log(`Warning: _getSheetDataRowCount: Sheet "${sheetName}" not found in DB. Returning 0 rows.`);
         return 0;
       }
-      // Directly get the last row index of the sheet, this is the safest counting method, won't trigger Argument too large
       const lastRow = sheet.getLastRow();
-      // Subtract two header rows, return 0 if result is negative
       return Math.max(0, lastRow - 2); 
     } catch (e) {
-      logError(`[RawDataStatsService] Error in _getSheetDataRowCount for ${sheetName}: ${e.message}\n${e.stack}`);
-      // To prevent the entire application from crashing due to internal Apps Script errors, return 0
+      Logger.log(`Error in _getSheetDataRowCount for ${sheetName}: ${e.message}`);
       return 0; 
+    }
+  },
+
+  /**
+   * **新增：计算指定Sheet的近7日采集数量**
+   * @param {string} dbId - 数据库ID。
+   * @param {string} sheetName - 表名。
+   * @param {string} ingestionDateField - 记录采集时间的字段名 (e.g., 'created_timestamp')。
+   * @returns {number} 近7日采集数量。
+   */
+  _getSevenDayIngestionCount(dbId, sheetName, ingestionDateField = 'created_timestamp') {
+    try {
+      const allData = DataService.getDataAsObjects(dbId, sheetName); // 获取所有数据
+      if (!allData || allData.length === 0) {
+        return 0;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const sevenDaysAgo = new Date(today);
+      sevenDaysAgo.setDate(today.getDate() - 6); // 过去7天：包括今天和前6天
+
+      const count = allData.filter(item => {
+        const val = item[ingestionDateField];
+        if (!val) return false;
+
+        const itemDate = new Date(val); // 尝试将值转换为日期对象
+        return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo && itemDate <= today;
+      }).length;
+      
+      return count;
+
+    } catch (e) {
+      Logger.log(`Error in _getSevenDayIngestionCount for ${sheetName}: ${e.message}`);
+      return 0;
     }
   },
 
@@ -50,63 +70,87 @@ const RawDataStatsService = {
    */
   getStats() {
     try {
-      // Use _getSheetDataRowCount to get real row counts, avoiding Argument too large
-      const academicPapersCount = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS);
-      const patentDataCount = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_PATENT_DATA);
-      const openSourceDataCount = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_OPENSOURCE_DATA);
-      const techNewsCount = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_TECH_NEWS);
-      const industryDynamicsCount = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS);
-      const competitorIntelligenceCount = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
+      // 定义采集时间字段映射
+      const ingestionDateFieldMap = {
+          RAW_ACADEMIC_PAPERS: 'created_timestamp', 
+          RAW_PATENT_DATA: 'created_timestamp',     
+          RAW_OPENSOURCE_DATA: 'created_timestamp', 
+          RAW_TECH_NEWS: 'created_timestamp',       
+          RAW_INDUSTRY_DYNAMICS: 'created_timestamp', 
+          RAW_COMPETITOR_INTELLIGENCE: 'created_timestamp'
+      };
+
+      // 获取每个类别的总数
+      const academicPapersTotal = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS);
+      const patentDataTotal = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_PATENT_DATA);
+      const openSourceDataTotal = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_OPENSOURCE_DATA);
+      const techNewsTotal = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_TECH_NEWS);
+      const industryDynamicsTotal = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS);
+      const competitorIntelligenceTotal = this._getSheetDataRowCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
       
-      // Count total raw data
-      const totalRawData = academicPapersCount + patentDataCount + openSourceDataCount + techNewsCount + industryDynamicsCount + competitorIntelligenceCount;
-      
-      // 'Today's Update' requires iterating through data, which may be limited by Apps Script.
-      // Suggestion: Make workflows calculate daily increments at the end of each day and write them to a small statistics table for Apps Script to read.
-      const todayUpdated = 0; 
+      // 获取每个类别的近7日采集数量
+      const academicPapersSevenDay = this._getSevenDayIngestionCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS, ingestionDateFieldMap.RAW_ACADEMIC_PAPERS);
+      const patentDataSevenDay = this._getSevenDayIngestionCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_PATENT_DATA, ingestionDateFieldMap.RAW_PATENT_DATA);
+      const openSourceDataSevenDay = this._getSevenDayIngestionCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_OPENSOURCE_DATA, ingestionDateFieldMap.RAW_OPENSOURCE_DATA);
+      const techNewsSevenDay = this._getSevenDayIngestionCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_TECH_NEWS, ingestionDateFieldMap.RAW_TECH_NEWS);
+      const industryDynamicsSevenDay = this._getSevenDayIngestionCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS, ingestionDateFieldMap.RAW_INDUSTRY_DYNAMICS);
+      const competitorIntelligenceSevenDay = this._getSevenDayIngestionCount(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE, ingestionDateFieldMap.RAW_COMPETITOR_INTELLIGENCE);
+
+      // 统计总数和总近7日采集
+      const totalRawData = academicPapersTotal + patentDataTotal + openSourceDataTotal + techNewsTotal + industryDynamicsTotal + competitorIntelligenceTotal;
+      const totalSevenDayIngestion = academicPapersSevenDay + patentDataSevenDay + openSourceDataSevenDay + techNewsSevenDay + industryDynamicsSevenDay + competitorIntelligenceSevenDay;
 
       return {
         total: totalRawData,
-        todayUpdated: todayUpdated,
+        sevenDayIngestion: totalSevenDayIngestion, // **新增：总近7日采集**
+        todayUpdated: 0, // 这个字段现在可以废弃或重新定义
         categories: {
-          academicPapers: academicPapersCount,
-          patentData: patentDataCount,
-          openSourceData: openSourceDataCount,
-          techNews: techNewsCount,
-          industryDynamics: industryDynamicsCount,
-          competitorIntelligence: competitorIntelligenceCount
+          academicPapers: academicPapersTotal,
+          patentData: patentDataTotal,
+          openSourceData: openSourceDataTotal,
+          techNews: techNewsTotal,
+          industryDynamics: industryDynamicsTotal,
+          competitorIntelligence: competitorIntelligenceTotal
+        },
+        sevenDayCategories: { // **新增：各类别近7日采集**
+          academicPapers: academicPapersSevenDay,
+          patentData: patentDataSevenDay,
+          openSourceData: openSourceDataSevenDay,
+          techNews: techNewsSevenDay,
+          industryDynamics: industryDynamicsSevenDay,
+          competitorIntelligence: competitorIntelligenceSevenDay
         }
       };
     } catch (e) {
-      logError(`[RawDataStatsService] Error in RawDataStatsService.getStats: ${e.message} \n ${e.stack}`);
+      Logger.log(`Error in RawDataStatsService.getStats: ${e.message} \n ${e.stack}`);
       throw new Error(`无法获取原始数据统计: ${e.message}`); 
     }
   }
 };
 
-// ==================================================================================
+// ====================================================================
 //  T E S T   C O D E
-// ==================================================================================
+// ====================================================================
 
 /**
  * 测试 RawDataStatsService 核心功能。
  */
 function test_RawDataStatsService() {
-  logInfo("======== 开始测试 RawDataStatsService ========");
+  Logger.log("======== 开始测试 RawDataStatsService ========");
   try {
     const stats = RawDataStatsService.getStats();
-    logInfo("✅ 成功获取原始数据统计:");
-    logInfo(JSON.stringify(stats, null, 2));
+    Logger.log("✅ 成功获取原始数据统计:");
+    Logger.log(JSON.stringify(stats, null, 2));
     
-    // Simple assertion
+    // 简单断言
     if (typeof stats.total === 'number' && stats.total >= 0) {
-      logInfo("✅ 统计数据格式正确。");
+      Logger.log("✅ 统计数据格式正确。");
     } else {
-      logInfo("❌ 统计数据格式不正确。");
+      Logger.log("❌ 统计数据格式不正确。");
     }
 
   } catch (e) {
-    logError(`❌ RawDataStatsService 测试失败: ${e.message} \n ${e.stack}`);
+    Logger.log(`❌ RawDataStatsService 测试失败: ${e.message} \n ${e.stack}`);
   }
-  logInfo("\n======== RawDataStatsService 测试结束 ========");
+  Logger.log("\n======== RawDataStatsService 测试结束 ========");
 }
