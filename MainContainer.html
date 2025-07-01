@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>技术洞察引擎</title>
+  <base target="_top">
+  <!-- 引入Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+  <!-- 引入Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  
+  <!-- 配置Tailwind -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0000ff',
+            secondary: '#6c757d',
+            success: '#28a745',
+            warning: '#ffc107',
+            error: '#dc3545',
+            info: '#17a2b8',
+            group1: '#e9eff4',
+            group2: '#dbe4ec',
+            group3: '#cbdae5',
+            navDark: '#2c3e50',
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+          },
+          boxShadow: {
+            'card': '0 4px 15px rgba(0,0,0,0.08)',
+            'card-hover': '0 6px 20px rgba(0,0,0,0.12)',
+          },
+          animation: {
+            spin: 'spin 1s linear infinite', // Ensure spin animation is defined
+          },
+          keyframes: {
+            spin: {
+              '0%': { transform: 'rotate(0deg)' },
+              '100%': { transform: 'rotate(360deg)' },
+            }
+          }
+        },
+      }
+    }
+  </script>
+  
+  <!-- 自定义工具类 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .card-transition {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+      }
+      .hover-lift {
+        transform: translateY(-5px);
+      }
+      .progress-bar {
+        transition: width 0.5s ease-in-out;
+      }
+      .alert-transition {
+        transition: opacity 0.3s ease-in-out;
+      }
+      .page-transition {
+        transition: opacity 0.3s ease-in-out;
+      }
+    }
+  </style>
+  
+  <style>
+    /* Global Variables */
+    :root {
+      --header-height: 80px;
+    }
+    
+    body {
+      line-height: 1.6;
+    }
+
+    /* Smooth Scrolling */
+    html {
+      scroll-behavior: smooth;
+    }
+    
+    /* Skeleton Screen Animation */
+    @keyframes shimmer {
+      0% { background-position: -1000px 0 }
+      100% { background-position: 1000px 0 }
+    }
+    
+    .skeleton {
+      background: linear-gradient(to right, #f0f0f0 4%, #f8f8f8 25%, #f0f0f0 36%);
+      background-size: 1000px 100%;
+      animation: shimmer 1.5s infinite linear;
+    }
+    
+    /* Page Transition Animation */
+    .page-container {
+      opacity: 1;
+      transition: opacity 0.3s ease-in-out;
+    }
+    
+    .page-container.fade-out {
+      opacity: 0;
+    }
+
+    /* --- Responsive Table Styling --- */
+    /* Apply to tables that need to be responsive on small screens */
+    @media (max-width: 768px) { /* Adjust breakpoint as needed (e.g., md breakpoint in Tailwind) */
+      .responsive-table,
+      .responsive-table thead,
+      .responsive-table tbody,
+      .responsive-table th,
+      .responsive-table td,
+      .responsive-table tr {
+        display: block;
+      }
+
+      .responsive-table thead tr {
+        position: absolute;
+        top: -9999px; /* Hide table headers (but not display: none;, for accessibility) */
+        left: -9999px;
+      }
+
+      .responsive-table tr {
+        border: 1px solid #e2e8f0; /* Tailwind border-gray-300 */
+        margin-bottom: 1rem; /* Tailwind mb-4 */
+        border-radius: 0.5rem; /* Tailwind rounded-lg */
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); /* Tailwind shadow-sm */
+        padding: 1rem;
+        background-color: #fff;
+      }
+
+      .responsive-table td {
+        border: none;
+        border-bottom: 1px solid #edf2f7; /* Tailwind border-gray-200 */
+        position: relative;
+        padding-left: 50%; /* Space for the data-label */
+        text-align: right;
+        white-space: normal; /* Allow text to wrap */
+      }
+
+      .responsive-table td:last-child {
+        border-bottom: 0;
+      }
+
+      .responsive-table td::before {
+        position: absolute;
+        top: 0.75rem; /* Padding-top of td */
+        left: 1rem; /* Padding-left of td */
+        width: 45%; /* Space for the label */
+        padding-right: 0.5rem;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: 600; /* Tailwind font-semibold */
+        color: #4a5568; /* Tailwind text-gray-700 */
+        content: attr(data-label); /* Use the data-label attribute for content */
+      }
+    }
+
+    /* --- Modal Optimization for Mobile --- */
+    #detailModal, #historyDetailModal {
+      transition: opacity 0.3s ease-in-out;
+    }
+
+    /* On small screens, make modal almost full screen */
+    @media (max-width: 768px) {
+      #detailModal > div, #historyDetailModal > div {
+        max-width: 95vw; /* Slightly less than full width */
+        max-height: 95vh; /* Slightly less than full height */
+        margin: auto; /* Center it */
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <!-- 导航栏 -->
+  <header class="fixed top-0 left-0 w-full h-[var(--header-height)] bg-navDark border-b border-gray-800/20 flex items-center px-6 z-50 shadow-lg bg-[url('https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=100')] bg-cover bg-center bg-blend-overlay bg-navDark/80">
+    <div class="logo text-white font-bold text-xl tracking-wide mr-10 text-shadow-md">
+      <div style="font-size:1em;font-weight:800;">联接NEXT</div>
+      <div style="font-size:1em;font-weight:800;">技术洞察智能引擎</div>
+    </div>
+    
+    <!-- Hamburger menu button for small screens -->
+    <button id="mobile-menu-button" class="md:hidden text-white text-2xl ml-auto">
+      <i class="fa fa-bars"></i>
+    </button>
+
+    <!-- Desktop Navigation -->
+    <nav class="hidden md:flex flex-wrap gap-2 md:gap-4">
+      <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="home">
+        <i class="fa fa-dashboard mr-2"></i>主仪表板
+      </a>
+      <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="collection">
+        <i class="fa fa-database mr-2"></i>数据采集
+      </a>
+      <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="insights">
+        <i class="fa fa-lightbulb-o mr-2"></i>智能分析
+      </a>
+      <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="actions">
+        <i class="fa fa-cogs mr-2"></i>决策行动
+      </a>
+      <a href="javascript:void(0)" class="nav-link bg-white/10 text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 active:bg-primary active:shadow-md" data-page="reports">
+        <i class="fa fa-file-text-o mr-2"></i>报告中心
+      </a>
+    </nav>
+  </header>
+
+  <!-- Mobile Menu Overlay (initially hidden) -->
+  <div id="mobile-menu-overlay" class="fixed inset-0 bg-navDark/95 z-[100] hidden flex-col items-center justify-center p-4">
+    <button id="close-mobile-menu" class="absolute top-4 right-4 text-white text-3xl">
+      &times;
+    </button>
+    <nav class="flex flex-col gap-6 text-center">
+      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="home">
+        <i class="fa fa-dashboard mr-2"></i>主仪表板
+      </a>
+      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="collection">
+        <i class="fa fa-database mr-2"></i>数据采集
+      </a>
+      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="insights">
+        <i class="fa fa-lightbulb-o mr-2"></i>智能分析
+      </a>
+      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="actions">
+        <i class="fa fa-cogs mr-2"></i>决策行动
+      </a>
+      <a href="javascript:void(0)" class="nav-link text-white text-2xl py-3 hover:text-gray-300 transition-colors" data-page="reports">
+        <i class="fa fa-file-text-o mr-2"></i>报告中心
+      </a>
+    </nav>
+  </div>
+
+
+  <!-- 主内容区域 -->
+  <main id="main-content" class="pt-[var(--header-height)] px-4 md:px-6 py-6 max-w-7xl mx-auto">
+    <!-- 初始加载动画 -->
+    <div id="loader" class="flex flex-col justify-center items-center h-[calc(100vh-var(--header-height)-60px)] text-gray-500 text-lg">
+      <div class="spinner border-4 border-gray-200 border-l-primary w-10 h-10 rounded-full animate-spin mb-4"></div>
+      <p>正在初始化...</p>
+    </div>
+
+    <!-- 主仪表板内容 -->
+    <!-- Content from pages/index.html will be loaded here by router.js -->
+    <div id="page-home" class="page-container">
+      <div class="kpi-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+        <!-- 原始数据统计卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-2 lg:col-span-3 group1 bg-group1 transition-all hover:shadow-card-hover" data-type="academicPapers">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-bar-chart"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">原始数据统计</span>
+          </div>
+          <div class="kpi-main-stats flex items-baseline justify-between mb-4">
+            <span class="kpi-value text-3xl font-bold text-primary skeleton" id="rawDataTotal">--</span>
+            <span class="kpi-sub-label text-gray-500">总量</span>
+            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="rawDataTodayUpdate">近7日采集: --</span>
+          </div>
+          <div class="kpi-categories grid grid-cols-2 sm:grid-cols-3 gap-2 pt-4 border-t border-gray-200" id="rawDataCategories">
+            <!-- 分类数据将由JS填充 -->
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>论文
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>新闻
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>会议
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>专利
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>开源
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>竞情
+            </div>
+          </div>
+        </div>
+
+        <!-- 洞察线索统计卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-2 lg:col-span-3 group1 bg-group1 transition-all hover:shadow-card-hover">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-lightbulb-o"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">洞察线索统计</span>
+          </div>
+          <div class="kpi-main-stats flex items-baseline justify-between mb-4">
+            <span class="kpi-value text-3xl font-bold text-primary skeleton" id="insightLeadTotal">--</span>
+            <span class="kpi-sub-label text-gray-500">总量</span>
+            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="insightLeadTodayUpdate">今日采集: --</span>
+          </div>
+          <div class="kpi-categories grid grid-cols-2 sm:grid-cols-4 gap-2 pt-4 border-t border-gray-200" id="insightLeadCategories">
+            <!-- 分类数据将由JS填充 -->
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>待处理
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>处理中
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>已完成
+            </div>
+            <div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm hover:bg-gray-200 transition-colors">
+              <span class="kpi-category-value font-semibold skeleton">--</span>已发布
+            </div>
+          </div>
+        </div>
+
+        <!-- 细分技术领域卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-2 lg:col-span-2 group2 bg-group2 transition-all hover:shadow-card-hover cursor-pointer clickable-kpi" data-type="techDomain">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-flask"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">细分技术领域</span>
+          </div>
+          <div class="kpi-main-stats flex items-baseline justify-between mb-4">
+            <span class="kpi-value text-3xl font-bold text-primary skeleton" id="techDomainTotal">--</span>
+            <span class="kpi-sub-label text-gray-500">总数</span>
+            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="techDomainActive">活跃: --</span>
+          </div>
+          <div class="kpi-footer text-gray-500 text-sm flex justify-between items-center">
+            <span>点击查看详情</span>
+            <i class="fa fa-chevron-right text-xs"></i>
+          </div>
+        </div>
+
+        <!-- 业界关键标杆卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-2 lg:col-span-2 group2 bg-group2 transition-all hover:shadow-card-hover cursor-pointer clickable-kpi" data-type="industryBenchmark">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-building"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">业界关键标杆</span>
+          </div>
+          <div class="kpi-main-stats flex items-baseline justify-between mb-4">
+            <span class="kpi-value text-3xl font-bold text-primary skeleton" id="industryBenchmarkTotal">--</span>
+            <span class="kpi-sub-label text-gray-500">总数</span>
+            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="industryBenchmarkFocus">重点: --</span>
+          </div>
+          <div class="kpi-footer text-gray-500 text-sm flex justify-between items-center">
+            <span>点击查看详情</span>
+            <i class="fa fa-chevron-right text-xs"></i>
+          </div>
+        </div>
+
+        <!-- 产业学术顶会卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-2 lg:col-span-2 group2 bg-group2 transition-all hover:shadow-card-hover cursor-pointer clickable-kpi" data-type="conference">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-calendar"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">产业学术顶会</span>
+          </div>
+          <div class="kpi-main-stats flex items-baseline justify-between mb-4">
+            <span class="kpi-value text-3xl font-bold text-primary skeleton" id="conferenceTotal">--</span>
+            <span class="kpi-sub-label text-gray-500">总数</span>
+            <span class="kpi-today-update bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-sm skeleton" id="conferenceMonitoring">关注中: --</span>
+          </div>
+          <div class="kpi-footer text-gray-500 text-sm flex justify-between items-center">
+            <span>点击查看详情</span>
+            <i class="fa fa-chevron-right text-xs"></i>
+          </div>
+        </div>
+
+        <!-- 系统状态卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-3 lg:col-span-3 group3 bg-group3 transition-all hover:shadow-card-hover">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-cog"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">系统状态</span>
+          </div>
+          
+          <div class="space-y-4">
+            <div class="status-item flex items-center">
+              <span class="status-label font-medium w-24">整体健康度</span>
+              <div class="progress-bar-container flex-grow bg-gray-200 rounded-full h-2.5 mx-2">
+                <div class="progress-bar bg-primary rounded-full h-full" id="overallHealthBar" style="width: 0%"></div>
+              </div>
+              <span class="status-percentage font-medium text-gray-600 w-12 skeleton" id="overallHealthPct">--%</span>
+            </div>
+            
+            <div class="status-item flex items-center">
+              <span class="status-label font-medium w-24">工作流状态</span>
+              <div class="progress-bar-container flex-grow bg-gray-200 rounded-full h-2.5 mx-2">
+                <div class="progress-bar bg-primary rounded-full h-full" id="workflowHealthBar" style="width: 0%"></div>
+              </div>
+              <span class="status-percentage font-medium text-gray-600 w-12 skeleton" id="workflowHealthPct">--%</span>
+            </div>
+            
+            <div class="status-item flex items-center">
+              <span class="status-label font-medium w-24">数据质量</span>
+              <div class="progress-bar-container flex-grow bg-gray-200 rounded-full h-2.5 mx-2">
+                <div class="progress-bar bg-primary rounded-full h-full" id="dataQualityBar" style="width: 0%"></div>
+              </div>
+              <span class="status-percentage font-medium text-gray-600 w-12 skeleton" id="dataQualityPct">--%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 系统警报卡片 -->
+        <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-3 lg:col-span-3 group3 bg-group3 transition-all hover:shadow-card-hover">
+          <div class="kpi-card-header flex items-center mb-4">
+            <span class="kpi-card-icon text-2xl text-primary mr-3"><i class="fa fa-bell"></i></span>
+            <span class="kpi-card-title font-semibold text-lg">系统警报</span>
+          </div>
+          
+          <div id="systemAlertsList" class="space-y-3">
+            <div class="alert-item bg-blue-50 border-l-4 border-blue-400 p-4 rounded-md shadow-sm">
+              <div class="alert-title font-medium text-blue-800">系统健康度良好</div>
+              <p class="text-blue-700 text-sm">当前系统运行正常，无重要警报。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 数据采集页面 -->
+    <div id="page-collection" class="page-container hidden">
+      <div class="p-6 bg-white rounded-xl shadow-lg">
+        <!-- Section 1: 技术数据采集 -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <!-- 统一的标题栏结构 -->
+          <div class="flex items-center mb-6 border-b pb-4">
+            <i class="fa fa-cogs text-xl text-primary mr-3"></i>
+            <h3 class="text-xl font-bold text-gray-800">技术数据采集</h3>
+            <span class="ml-4 text-sm text-gray-500">关注全球技术动态，捕捉前沿技术信号</span>
+          </div>
+          <!-- 卡片容器 -->
+          <div id="tech-data-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- 技术数据源卡片将由JS动态填充 -->
+            <div class="skeleton h-56 rounded-lg"></div>
+            <div class="skeleton h-56 rounded-lg"></div>
+            <div class="skeleton h-56 rounded-lg"></div>
+            <div class="skeleton h-56 rounded-lg"></div>
+          </div>
+        </div>
+
+        <!-- Section 2: 标杆数据采集 (升级版) -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <!-- 统一的标题栏结构 -->
+          <div class="flex items-center mb-6 border-b pb-4">
+            <i class="fa fa-flag-checkered text-xl text-primary mr-3"></i>
+            <h3 class="text-xl font-bold text-gray-800">标杆数据采集</h3>
+            <span class="ml-4 text-sm text-gray-500">追踪标杆企业动态，洞察产业发展趋势</span>
+          </div>
+
+          <!-- 升级后的筛选区域 -->
+          <div class="bg-white p-4 rounded-lg border border-gray-200 mb-4 flex items-center justify-between shadow-sm">
+            <div class="flex items-center gap-4">
+              <label for="company-select" class="font-medium text-gray-700">选择企业:</label>
+              <select id="company-select" class="w-64 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                <option value="">所有企业</option>
+                <!-- 企业选项将由JS动态加载 -->
+              </select>
+              <button id="filter-btn" class="px-5 py-2 bg-primary text-white font-semibold rounded-md hover:bg-blue-700 transition-colors shadow">筛选</button>
+              <button id="clear-filter-btn" class="px-5 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors">清除筛选</button>
+            </div>
+          </div>
+          <p id="filter-status-text" class="text-sm text-gray-500 mb-6">显示所有企业的标杆企业数据</p>
+
+          <!-- 卡片容器 -->
+          <div id="benchmark-data-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- 标杆数据源卡片将由JS动态填充 -->
+            <div class="skeleton h-56 rounded-lg"></div>
+            <div class="skeleton h-56 rounded-lg"></div>
+            <div class="skeleton h-56 rounded-lg"></div>
+            <div class="skeleton h-56 rounded-lg"></div>
+          </div>
+        </div>
+        
+        <!-- Section 3: 采集统计 -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <!-- 统一的标题栏结构 -->
+          <div class="flex items-center mb-6 border-b pb-4">
+            <i class="fa fa-line-chart text-xl text-primary mr-3"></i>
+            <h3 class="text-xl font-bold text-gray-800">采集统计</h3>
+          </div>
+          <div id="collection-stats-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div class="text-sm text-gray-500 mb-1">本月采集量</div>
+              <div class="text-2xl font-bold" id="monthlyVolume">--</div>
+              <div id="monthlyVolumeChange" class="text-sm flex items-center mt-1"></div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div class="text-sm text-gray-500 mb-1">成功率</div>
+              <div class="text-2xl font-bold" id="successRate">--</div>
+              <div id="successRateChange" class="text-sm flex items-center mt-1"></div>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <div class="text-sm text-gray-500 mb-1">失败任务</div>
+              <div class="text-2xl font-bold" id="failedTasks">--</div>
+              <div id="failedTasksChange" class="text-sm flex items-center mt-1"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 4: 最近采集历史 -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+          <!-- 统一的标题栏结构 -->
+          <div class="flex items-center mb-6 border-b pb-4">
+            <i class="fa fa-history text-xl text-primary mr-3"></i>
+            <h3 class="text-xl font-bold text-gray-800">最近采集历史</h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 responsive-table"> <!-- Added responsive-table class -->
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">任务名称</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">开始时间</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">结束时间</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <!-- 表格内容将由JS动态填充 -->
+                <tr><td colspan="5" class="text-center py-4 text-gray-500">正在加载历史记录...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+    <!-- 技术洞察页面 -->
+    <div id="page-insights" class="page-container hidden">
+      <div class="p-6 bg-white rounded-xl shadow-lg">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h3 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fa fa-area-chart text-primary mr-2"></i>趋势分析
+            </h3>
+            <!-- ✅ 为图表容器添加ID -->
+            <div id="trend-chart-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <!-- 占位符将被ECharts替换 -->
+              <div class="flex items-center justify-center h-full text-gray-400">
+                <i class="fa fa-spinner fa-spin text-4xl mr-3"></i>
+                <span>正在加载图表数据...</span>
+              </div>
+            </div>
+          </div>
+        
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h3 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fa fa-tags text-primary mr-2"></i>热点关键词
+            </h3>
+            <!-- ✅ 为图表容器添加ID -->
+            <div id="keyword-cloud-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+              <!-- 热词云占位 -->
+              <div class="flex items-center justify-center h-full text-gray-400">
+                <i class="fa fa-cloud text-4xl mr-3"></i>
+                <span>关键词云将在这里显示</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fa fa-line-chart text-primary mr-2"></i>技术成熟度曲线
+          </h3>
+          <div id="hype-cycle-chart-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <!-- 占位符 -->
+            <div class="flex items-center justify-center h-full text-gray-400">
+              <i class="fa fa-spinner fa-spin text-4xl mr-3"></i>
+              <span>正在加载图表数据...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fa fa-lightbulb-o text-primary mr-2"></i>最新洞察线索
+          </h3>
+          <div class="overflow-x-auto">
+            <!-- ✅ 修改：为 table 添加 responsive-table 类 -->
+            <table class="min-w-full divide-y divide-gray-200 table-fixed responsive-table">
+              <thead class="bg-gray-100">
+                <tr>
+                  <!-- ✅ 修改：为 th 添加宽度类 -->
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">标题</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">来源</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">日期</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/10">状态</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/10">操作</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <!-- 表格内容将由JS动态填充 -->
+                <!-- 初始加载状态，此行会被JS替换 -->
+                <tr><td colspan="5" class="text-center py-4 text-gray-500">正在加载最新线索...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+    <!-- 决策行动页面 -->
+    <div id="page-actions" class="page-container hidden">
+      <div class="p-6 bg-white rounded-xl shadow-lg">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">决策行动中心</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h3 class="text-xl font-semibold mb-4 flex items-center">
+              <i class="fa fa-tasks text-primary mr-2"></i>待处理任务
+            </h3>
+            <div class="space-y-4">
+              <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <div class="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 class="font-medium text-gray-900">评估量子计算技术应用可行性</h4>
+                    <p class="text-sm text-gray-500 mt-1">负责人: 张博士</p>
+                  </div>
+                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                    高优先级
+                  </span>
+                </div>
+                <p class="text-sm text-gray-600 mb-3">根据最新研究，评估量子计算技术在公司核心业务场景中的应用可能性和潜在价值。</p>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-gray-500">截止日期: 2025-07-15</span>
+                  <button class="text-primary hover:text-primary-dark text-sm">处理</button>
+                </div>
+              </div>
+              
+              <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <div class="flex justify-between items-start mb-3">
+                  <div>
+                    <h4 class="font-medium text-gray-900">分析边缘计算架构升级方案</h4>
+                    <p class="text-sm text-gray-500 mt-1">负责人: 李工程师</p>
+                  </div>
+                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                    中优先级
+                  </span>
+                </div>
+                <p class="text-sm text-gray-600 mb-3">分析现有架构与边缘计算技术结合的可行性，提出升级方案和成本估算。</p>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-gray-500">截止日期: 2025-07-30</span>
+                  <button class="text-primary hover:text-primary-dark text-sm">处理</button>
+                </div>
+              </div>
+              
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                  <div class="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 class="font-medium text-gray-900">制定人工智能人才培养计划</h4>
+                      <p class="text-sm text-gray-500 mt-1">负责人: 王经理</p>
+                    </div>
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                      中优先级
+                    </span>
+                  </div>
+                  <p class="text-sm text-gray-600 mb-3">基于行业趋势和公司战略，制定人工智能领域的人才招聘、培养和保留计划。</p>
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm text-gray-500">截止日期: 2025-08-10</span>
+                    <button class="text-primary hover:text-primary-dark text-sm">处理</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <h3 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fa fa-calendar-check-o text-primary mr-2"></i>即将到来的里程碑
+              </h3>
+              <div class="space-y-4">
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                  <div class="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 class="font-medium text-gray-900">季度技术洞察报告发布</h4>
+                      <p class="text-sm text-gray-500 mt-1">负责人: 赵分析师</p>
+                    </div>
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
+                      即将到期
+                    </span>
+                  </div>
+                  <div class="flex items-center mb-3">
+                    <i class="fa fa-calendar text-gray-400 mr-2"></i>
+                    <span class="text-sm">2025-06-30 (3天后)</span>
+                  </div>
+                  <p class="text-sm text-gray-600 mb-3">准备并发布本季度的技术洞察综合报告，包括趋势分析和建议。</p>
+                  <div class="flex justify-between items-center">
+                    <button class="text-primary hover:text-primary-dark text-sm">查看详情</button>
+                    <button class="px-3 py-1 bg-primary text-white rounded text-sm">编辑</button>
+                  </div>
+                </div>
+                
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                  <div class="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 class="font-medium text-gray-900">技术路线图评审会议</h4>
+                      <p class="text-sm text-gray-500 mt-1">负责人: 陈总监</p>
+                    </div>
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                      计划中
+                    </span>
+                  </div>
+                  <div class="flex items-center mb-3">
+                    <i class="fa fa-calendar text-gray-400 mr-2"></i>
+                    <span class="text-sm">2025-07-05 (8天后)</span>
+                  </div>
+                  <p class="text-sm text-gray-600 mb-3">组织跨部门会议，评审和更新公司技术战略路线图。</p>
+                  <div class="flex justify-between items-center">
+                    <button class="text-primary hover:text-primary-dark text-sm">查看详情</button>
+                    <button class="px-3 py-1 bg-primary text-white rounded text-sm">参与</button>
+                  </div>
+                </div>
+                
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                  <div class="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 class="font-medium text-gray-900">技术合作伙伴峰会</h4>
+                      <p class="text-sm text-gray-500 mt-1">负责人: 刘主管</p>
+                    </div>
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                      筹备中
+                    </span>
+                  </div>
+                  <div class="flex items-center mb-3">
+                    <i class="fa fa-calendar text-gray-400 mr-2"></i>
+                    <span class="text-sm">2025-07-20 (23天后)</span>
+                  </div>
+                  <p class="text-sm text-gray-600 mb-3">参与年度技术合作伙伴峰会，展示最新技术成果和合作机会。</p>
+                  <div class="flex justify-between items-center">
+                    <button class="text-primary hover:text-primary-dark text-sm">查看详情</button>
+                    <button class="px-3 py-1 bg-primary text-white rounded text-sm">准备</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <h3 class="text-xl font-semibold mb-4 flex items-center">
+                <i class="fa fa-line-chart text-primary mr-2"></i>关键绩效指标
+              </h3>
+              <div class="space-y-6">
+                <div>
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">洞察转化率</span>
+                    <span class="text-sm font-medium">82%</span>
+                  </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-primary h-2.5 rounded-full" style="width: 82%"></div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">技术建议采纳率</span>
+                    <span class="text-sm font-medium">67%</span>
+                  </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-primary h-2.5 rounded-full" style="width: 67%"></div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">决策响应时间</span>
+                    <span class="text-sm font-medium">9天</span>
+                  </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-primary h-2.5 rounded-full" style="width: 78%"></div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium">技术实施成功率</span>
+                    <span class="text-sm font-medium">75%</span>
+                  </div>
+                  <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div class="bg-primary h-2.5 rounded-full" style="width: 75%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+    <!-- 报告中心页面 -->
+    <div id="page-reports" class="page-container hidden">
+      <div class="p-6 bg-white rounded-xl shadow-lg">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800">报告中心</h2>
+        
+        <!-- 报告类型卡片（这部分保持不变） -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-100 transition-colors">
+            <div class="text-4xl text-primary mb-3"><i class="fa fa-file-text-o"></i></div>
+            <h3 class="text-lg font-semibold mb-1">季度技术趋势报告</h3>
+            <p class="text-sm text-gray-500 mb-3">分析本季度主要技术趋势和发展方向</p>
+            <span class="text-xs text-gray-400">最近更新: 2025-06-15</span>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-100 transition-colors">
+            <div class="text-4xl text-primary mb-3"><i class="fa fa-bar-chart"></i></div>
+            <h3 class="text-lg font-semibold mb-1">竞争技术分析</h3>
+            <p class="text-sm text-gray-500 mb-3">对比主要竞争对手的技术布局和优势</p>
+            <span class="text-xs text-gray-400">最近更新: 2025-05-30</span>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-100 transition-colors">
+            <div class="text-4xl text-primary mb-3"><i class="fa fa-lightbulb-o"></i></div>
+            <h3 class="text-lg font-semibold mb-1">技术创新洞察</h3>
+            <p class="text-sm text-gray-500 mb-3">识别潜在的技术创新机会和突破点</p>
+            <span class="text-xs text-gray-400">最近更新: 2025-06-20</span>
+          </div>
+        </div>
+        
+        <!-- 报告历史记录 -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fa fa-history text-primary mr-2"></i>报告历史记录
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 responsive-table"> <!-- Added responsive-table class -->
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">报告名称</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">报告类型</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生成日期</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生成者</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                </tr>
+              </thead>
+              <tbody id="reportHistoryTable" class="bg-white divide-y divide-gray-200">
+                <!-- 报告历史记录将由JS填充 -->
+                <tr><td colspan="6" class="text-center py-4 text-gray-500">正在加载报告历史...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- **新增：报告历史记录分页控件** -->
+          <div class="flex justify-between items-center mt-4">
+            <button id="reportsHistoryPrevPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">上一页</button>
+            <span id="reportsHistoryPaginationInfo" class="text-sm text-gray-600"></span>
+            <button id="reportsHistoryNextPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">下一页</button>
+          </div>
+          <!-- **新增：报告历史记录分页控件 结束** -->
+        </div>
+        
+        <!-- 创建新报告表单 -->
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+          <h3 class="text-xl font-semibold mb-4 flex items-center">
+            <i class="fa fa-plus-circle text-primary mr-2"></i>创建新报告
+          </h3>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">报告类型</label>
+                <select name="report-type-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                  <option value="Daily">日报</option>
+                  <option value="Weekly">周报</option>
+                  <option value="Monthly">月报</option>
+                  <option value="Quarterly">季度报告</option>
+                  <option value="Annual">年报</option>
+                  <option value="Custom">自定义报告</option>
+                </select>
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">报告标题</label>
+                <input type="text" name="report-title-input" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" placeholder="输入报告标题">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">报告周期</label>
+                <div class="flex items-center space-x-4">
+                  <div class="flex items-center">
+                    <input type="radio" id="weekly" name="report-period" value="weekly" class="h-4 w-4 text-primary focus:ring-primary border-gray-300" checked>
+                    <label for="weekly" class="ml-2 block text-sm text-gray-700">周度</label>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="radio" id="monthly" name="report-period" value="monthly" class="h-4 w-4 text-primary focus:ring-primary border-gray-300">
+                    <label for="monthly" class="ml-2 block text-sm text-gray-700">月度</label>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="radio" id="quarterly" name="report-period" value="quarterly" class="h-4 w-4 text-primary focus:ring-primary border-gray-300">
+                    <label for="quarterly" class="ml-2 block text-sm text-gray-700">季度</label>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="radio" id="annual" name="report-period" value="annual" class="h-4 w-4 text-primary focus:ring-primary border-gray-300">
+                    <label for="annual" class="ml-2 block text-sm text-gray-700">年度</label>
+                  </div>
+                  <div class="flex items-center">
+                    <input type="radio" id="custom" name="report-period" value="custom" class="h-4 w-4 text-primary focus:ring-primary border-gray-300">
+                    <label for="custom" class="ml-2 block text-sm text-gray-700">自定义</label>
+                  </div>
+                </div>
+                <!-- 自定义日期范围 -->
+                <div id="customDateRange" class="flex items-center space-x-2 mt-2 hidden">
+                  <input type="date" id="startDate" class="w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                  <span>至</span>
+                  <input type="date" id="endDate" class="w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                </div>
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">覆盖技术领域</label>
+                <div id="techAreaCheckboxesContainer" class="grid grid-cols-1 gap-2">
+                  <!-- 技术领域复选框将由JavaScript动态填充 -->
+                </div>  
+              
+                <div class="flex items-center">
+                  <input type="checkbox" id="all-tech-areas" name="tech-area-checkbox" value="all" class="h-4 w-4 text-primary focus:ring-primary border-gray-300">
+                  <label for="all-tech-areas" class="ml-2 block text-sm text-gray-700">全选</label>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">目标受众</label>
+                <select name="target-audience-select" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                  <option value="技术团队">技术团队</option>
+                  <option value="管理层">管理层</option>
+                  <option value="产品团队">产品团队</option>
+                  <option value="市场团队">市场团队</option>
+                  <option value="多部门共享">多部门共享</option>
+                </select>
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">报告负责人</label>
+                <input type="text" name="report-owner-input" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" placeholder="输入负责人姓名">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">接收者邮箱 (可选，用于邮件分发)</label>
+                <input type="email" id="recipient-email-input" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" placeholder="输入邮箱地址">
+              </div>
+
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">预计完成日期</label>
+                <input type="date" name="expected-completion-date" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">报告摘要</label>
+                <textarea name="report-summary-textarea" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" rows="4" placeholder="简要描述报告内容和目的"></textarea>
+              </div>
+            </div>
+          </div>
+          
+          <div class="mt-6 flex justify-end">
+            <button class="mr-3 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+              保存为草稿
+            </button>
+            <button id="generateReportBtn" class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+              生成报告
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =============================================================== -->
+    <!-- ================== Global Detail Modal (MODAL) ================== -->
+    <!-- =============================================================== -->
+    <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex justify-between items-center p-4 border-b">
+          <h3 id="modalTitle" class="text-xl font-semibold text-gray-800">数据详情</h3>
+          <button class="close-button text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto">
+          <div id="noDataMessage" class="text-center text-gray-500 py-8 hidden">没有找到相关数据。</div>
+          <div class="overflow-x-auto">
+              <table id="detailTable" class="min-w-full divide-y divide-gray-200 responsive-table"> <!-- Added responsive-table class -->
+                <!-- thead and tbody will be generated by JS -->
+              </table>
+          </div>
+        </div>
+
+        <!-- Modal Footer (for pagination, if needed later) -->
+        <div class="modal-footer flex justify-between items-center p-4 border-t">
+          <span id="paginationInfo" class="text-sm text-gray-600"></span>
+          <div>
+            <button id="prevPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">上一页</button>
+            <button id="nextPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50 ml-2">下一页</button>
+          </div>
+        </div>
+      </div>
+    </div>
+        <!-- =============================================================== -->
+        <!-- ================== History Detail Specific Modal ================== -->
+        <!-- =============================================================== -->
+    <div id="historyDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center p-4 border-b">
+          <h3 id="historyModalTitle" class="text-xl font-semibold text-gray-800">任务详情</h3>
+          <button class="close-button text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div id="historyModalBody" class="p-6 overflow-y-auto">
+          <!-- 内容将由JS填充 -->
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <?!= include('frontend/main.js'); ?>
+
+</body>
+</html>

@@ -1,0 +1,1347 @@
+<script>
+  // ==================================================================
+  //  SECTION 1: CONFIGURATION & DATA ADAPTERS
+  // ==================================================================
+
+  // Client-side logging wrapper. Can be toggled for production if needed.
+  const CLIENT_LOG_LEVEL = 'DEBUG'; // 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+  function clientLogDebug(message, ...args) { if (CLIENT_LOG_LEVEL === 'DEBUG') console.log(message, ...args); }
+  function clientLogInfo(message, ...args) { if (['DEBUG', 'INFO'].includes(CLIENT_LOG_LEVEL)) console.info(message, ...args); }
+  function clientLogWarning(message, ...args) { if (['DEBUG', 'INFO', 'WARNING'].includes(CLIENT_LOG_LEVEL)) console.warn(message, ...args); }
+  function clientLogError(message, ...args) { console.error(message, ...args); }
+
+  const FIELD_CONFIG = {
+    _default: [
+      { key: 'title', label: '标题', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '日期' }, { key: 'infoA', label: '信息 A' },
+      { key: 'infoB', label: '信息 B' }, { key: 'id', label: 'ID' },
+    ],
+    academicPapers: [
+      { key: 'title', label: '技术主题', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'infoA', label: '论文作者' }, { key: 'date', label: '发表日期' },
+      { key: 'infoB', label: '相关性分' }, { key: 'id', label: '原始ID' },
+    ],
+    patentData: [
+      { key: 'title', label: '专利标题', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'infoA', label: '专利号' }, { key: 'date', label: '申请日期' },
+      { key: 'infoB', label: '状态' }, { key: 'id', label: 'ID' },
+    ],
+    openSourceData: [
+      { key: 'title', label: '项目名称', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '最新提交' },
+      { key: 'infoA', label: '技术领域' },
+      { key: 'infoB', label: '项目简介', needTrunc: true },
+      { key: 'id', label: 'ID' },
+    ],
+    techNews: [
+      { key: 'title', label: '新闻标题', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '发布日期' },
+      { key: 'infoA', label: '新闻来源' },
+      { key: 'infoB', label: '新闻简介', needTrunc: true },
+      { key: 'id', label: 'ID' },
+    ],
+    industryDynamics: [
+      { key: 'title', label: '事件标题', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '事件日期' },
+      { key: 'infoA', label: '影响级别' },
+      { key: 'infoB', label: '状态' },
+      { key: 'id', label: 'ID' },
+    ],
+    techInnovation: [
+      { key: 'title', label: '创新点', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '更新时间' },
+      { key: 'infoA', label: '状态' },
+      { key: 'infoB', label: '威胁等级' },
+      { key: 'id', label: 'ID' },
+    ],
+    productRelease: [
+      { key: 'title', label: '产品名称', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '发布时间' },
+      { key: 'infoA', label: '状态' },
+      { key: 'infoB', label: '' },
+      { key: 'id', label: 'ID' },
+    ],
+    talentFlow: [
+      { key: 'title', label: '流动事件', needTrunc: true, linkField: 'sourceUrl' },
+      { key: 'date', label: '时间' },
+      { key: 'infoA', label: '状态' },
+      { key: 'infoB', label: '' },
+      { key: 'id', label: 'ID' },
+    ],
+    techDomain: [
+        { key: 'title', label: '技术名称' }, { key: 'infoA', label: '技术类别' },
+        { key: 'infoB', label: '监控状态' }, { key: 'date', label: '创建日期' }, { key: 'id', label: '技术ID' },
+    ],
+    industryBenchmark: [
+        { key: 'title', label: '公司名称', linkField: 'sourceUrl' }, { key: 'infoA', label: '行业类别' },
+        { key: 'infoB', label: '威胁等级' }, { key: 'date', label: '上次更新' }, { key: 'id', label: '对手ID' },
+    ],
+    conference: [
+        { key: 'title', label: '会议名称', linkField: 'sourceUrl' }, { key: 'infoA', label: '行业焦点' },
+        { key: 'infoB', label: '监控状态' }, { key: 'date', label: '下次活动' }, { key: 'id', label: '会议ID' },
+    ],
+    // ✅ New: Create a config specifically for history detail
+    historyDetail: [
+        { key: 'key', label: '属性', width: '30%' },
+        { key: 'value', label: '值', width: '70%' },
+    ]
+  };
+
+  const DataAdapters = {
+    academicPapers: item => ({ id: item.raw_id, title: item.title, date: item.publication_date, infoA: item.authors, infoB: item.initial_relevance_score, sourceUrl: item.source_url }),
+    patentData: item => ({ id: item.patent_number, title: item.title, date: item.application_date, infoA: item.patent_number, infoB: item.processing_status, sourceUrl: item.source_url }),
+    openSourceData: item => ({ id: item.project_name, title: item.project_name, date: item.last_update_timestamp, infoA: item.tech_keywords, infoB: item.description, sourceUrl: item.source_url }),
+    techNews: item => ({ id: item.raw_id, title: item.news_title, date: item.publication_date, infoA: item.source_platform, infoB: item.news_summary, sourceUrl: item.source_url }),
+    industryDynamics: item => ({ id: item.event_title, title: item.event_title, date: item.event_date, infoA: item.impact_level, infoB: item.processing_status, sourceUrl: item.source_url }),
+    _competitorIntelligenceAdapter: item => ({ id: item.intelligence_id, title: item.intelligence_title, date: item.last_update_timestamp, infoA: item.processing_status, infoB: item.threat_level || '', sourceUrl: item.source_url }),
+    techInnovation: item => DataAdapters._competitorIntelligenceAdapter(item),
+    productRelease: item => DataAdapters._competitorIntelligenceAdapter(item),
+    talentFlow: item => DataAdapters._competitorIntelligenceAdapter(item),
+    techDomain: item => ({ id: item.tech_id, title: item.tech_name, date: item.created_date, infoA: item.tech_category, infoB: item.monitoring_status, sourceUrl: null }),
+    industryBenchmark: item => ({ id: item.competitor_id, title: item.company_name, date: item.last_updated, infoA: item.industry_category, infoB: item.threat_level, sourceUrl: item.website_url }),
+    conference: item => ({ id: item.conference_id, title: item.conference_name, date: item.next_event_date, infoA: item.industry_focus, infoB: item.monitoring_status, sourceUrl: item.official_website })
+  };
+
+  // ==================================================================
+  //  SECTION 2: UTILITY FUNCTIONS
+  // ==================================================================\
+
+  function truncate(str, len = 40) { if (str == null) return ''; str = String(str); return str.length > len ? str.slice(0, len) + '...' : str; }
+  function handleFailure(error) { const message = error.message || '发生未知错误'; clientLogError('全局错误处理器捕获到错误:', message, error); alert(`错误: ${message}`); }
+  
+  /**
+   * ✅ Core change: Rewrite showHistoryDetailModal to use the main rendering engine
+   */
+  function showHistoryDetailModal(executionId) {
+    App.currentDetailType = 'historyDetail';
+    App.allModalData = [];
+    App.currentPage = 1;
+    App.ui.showDetailListModal(`任务详情: ${executionId}`, 'all');
+    document.getElementById('detailTable').innerHTML = '<tbody><tr><td class=\"text-center p-4\" colspan=\"2\">正在加载...</td></tr></tbody>'; // Added colspan
+    document.querySelector('#detailModal .modal-footer').style.display = 'none';
+
+    App.callApi('CollectionStatsService', 'getWorkflowExecutionDetail', [executionId])
+      .then(detail => {
+        if (detail && !detail.error) {
+          App.allModalData = Object.entries(detail).map(([key, value]) => ({
+            key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Format key, e.g., 'intelligence_id' -> 'Intelligence Id'
+            value: value !== null ? value : 'N/A'
+          }));
+          App.ui.renderPagedKpiDetails();
+          document.querySelector('#detailModal .modal-footer').style.display = 'none';
+        } else {
+          App.allModalData = [{ key: '错误信息', value: detail.error || '未能获取详情。' }];
+          App.ui.renderPagedKpiDetails();
+          document.querySelector('#detailModal .modal-footer').style.display = 'none';
+        }
+      })
+      .catch(error => {
+        App.allModalData = [{ key: '严重错误', value: error.message }];
+        App.ui.renderPagedKpiDetails();
+        document.querySelector('#detailModal .modal-footer').style.display = 'none';
+      });
+  }
+
+  // ==================================================================\
+  //  SECTION 3: CORE APPLICATION LOGIC\
+  // ==================================================================\
+\
+  const App = {\
+    allModalData: [], currentPage: 1, itemsPerPage: 15, currentDetailType: null,\
+    reportsHistoryCurrentPage: 1,\
+    reportsHistoryItemsPerPage: 15,\
+    reportsHistoryTotalPages: 1,\
+    reportsHistoryTotalRecords: 0,\
+\
+    callApi: function(svc, mtd, args = []) {\
+      clientLogDebug(`[App.callApi] invoked: ${svc}.${mtd}`); \
+      return new Promise((resolve, reject) => {\
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {\
+          clientLogError(\"ERROR: Frontend cannot connect to backend (google.script.run is undefined).\");\
+          return reject(new Error(\"错误：前端无法连接到后端。\"));\
+        }\
+        google.script.run.withSuccessHandler(res => {\
+            clientLogDebug(`[App.callApi] success for ${svc}.${mtd}. Response type: ${typeof res}`);\
+            \
+            let parsedRes = res;\
+            // **Core change: Attempt to parse JSON string**\
+            // Check if it's a string and looks like JSON (starts with { or [)\
+            if (typeof res === 'string' && (res.startsWith('{') || res.startsWith('['))) { \
+                try {\
+                    parsedRes = JSON.parse(res);\
+                    clientLogDebug(`[App.callApi] Successfully parsed JSON response for ${svc}.${mtd}.`);\
+                } catch (e) {\
+                    clientLogError(`ERROR: Failed to parse JSON response for ${svc}.${mtd}:`, e);\
+                    reject(new Error(`后端返回的响应无法解析为JSON: ${e.message}`));\
+                    return; \
+                }\
+            }\
+\
+            // **Use parsedRes for checking**\
+            if (parsedRes === null) {\
+                reject(new Error(\"后端返回了意外的null值。\"));\
+            } else if (parsedRes.error) { // If backend explicitly returned { error: \"...\" }\
+                reject(new Error(parsedRes.error));\
+            } else {\
+                resolve(parsedRes); // Successfully parsed and resolved Promise\
+            }\
+        }).withFailureHandler(reject).callApi(svc, mtd, args);\
+      });\
+    },\
+\
+    ui: {\
+      renderPagedKpiDetails: function() {\
+        const table = document.getElementById('detailTable');\
+        const footer = document.querySelector('#detailModal .modal-footer');\
+        const noData = document.getElementById('noDataMessage');\
+        if (!App.allModalData || App.allModalData.length === 0) { table.innerHTML = ''; noData.style.display = 'block'; footer.style.display = 'none'; return; }\
+        noData.style.display = 'none';\
+        const totalItems = App.allModalData.length;\
+        const totalPages = Math.ceil(totalItems / App.itemsPerPage);\
+        const pageData = App.allModalData.slice((App.currentPage - 1) * App.itemsPerPage, App.currentPage * App.itemsPerPage);\
+        const displayFields = FIELD_CONFIG[App.currentDetailType] || FIELD_CONFIG._default || [];\
+\
+        // Responsive table headers\
+        const theadHTML = `<thead class=\"bg-gray-50\"><tr>${\
+            displayFields.map(f => {\
+                const style = f.width ? `style=\"width: ${f.width};\"` : '';\
+                return `<th ${style} class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap\">${f.label}</th>`;\
+            }).join('')\
+        }</tr></thead>`;\
+\
+        // ✅ Core change: Add styles to td, and optimize value handling logic\
+        // Add data-label for responsive tables\
+        const tbodyHTML = `<tbody class=\"bg-white divide-y divide-gray-200\">${\
+            pageData.map(item => `<tr>${\
+                displayFields.map(f => {\
+                    const rawValue = item[f.key];\
+                    let displayValue = rawValue !== null ? String(rawValue) : 'N/A';\
+\
+                    // --- START NEW/MODIFIED LOGIC ---\
+                    // Special handling for 'Source Url' field in historyDetail for clickable links\
+                    if (App.currentDetailType === 'historyDetail' && f.key === 'value' && item.key === 'Source Url' && rawValue && typeof rawValue === 'string' && (rawValue.startsWith('http://') || rawValue.startsWith('https://'))) {\
+                        const truncatedUrlText = truncate(displayValue, 60); \
+                        displayValue = `<a href=\"${rawValue}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-blue-600 hover:text-blue-800 hover:underline\">${truncatedUrlText}</a>`;\
+                    } else if (f.linkField && item[f.linkField]) { // Existing general link handling logic\
+                        const truncatedText = f.needTrunc ? truncate(displayValue) : displayValue;\
+                        displayValue = `<a href=\"${item[f.linkField]}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-blue-600 hover:text-blue-800 hover:underline\">${truncatedText}</a>`;\
+                    } else if (f.needTrunc) { // Existing general truncation logic\
+                        displayValue = truncate(displayValue);\
+                    }\
+                    // --- END NEW/MODIFIED LOGIC ---\
+                    \
+                    // Dynamic styles\
+                    const style = f.width ? `style=\"width: ${f.width}; max-width: ${f.width};\"` : 'style=\"max-width: 400px;\"'; // Set a max-width for auto-width columns\
+                    const classes = \"px-6 py-4 text-sm text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis\";\
+\
+                    // Add data-label for responsive table (for mobile view)\
+                    return `<td class=\"${classes}\" ${style} title=\"${String(rawValue || '').replace(/\"/g, '&quot;')}\" data-label=\"${f.label}\">${displayValue}</td>`;\
+                }).join('')\
+            }</tr>`).join('')\
+        }</tbody>`;\
+        table.innerHTML = theadHTML + tbodyHTML;\
+        document.getElementById('paginationInfo').textContent = `第 ${App.currentPage} / ${totalPages} 页 (共 ${totalItems} 条)`;\
+        document.getElementById('prevPageBtn').disabled = App.currentPage === 1;\
+        document.getElementById('nextPageBtn').disabled = App.currentPage === totalPages;\
+        footer.style.display = 'flex';\
+      },\
+      showDetailListModal: function(title, detailKind) {\
+        document.getElementById('modalTitle').textContent = `${title} - ${detailKind === 'today' ? '近7日明细' : '全部明细'}`;\
+        this.renderPagedKpiDetails();\
+        document.getElementById('detailModal').classList.add('flex'); // Use classList for visibility\
+        document.getElementById('detailModal').classList.remove('hidden');\
+      },\
+      handleCollectionCardClick: function(e, pageData) {\
+        const card = e.target.closest('.clickable-kpi');\
+        if (!card) return;\
+        const type = card.dataset.type;\
+        const adapter = DataAdapters[type];\
+        if (!type || !adapter) return clientLogError(`未找到类型 \"${type}\" 的适配器`);\
+        const detailEl = e.target.closest('.clickable-detail');\
+        const detailKind = detailEl ? detailEl.dataset.detail : 'all'; // 'today' or 'all'\
+        const title = card.querySelector('h3').innerText;\
+        App.currentDetailType = type;\
+        App.currentPage = 1;\
+        let rawData = [];\
+        if (pageData.techData && pageData.techData[type]) {\
+            rawData = pageData.techData[type];\
+        } else if (type === 'industryDynamics') {\
+            const ind = (pageData.benchmarkData.industryDynamics || []).filter(item => !this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName));\
+            const ciNews = (pageData.benchmarkData.competitorIntelligence || []).filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && (item.intelligence_type || '').toLowerCase().replace(/[\s_]/g, '') === 'generalnews')\
+                .map(item => ({ event_title: item.intelligence_title, event_date: item.last_update_timestamp, impact_level: item.threat_level, processing_status: item.processing_status, source_url: item.source_url }));\
+            rawData = [...ind, ...ciNews];\
+        } else {\
+            const typeMapping = { 'techInnovation': 'Tech Innovation', 'productRelease': 'Product Release', 'talentFlow': 'Talent Flow' };\
+            if (typeMapping[type]) rawData = (pageData.benchmarkData.competitorIntelligence || []).filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && item.intelligence_type === typeMapping[type]);\
+        }\
+        \
+        let dataToAdapt = rawData;\
+\
+        // **Modification 1: Unified 'today' filtering logic, using 'created_timestamp' and 'last 7 days' range**\
+        if (detailKind === 'today') { \
+            const ingestionDateFieldMap = {\
+                academicPapers: 'created_timestamp', \
+                patentData: 'created_timestamp',     \
+                openSourceData: 'created_timestamp', \
+                techNews: 'created_timestamp',       \
+                industryDynamics: 'created_timestamp', \
+                techInnovation: 'created_timestamp', \
+                productRelease: 'created_timestamp', \
+                talentFlow: 'created_timestamp' \
+            };\
+            const ingestionDateField = ingestionDateFieldMap[type] || 'created_timestamp'; \
+\
+            const today = new Date();\
+            today.setHours(0, 0, 0, 0); \
+\
+            const sevenDaysAgo = new Date(today);\
+            sevenDaysAgo.setDate(today.getDate() - 6); \
+            \
+            dataToAdapt = rawData.filter(item => { \
+                const val = item[ingestionDateField]; \
+                if (!val) return false;\
+                \
+                const itemDateStr = String(val).slice(0, 10);\
+                const itemDate = new Date(itemDateStr); \
+\
+                return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo && itemDate <= today;\
+            });\
+        }\
+        // **Modification 1 End**\
+\
+        App.allModalData = dataToAdapt.map(adapter);\
+\
+        // **Modification 2: Sort data before displaying in modal (newest date first)**\
+        App.allModalData.sort((a, b) => {\
+            const dateA = new Date(a.date);\
+            const dateB = new Date(b.date);\
+\
+            const timeA = isNaN(dateA.getTime()) ? -Infinity : dateA.getTime();\
+            const timeB = isNaN(dateB.getTime()) ? -Infinity : dateB.getTime();\
+\
+            return timeB - timeA; \
+        });\
+        // **Sorting logic end**\
+\
+        App.ui.showDetailListModal(title, detailKind); \
+      },\
+      handleDashboardKpiClick: async function(event) {\
+        try{\
+          clientLogDebug(\"handleDashboardKpiClick triggered.\"); \
+          const card = event.currentTarget;\
+          const type = card.dataset.type;\
+          const adapter = DataAdapters[type];\
+          if (!type || !adapter) return clientLogError(`未找到类型 \"${type}\" 的适配器`);\
+          App.currentDetailType = type;\
+          App.currentPage = 1;\
+          const title = card.querySelector('.kpi-card-title').innerText;\
+          document.getElementById('modalTitle').textContent = `${title} - 正在加载...`;\
+          document.getElementById('detailTable').innerHTML = '<tbody><tr><td colspan=\"5\" class=\"text-center py-8\">正在加载...</td></tr></tbody>';\
+          document.getElementById('noDataMessage').style.display = 'none';\
+          document.querySelector('#detailModal .modal-footer').style.display = 'none';\
+          document.getElementById('detailModal').classList.add('flex'); // Use classList\
+          document.getElementById('detailModal').classList.remove('hidden');\
+\
+          const methodMap = { techDomain: 'getTechnologyDomainDetails', industryBenchmark: 'getIndustryBenchmarkDetails', conference: 'getConferenceDetails' };\
+          const method = methodMap[type];\
+          if (!method) { handleFailure(new Error(`未为类型 \"${type}\" 配置后端方法`)); return App.ui.hideDetailModal(); }\
+          try {\
+              const rawData = await App.callApi('ConfigDataService', method);\
+              App.allModalData = rawData.map(adapter);\
+              App.ui.showDetailListModal(title, 'all');\
+          } catch (e) { handleFailure(e); App.ui.hideDetailModal(); }\
+        } catch (outerError) { \
+          clientLogError(`FATAL ERROR: handleDashboardKpiClick - Unhandled error in event handler:`, outerError);\
+          handleFailure(outerError); \
+          App.ui.hideDetailModal();\
+        }\
+      },\
+      prevPage: function() { if (App.currentPage > 1) { App.currentPage--; App.ui.renderPagedKpiDetails(); } },\
+      nextPage: function() { if (App.currentPage < Math.ceil(App.allModalData.length / App.itemsPerPage)) { App.currentPage++; App.ui.renderPagedKpiDetails(); } },\
+      hideDetailModal: function() { \
+        document.getElementById('detailModal').classList.remove('flex');\
+        document.getElementById('detailModal').classList.add('hidden');\
+      }\
+    },\
+    init: function() {\
+      const trendChartDom = document.getElementById('trend-chart-container');\
+      const keywordChartDom = document.getElementById('keyword-cloud-container');\
+      const hypeCycleDom = document.getElementById('hype-cycle-chart-container');\
+\
+      clientLogDebug('trendChartDom:', trendChartDom);\
+      clientLogDebug('keywordChartDom:', keywordChartDom);\
+      clientLogDebug('hypeCycleDom:', hypeCycleDom); \
+\
+      const modal = document.getElementById('detailModal');\
+      modal.querySelector('.close-button').addEventListener('click', this.ui.hideDetailModal);\
+      modal.addEventListener('click', e => { if (e.target.id === 'detailModal') this.ui.hideDetailModal(); });\
+      document.getElementById('prevPageBtn').addEventListener('click', this.ui.prevPage);\
+      document.getElementById('nextPageBtn').addEventListener('click', this.ui.nextPage);\
+      document.querySelectorAll('.nav-link').forEach(l => l.addEventListener('click', e => { e.preventDefault(); this.switchPage(e.currentTarget.dataset.page); }));\
+\
+      // Mobile menu toggling\
+      const mobileMenuBtn = document.getElementById('mobile-menu-button');\
+      const mobileMenuOverlay = document.getElementById('mobile-menu-overlay');\
+      const closeMobileMenuBtn = document.getElementById('close-mobile-menu');\
+      const mobileNavLinks = document.querySelectorAll('#mobile-menu-overlay .nav-link');\
+\
+      if(mobileMenuBtn) {\
+        mobileMenuBtn.addEventListener('click', () => {\
+          if(mobileMenuOverlay) mobileMenuOverlay.classList.remove('hidden');\
+        });\
+      }\
+      if(closeMobileMenuBtn) {\
+        closeMobileMenuBtn.addEventListener('click', () => {\
+          if(mobileMenuOverlay) mobileMenuOverlay.classList.add('hidden');\
+        });\
+      }\
+      mobileNavLinks.forEach(link => {\
+        link.addEventListener('click', () => {\
+          if(mobileMenuOverlay) mobileMenuOverlay.classList.add('hidden');\
+        });\
+      });\
+\
+      this.switchPage('home');\
+      document.getElementById('loader').style.display = 'none';\
+      clientLogInfo(\"✅ App has been initialized successfully!\");\
+    },\
+    switchPage: function(pageId) {\
+      // 1. Toggle navigation bar highlight state\
+      document.querySelectorAll('.nav-link').forEach(l => {\
+        l.classList.toggle('bg-primary', l.dataset.page === pageId);\
+        l.classList.toggle('shadow-md', l.dataset.page === pageId);\
+      });\
+\
+      // 2. Toggle visibility of page containers\
+      document.querySelectorAll('.page-container').forEach(p => {\
+        p.classList.toggle('hidden', p.id !== `page-${pageId}`);\
+      });\
+\
+      // ✅ Core change: Force browser repaint and layout\
+      const activePageElement = document.getElementById(`page-${pageId}`);\
+      if (activePageElement) {\
+        void activePageElement.offsetWidth; // Access offsetWidth to force browser synchronous layout\
+      }\
+\
+      // 3. Get initializer function for the corresponding page\
+      const pageInitializer = this.pageInitializers[pageId];\
+      if (pageInitializer && typeof pageInitializer.init === 'function') {\
+        // ✅ Still using setTimeout, but now can rely on it more confidently\
+        setTimeout(() => {\
+          pageInitializer.init();\
+        }, 0); \
+      }\
+    },\
+    pageInitializers: {\
+      home: {\
+        isInitialized: false,\
+        init: async function() {\
+          clientLogDebug('正在初始化主页...');\
+          if (!this.isInitialized) {\
+            document.querySelectorAll('#page-home .kpi-card.clickable-kpi').forEach(c => c.addEventListener('click', App.ui.handleDashboardKpiClick));\
+            this.isInitialized = true;\
+          }\
+          try {\
+            document.querySelectorAll('#page-home .kpi-value, #page-home .kpi-today-update, #page-home .status-percentage, #page-home .kpi-category-value').forEach(el => el.classList.add('skeleton'));\
+            const [ rawData, insightLeads, techDomains, benchmarks, conferences, health ] = await Promise.all([\
+                App.callApi('RawDataStatsService', 'getStats'), App.callApi('InsightLeadStatsService', 'getStats'),\
+                App.callApi('ConfigDataService', 'getTechnologyDomainStats'), App.callApi('ConfigDataService', 'getIndustryBenchmarkStats'),\
+                App.callApi('ConfigDataService', 'getConferenceStats'), App.callApi('SystemHealthStatsService', 'getStats')\
+            ]);\
+            document.getElementById('rawDataTotal').textContent = rawData.total.toLocaleString();\
+            const RAWDATA_CATEGORY_ORDER = [ { key: 'academicPapers', label: '论文' }, { key: 'techNews', label: '新闻' }, { key: 'industryDynamics', label: '会议' }, { key: 'patentData', label: '专利' }, { key: 'openSourceData', label: '开源' }, { key: 'competitorIntelligence', label: '竞情' } ];\
+            document.getElementById('rawDataCategories').innerHTML = rawData.categories ? RAWDATA_CATEGORY_ORDER.map(cat => `<div class=\"kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm\"><span class=\"kpi-category-value font-semibold\">${(rawData.categories[cat.key] || 0).toLocaleString()}</span> ${cat.label}</div>`).join('') : '';\
+            document.getElementById('insightLeadTotal').textContent = insightLeads.total.toLocaleString();\
+            const INSIGHT_CATEGORY_LABELS = { pending: '待处理', processing: '处理中', completed: '已完成', published: '已发布' };\
+            document.getElementById('insightLeadCategories').innerHTML = insightLeads.status ? Object.entries(insightLeads.status).map(([k,v]) => `<div class=\"kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm\"><span class=\"kpi-category-value font-semibold\">${v}</span> ${INSIGHT_CATEGORY_LABELS[k] || k}</div>`).join('') : '';\
+            document.getElementById('techDomainTotal').textContent = techDomains.total;\
+            document.getElementById('techDomainActive').textContent = `活跃: ${techDomains.active}`;\
+            document.getElementById('industryBenchmarkTotal').textContent = benchmarks.total;\
+            document.getElementById('industryBenchmarkFocus').textContent = `重点: ${benchmarks.focus}`;\
+            document.getElementById('conferenceTotal').textContent = conferences.total;\
+            document.getElementById('conferenceMonitoring').textContent = `监控中: ${conferences.monitoring}`;\
+            document.getElementById('overallHealthPct').textContent = `${health.overall}%`;\
+            document.getElementById('overallHealthBar').style.width = `${health.overall}%`;\
+            document.getElementById('workflowHealthPct').textContent = `${health.workflow}%`;\
+            document.getElementById('workflowHealthBar').style.width = `${health.workflow}%`;\
+            document.getElementById('dataQualityPct').textContent = `${health.dataQuality}%`;\
+            document.getElementById('dataQualityBar').style.width = `${health.dataQuality}%`;\
+            document.querySelectorAll('#page-home .skeleton').forEach(el => el.classList.remove('skeleton'));\
+          } catch(e) { handleFailure(e); }\
+        }\
+      },\
+      collection: {\
+        isInitialized: false,\
+        pageData: null,\
+        elements: {},\
+        competitorName: null,\
+        init: async function() {\
+          clientLogDebug('正在初始化数据采集页面...');\
+          if (!this.isInitialized) {\
+            this.elements = {\
+              companySelect: document.getElementById('company-select'), filterBtn: document.getElementById('filter-btn'),\
+              clearBtn: document.getElementById('clear-filter-btn'), filterStatusText: document.getElementById('filter-status-text'),\
+              techGrid: document.getElementById('tech-data-grid'), benchmarkGrid: document.getElementById('benchmark-data-grid'),\
+              statsGrid: document.getElementById('collection-stats-grid'), historyTbody: document.querySelector('#page-collection table tbody')\
+            };\
+            this.elements.techGrid.addEventListener('click', (e) => this.handleCardClick(e));\
+            this.elements.benchmarkGrid.addEventListener('click', (e) => this.handleCardClick(e));\
+            this.elements.historyTbody.addEventListener('click', (e) => {\
+                const button = e.target.closest('.view-history-detail-btn');\
+                if (button && button.dataset.executionId) showHistoryDetailModal(button.dataset.executionId);\
+            });\
+            this.elements.filterBtn.addEventListener('click', () => { this.elements.filterStatusText.textContent = `显示 \"${this.elements.companySelect.value || '所有企业'}\" 的数据`; this.processAndRender(); }); // Removed competitorName from filterBtn call
+            this.elements.clearBtn.addEventListener('click', () => { this.elements.companySelect.value = ''; this.elements.filterStatusText.textContent = '显示所有企业的数据'; this.processAndRender(); });
+            this.isInitialized = true;\
+          }\
+          try {\
+            this.elements.techGrid.innerHTML = '<div class=\"skeleton h-56 rounded-lg\"></div>'.repeat(4);\
+            this.elements.benchmarkGrid.innerHTML = '<div class=\"skeleton h-56 rounded-lg\"></div>'.repeat(4);\
+            this.elements.statsGrid.innerHTML = '<div class=\"skeleton h-24 rounded-lg\"></div>'.repeat(3);\
+            this.elements.historyTbody.innerHTML = `<tr><td colspan=\"5\" class=\"text-center py-4 text-gray-500\">正在加载...</td></tr>`;\
+            \
+            // **Frontend receives data and immediately logs**\
+            this.pageData = await App.callApi('CollectionStatsService', 'getCollectionPageData');\
+            clientLogDebug(\"DEBUG_FRONTEND: Data received by frontend.collection.init:\", this.pageData);\
+            clientLogDebug(\"DEBUG_FRONTEND: pageData.history content:\", this.pageData.history); // **Core debug line**\
+\
+            this.elements.companySelect.innerHTML = '<option value=\"\">所有企业</option>' + this.pageData.competitors.map(c => `<option value=\"${c.name}\">${c.name}</option>`).join('');\
+            this.processAndRender();\
+          } catch (e) { handleFailure(e); }\
+        },\
+        handleCardClick: function(e) {\
+            const card = e.target.closest('.clickable-kpi');\
+            if (!card) return;\
+            const type = card.dataset.type;\
+            const adapter = DataAdapters[type];\
+            if (!type || !adapter) return clientLogError(`未找到类型 \"${type}\" 的适配器`);\
+            const detailEl = e.target.closest('.clickable-detail');\
+            const detailKind = detailEl ? detailEl.dataset.detail : 'all'; // 'today' or 'all'\
+            const title = card.querySelector('h3').innerText;\
+            App.currentDetailType = type;\
+            App.currentPage = 1;\
+            let rawData = [];\
+            if (this.pageData.techData && this.pageData.techData[type]) {\
+                rawData = this.pageData.techData[type];\
+            } else if (type === 'industryDynamics') {\
+                const ind = (this.pageData.benchmarkData.industryDynamics || []).filter(item => !this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName));\
+                const ciNews = (this.pageData.benchmarkData.competitorIntelligence || []).filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && (item.intelligence_type || '').toLowerCase().replace(/[\s_]/g, '') === 'generalnews')\
+                    .map(item => ({ event_title: item.intelligence_title, event_date: item.last_update_timestamp, impact_level: item.threat_level, processing_status: item.processing_status, source_url: item.source_url }));\
+                rawData = [...ind, ...ciNews];\
+            } else {\
+                const typeMapping = { 'techInnovation': 'Tech Innovation', 'productRelease': 'Product Release', 'talentFlow': 'Talent Flow' };\
+                if (typeMapping[type]) rawData = (this.pageData.benchmarkData.competitorIntelligence || []).filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && item.intelligence_type === typeMapping[type]);\
+            }\
+            \
+            let dataToAdapt = rawData;\
+\
+            // **Modification 1: Unified 'today' filtering logic, using 'created_timestamp' and 'last 7 days' range**\
+            if (detailKind === 'today') { \
+                const ingestionDateFieldMap = {\
+                    academicPapers: 'created_timestamp', \
+                    patentData: 'created_timestamp',     \
+                    openSourceData: 'created_timestamp', \
+                    techNews: 'created_timestamp',       \
+                    industryDynamics: 'created_timestamp', \
+                    techInnovation: 'created_timestamp', \
+                    productRelease: 'created_timestamp', \
+                    talentFlow: 'created_timestamp' \
+                };\
+                const ingestionDateField = ingestionDateFieldMap[type] || 'created_timestamp'; \
+\
+                const today = new Date();\
+                today.setHours(0, 0, 0, 0); \
+\
+                const sevenDaysAgo = new Date(today);\
+                sevenDaysAgo.setDate(today.getDate() - 6); \
+                \
+                dataToAdapt = rawData.filter(item => { \
+                    const val = item[ingestionDateField]; \
+                    if (!val) return false;\
+                    \
+                    const itemDateStr = String(val).slice(0, 10);\
+                    const itemDate = new Date(itemDateStr); \
+\
+                    return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo && itemDate <= today;\
+                });\
+            }\
+            // **Modification 1 End**\
+\
+            App.allModalData = dataToAdapt.map(adapter);\
+\
+            // **Modification 2: Sort data before displaying in modal (newest date first)**\
+            App.allModalData.sort((a, b) => {\
+                const dateA = new Date(a.date);\
+                const dateB = new Date(b.date);\
+\
+                const timeA = isNaN(dateA.getTime()) ? -Infinity : dateA.getTime();\
+                const timeB = isNaN(dateB.getTime()) ? -Infinity : dateB.getTime();\
+\
+                return timeB - timeA; \
+            });\
+            // **Sorting logic end**\
+\
+            App.ui.showDetailListModal(title, detailKind); \
+      },\
+      processAndRender: function(competitorName = null) {\
+            this.competitorName = competitorName ? competitorName.toLowerCase() : null;\
+            const calculateCardData = (type, title, allData) => {\
+              const totalCount = allData.length;\
+              \
+              const ingestionDateFieldMap = {\
+                  academicPapers: 'created_timestamp', \
+                  patentData: 'created_timestamp',     \
+                  openSourceData: 'created_timestamp', \
+                  techNews: 'created_timestamp',       \
+                  industryDynamics: 'created_timestamp', \
+                  techInnovation: 'created_timestamp', \
+                  productRelease: 'created_timestamp', \
+                  talentFlow: 'created_timestamp' \
+              };\
+              const ingestionDateField = ingestionDateFieldMap[type] || 'created_timestamp'; \
+\
+              const today = new Date();\
+              today.setHours(0, 0, 0, 0); \
+\
+              const sevenDaysAgo = new Date(today);\
+              sevenDaysAgo.setDate(today.getDate() - 6); \
+\
+              const formatToYYYYMMDD = (date) => {\
+                  const y = date.getFullYear();\
+                  const m = String(date.getMonth() + 1).padStart(2, '0');\
+                  const d = String(date.getDate()).padStart(2, '0');\
+                  return `${y}-${m}-${d}`;\
+              };\
+              const sevenDaysAgoStr = formatToYYYYMMDD(sevenDaysAgo);\
+              const todayStr = formatToYYYYMMDD(today); \
+\
+              const todayCount = allData.filter(item => { \
+                  const val = item[ingestionDateField]; \
+                  if (!val) return false;\
+                  \
+                  const itemDateStr = String(val).slice(0, 10);\
+                  const itemDate = new Date(itemDateStr); \
+\
+                  return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo && itemDate <= today;\
+              }).length;\
+              \
+              let qualityScore = '100%';\
+              if (totalCount > 0 && allData[0] && allData[0].hasOwnProperty('quality_score')) {\
+                  const validCount = allData.filter(item => { const score = Number(item.quality_score); return !isNaN(score) && score >= 80; }).length;\
+                  qualityScore = totalCount > 0 ? Math.round(validCount / totalCount * 100) + '%' : '0%';\
+              }\
+              let success = 0, fail = 0;\
+              allData.forEach(item => { const s = (item.processing_status || '').toLowerCase(); if (s.includes('success') || s.includes('processed')) success++; else if (s.includes('fail') || s.includes('error')) fail++; });\
+              let successRate = (success + fail) > 0 ? Math.round(success / (success + fail) * 100) + '%' : (totalCount > 0 ? '100%' : '0%');\
+              let status = \"正常\";\
+              if (todayCount === 0 && totalCount > 0) status = \"暂停\"; \
+              if (fail > 0) status = \"异常\"; \
+\
+              let trend = '平稳', trendIcon = 'fa-minus', trendColor = 'text-gray-500';\
+              if (todayCount > 0) { trend = '上升'; trendIcon = 'fa-arrow-up'; trendColor = 'text-green-500'; } \
+              else if (fail > 0) { trend = '异常'; trendIcon = 'fa-exclamation-triangle'; trendColor = 'text-red-500'; }\
+\
+              let lastUpdate = '--'; \
+              if (totalCount > 0) {\
+                  const allIngestionDates = allData.map(item => item[ingestionDateField])\
+                                                    .filter(v => { \
+                                                        if (!v) return false; \
+                                                        const s = String(v).trim(); \
+                                                        return s && s !== '.' && s.toLowerCase() !== 'invalid date' && s !== '--'; \
+                                                    });\
+                  \
+                  if (allIngestionDates.length > 0) {\
+                      allIngestionDates.sort().reverse(); \
+                      lastUpdate = String(allIngestionDates[0]).slice(0, 10); \
+                  }\
+              }\
+              if (!lastUpdate || lastUpdate.trim() === '' || lastUpdate.trim() === '.' || lastUpdate.trim().toLowerCase() === 'invalid date') {\
+                  lastUpdate = '--';\
+              }\
+\
+              return { \
+                  sourceType: type, \
+                  title, \
+                  totalCount, \
+                  todayCount, \
+                  qualityScore, \
+                  successRate, \
+                  status, \
+                  trend, \
+                  trendIcon, \
+                  trendColor, \
+                  lastUpdate \
+              };\
+            };\
+            const renderCards = (container, cardData) => {\
+                if (!cardData || cardData.length === 0) { container.innerHTML = `<p class=\"text-gray-500 col-span-4\">${container.id === 'benchmark-data-grid' && this.elements.companySelect.value ? '该公司暂无相关数据' : '没有可显示的数据。'}</p>`; return; }\
+                const iconMap = { academicPapers: 'fa-book', patentData: 'fa-certificate', techNews: 'fa-newspaper-o', openSourceData: 'fa-github', industryDynamics: 'fa-building-o', techInnovation: 'fa-lightbulb-o', productRelease: 'fa-archive', talentFlow: 'fa-users' };\
+                container.innerHTML = cardData.map(card => {\
+                    const statusColors = { '正常': 'bg-blue-100 text-blue-800', '警告': 'bg-yellow-100 text-yellow-800', '异常': 'bg-red-100 text-red-800', '暂停': 'bg-gray-100 text-gray-800' };\
+                    const statusClass = statusColors[card.status] || 'bg-gray-100 text-gray-800';\
+                    return `<div class=\"bg-white border border-gray-200 rounded-lg p-4 flex flex-col justify-between min-h-[230px] shadow-sm hover:shadow-lg transition-shadow duration-300 clickable-kpi\" data-type=\"${card.sourceType}\"> <div class=\"flex justify-between items-center mb-3\"> <div class=\"flex items-center gap-2\"> <i class=\"fa ${iconMap[card.sourceType] || 'fa-database'} text-gray-500 text-base\"></i> <h3 class=\"font-semibold text-gray-800 text-base\">${card.title}</h3> </div> <span class=\"text-xs font-medium px-2 py-0.5 rounded-md ${statusClass}\">${card.status}</span> </div> <div class=\"flex text-center my-2\"> <div class=\"w-1/2 pr-4 clickable-detail\" data-type=\"${card.sourceType}\" data-detail=\"today\" style=\"cursor:pointer;\"> <p class=\"text-3xl font-semibold text-primary\">${card.todayCount.toLocaleString()}</p> <p class=\"text-xs text-gray-500 mt-1\">近7日采集</p> </div> <div class=\"w-1/2 pl-4 border-l border-gray-200 clickable-detail\" data-type=\"${card.sourceType}\" data-detail=\"all\" style=\"cursor:pointer;\"> <p class=\"text-3xl font-semibold text-gray-800\">${card.totalCount.toLocaleString()}</p> <p class=\"text-xs text-gray-500 mt-1\">合计</p> </div> </div> <div class=\"flex text-center text-sm text-gray-700 bg-gray-50 p-2 rounded-md\"> <div class=\"w-1/3\"><p class=\"font-semibold\">${card.qualityScore}</p><p class=\"text-xs text-gray-500\">质量评分</p></div> <div class=\"w-1/3\"><p class=\"font-semibold\">${card.successRate}</p><p class=\"text-xs text-gray-500\">成功率</p></div> <div class=\"w-1/3 flex justify-center items-center gap-1 ${card.trendColor}\"><span class=\"font-semibold\">${card.trend}</span><i class=\"fa ${card.trendIcon}\"></i></div> </div> <div class=\"flex justify-center items-center text-xs text-gray-400 mt-3 text-center\"> <span>最后更新: ${card.lastUpdate || '--'}</span> </div> </div>`;
+                }).join('');
+            };\
+            const renderStats = (container, statsData) => {\
+                if (!statsData) return;\
+                const formatChange = (change) => change >= 0 ? `<i class=\"fa fa-arrow-up mr-1\"></i> ${change}% 较上月` : `<i class=\"fa fa-arrow-down mr-1\"></i> ${Math.abs(change)}% 较上月`;\
+                const changeColor = (change) => change >= 0 ? 'text-green-500' : 'text-red-500';\
+                const failedChangeColor = (change) => change <= 0 ? 'text-green-500' : 'text-red-500';\
+                const failedFormatChange = (change) => change <= 0 ? `<i class=\"fa fa-arrow-down mr-1\"></i> ${Math.abs(change)} 较上月` : `<i class=\"fa fa-arrow-up mr-1\"></i> ${change} 较上月`;\
+                container.innerHTML = `<div class=\"bg-white p-4 rounded-lg shadow-sm border\"><div class=\"text-sm text-gray-500 mb-1\">本月采集量</div><div class=\"text-2xl font-bold\">${statsData.monthlyVolume.toLocaleString()}</div><div class=\"text-sm ${changeColor(statsData.monthlyChange)} flex items-center mt-1\">${formatChange(statsData.monthlyChange)}</div></div><div class=\"bg-white p-4 rounded-lg shadow-sm border\"><div class=\"text-sm text-gray-500 mb-1\">成功率</div><div class=\"text-2xl font-bold\">${statsData.successRate}%</div><div class=\"text-sm ${changeColor(statsData.successRateChange)} flex items-center mt-1\">${formatChange(statsData.successRateChange)}</div></div><div class=\"bg-white p-4 rounded-lg shadow-sm border\"><div class=\"text-sm text-gray-500 mb-1\">失败任务</div><div class=\"text-2xl font-bold\">${statsData.failedTasks}</div><div class=\"text-sm ${failedChangeColor(statsData.failedTasksChange)} flex items-center mt-1\">${failedFormatChange(statsData.failedTasksChange)}</div></div>`;
+            };\
+            const renderHistory = (container, historyData) => {\
+                if (!Array.isArray(historyData) || historyData.length === 0) { \
+                    container.innerHTML = `<tr><td colspan=\"5\" class=\"text-center py-4 text-gray-500\">暂无历史记录。</td></tr>`; \
+                    return; \
+                }\
+                const statusClasses = { 'completed': 'bg-green-100 text-green-800', 'failed': 'bg-red-100 text-red-800', 'running': 'bg-blue-100 text-blue-800', 'success': 'bg-green-100 text-green-800' };\
+                container.innerHTML = historyData.map(log => {\
+                    const actionCellHTML = log.execution_id ? `<button class=\"text-primary hover:text-primary-dark view-history-detail-btn\" data-execution-id=\"${log.execution_id}\">查看详情</button>` : `<span class=\"text-gray-400 cursor-not-allowed\">无详情</span>`;\
+                    return `<tr class=\"hover:bg-gray-50\"> <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"任务名称\"><div class=\"font-medium text-gray-900\">${log.workflow_name || 'N/A'}</div></td> <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"开始时间\"><div class=\"text-sm text-gray-500\">${log.start_timestamp || 'N/A'}</div></td> <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"结束时间\"><div class=\"text-sm text-gray-500\">${log.end_timestamp || 'N/A'}</div></td> <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"状态\"> <span class=\"px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[String(log.execution_status || '').toLowerCase()] || 'bg-gray-100'}\">${log.execution_status || '未知'}</span> </td> <td class=\"px-6 py-4 whitespace-nowrap text-sm\" data-label=\"操作\"> ${actionCellHTML} </td> </tr>`;\
+                }).join('');\
+            };\
+            if (!this.pageData) return;\
+            const techCards = [ \
+              calculateCardData('academicPapers', '学术论文监控', this.pageData.techData.academicPapers), \
+              calculateCardData('patentData', '技术专利监控', this.pageData.techData.patentData), \
+              calculateCardData('openSourceData', '开源项目监测', this.pageData.techData.openSourceData), \
+              calculateCardData('techNews', '技术新闻获取', this.pageData.techData.techNews) \
+            ];\
+            const dynamicCaptureData = [...(this.pageData.benchmarkData.industryDynamics.filter(item => !this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName))), ...(this.pageData.benchmarkData.competitorIntelligence.filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && (item.intelligence_type || '').toLowerCase().replace(/[\s_]/g, '') === 'generalnews').map(item => ({ event_title: item.intelligence_title, event_date: item.last_update_timestamp, impact_level: item.threat_level, processing_status: item.processing_status, source_url: item.source_url })))];\
+            const techInnovationData = this.pageData.benchmarkData.competitorIntelligence.filter(d => (!this.competitorName || String(d.competitor_name || '').toLowerCase().includes(this.competitorName)) && d.intelligence_type === 'Tech Innovation');\
+            const productReleaseData = this.pageData.benchmarkData.competitorIntelligence.filter(d => (!this.competitorName || String(d.competitor_name || '').toLowerCase().includes(this.competitorName)) && d.intelligence_type === 'Product Release');\
+            const talentFlowData = this.pageData.benchmarkData.competitorIntelligence.filter(d => (!this.competitorName || String(d.competitor_name || '').toLowerCase().includes(this.competitorName)) && d.intelligence_type === 'Talent Flow');\
+            const benchmarkCards = [ \
+              calculateCardData('industryDynamics', '企业动态捕获', dynamicCaptureData), \
+              calculateCardData('techInnovation', '技术创新追踪', techInnovationData), \
+              calculateCardData('productRelease', '产品发布监控', productReleaseData), \
+              calculateCardData('talentFlow', '人才流动监测', talentFlowData) \
+            ];\
+            renderCards(this.elements.techGrid, techCards);\
+            renderCards(this.elements.benchmarkGrid, benchmarkCards);\
+            renderStats(this.elements.statsGrid, this.pageData.overallStats);\
+            \
+            // **Log before passing data to renderHistory**\
+            clientLogDebug(\"DEBUG_FRONTEND: Data passed to renderHistory (from processAndRender):\", this.pageData.history); // **Core debug line**\
+            renderHistory(this.elements.historyTbody, this.pageData.history);\
+        }\
+      },\
+      insights: {\
+        isInitialized: false,\
+        trendChart: null,\
+        keywordChart: null,\
+        hypeCycleChart: null, // Add instance storage for the new chart\
+        \
+        // The init function is now very concise, only responsible for binding one-time event listeners\
+        init: function() {\
+          clientLogDebug('正在初始化智能分析页面...');\
+          \
+          // Step 1: Bind window resize event (only once)\
+          if (!this.isInitialized) {\
+            window.addEventListener('resize', () => {\
+              if (this.trendChart && !this.trendChart.isDisposed()) this.trendChart.resize();\
+              if (this.keywordChart && !this.keywordChart.isDisposed()) this.keywordChart.resize();\
+              if (this.hypeCycleChart && !this.hypeCycleChart.isDisposed()) this.hypeCycleChart.resize();\
+            });\
+            this.isInitialized = true;\
+          }\
+\
+          // Step 2: Call the load function each time the page is entered to refresh data and charts\
+          App.pageInitializers.insights.loadAllInsightsDataAndRender();\
+        },\
+        // Aggregate load all data and render\
+        loadAllInsightsDataAndRender: async function() {\
+          // Step 1: Ensure chart instances exist. If not, initialize them now.\
+          // At this point, the page is visible, and DOM elements must exist.\
+          const trendChartDom = document.getElementById('trend-chart-container');\
+          const keywordChartDom = document.getElementById('keyword-cloud-container');\
+          const hypeCycleDom = document.getElementById('hype-cycle-chart-container');\
+\
+          if (trendChartDom && !this.trendChart) {\
+              this.trendChart = echarts.init(trendChartDom);\
+          }\
+          if (keywordChartDom && !this.keywordChart) {\
+              this.keywordChart = echarts.init(keywordChartDom);\
+          }\
+          if (hypeCycleDom && !this.hypeCycleChart) {\
+              this.hypeCycleChart = echarts.init(hypeCycleDom);\
+          }\
+\
+          // Step 2: Show loading animation\
+          if (this.trendChart) this.trendChart.showLoading({ text: '正在加载数据...', color: '#007bff' });\
+          if (this.keywordChart) this.keywordChart.showLoading({ text: '正在加载数据...', color: '#007bff' });\
+          document.querySelector('#page-insights table tbody').innerHTML = `<tr><td colspan=\"5\" class=\"text-center py-8\">正在加载最新线索...</td></tr>`;\
+          if (this.hypeCycleChart) this.hypeCycleChart.showLoading({ text: '正在加载数据...', color: '#007bff' });\
+\
+          try {\
+            // Step 3: Core: Call the aggregated interface once to get all data\
+            const pageData = await App.callApi('InsightsService', 'getInsightsPageData');\
+            // Render trend chart\
+            if (this.trendChart) {\
+              this.trendChart.hideLoading();\
+              const option = {\
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } } },\
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },\
+                xAxis: [{ type: 'category', boundaryGap: false, data: pageData.trendData.xAxis }],\
+                yAxis: [{ type: 'value', min: 0, splitLine: { lineStyle: { type: 'dashed' } } }],\
+                series: [{\
+                  name: '洞察数量', type: 'line', smooth: true, data: pageData.trendData.seriesData,\
+                  symbol: 'circle', symbolSize: 8, lineStyle: { width: 3, color: '#007bff' }, itemStyle: { color: '#007bff' },\
+                  areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0, 123, 255, 0.3)' }, { offset: 1, color: 'rgba(255, 255, 255, 0)' }]) },\
+                  emphasis: { focus: 'series' }\
+                }]\
+              };\
+              this.trendChart.setOption(option, true);\
+            }\
+\
+            // Render word cloud chart\
+            if (this.keywordChart) {\
+              this.keywordChart.hideLoading();\
+              if (!pageData.keywordData || pageData.keywordData.length === 0) {\
+                const chartContainer = document.getElementById('keyword-cloud-container');\
+                this.keywordChart.clear();\
+                chartContainer.innerHTML = `<div class=\"flex items-center justify-center h-full text-gray-500\">暂无关键词数据可生成词云。</div>`;\
+              } else {\
+                const option = {\
+                  tooltip: { show: true, formatter: params => `${params.name} : ${params.value}` },\
+                  series: [{\
+                    type: 'wordCloud', left: 'center', top: 'center', width: '100%', height: '100%',\
+                    shape: 'pentagon', gridSize: 2, sizeRange: [14, 60],\
+                    rotationRange: [-45, 45], rotationStep: 45, drawOutOfBound: false,\
+                    textStyle: { color: () => `rgb(${[Math.round(Math.random() * 160), Math.round(Math.random() * 160), Math.round(Math.random() * 160)].join(',')})` },\
+                    emphasis: { focus: 'self', textStyle: { shadowBlur: 10, shadowColor: '#333' } },\
+                    data: pageData.keywordData \
+                  }]\
+                };\
+                this.keywordChart.setOption(option, true);\
+              }\
+            }\
+            \
+            // Render latest insights table\
+            const tableBody = document.querySelector('#page-insights table tbody');\
+            if (tableBody) {\
+              if (!pageData.latestInsights || pageData.latestInsights.length === 0) {\
+                tableBody.innerHTML = `<tr><td colspan=\"5\" class=\"text-center py-8 text-gray-500\">暂无最新洞察线索。</td></tr>`;\
+              } else {\
+                const statusMap = {\
+                  'decision_completed': { text: '已完成', classes: 'bg-green-100 text-green-800' },\
+                  'analyzing': { text: '分析中', classes: 'bg-blue-100 text-blue-800' },\
+                  'signal_identified': { text: '待处理', classes: 'bg-yellow-100 text-yellow-800' },\
+                  'published': { text: '已发布', classes: 'bg-purple-100 text-purple-800' },\
+                  'default': { text: '未知', classes: 'bg-gray-100 text-gray-800' }\
+                };\
+                tableBody.innerHTML = pageData.latestInsights.map(item => {\
+                  const statusKey = (item.status || 'default').toLowerCase();\
+                  const statusInfo = statusMap[statusKey] || statusMap['default'];\
+                  const statusText = statusInfo.text === '未知' ? item.status : statusInfo.text;\
+                  return `\
+                    <tr class=\"hover:bg-gray-50\">\
+                      <td class=\"px-6 py-4 overflow-hidden text-ellipsis\" data-label=\"标题\"><div class=\"font-medium text-gray-900\">${item.title || 'N/A'}</div></td>\
+                      <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"来源\"><div class=\"text-sm text-gray-500\">${item.source || 'N/A'}</div></td>\
+                      <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"日期\"><div class=\"text-sm text-gray-500\">${item.date || 'N/A'}</div></td>\
+                      <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"状态\"><span class=\"px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.classes}\">${statusText}</span></td>\
+                      <td class=\"px-6 py-4 whitespace-nowrap text-sm\" data-label=\"操作\"><button class=\"text-primary hover:text-primary-dark\" data-insight-id=\"${item.id}\">查看详情</button></td>\
+                    </tr>`;
+                }).join('');
+                if (!tableBody.dataset.listenerAttached) {
+                    tableBody.addEventListener('click', (e) => {
+                        if (e.target.tagName === 'BUTTON' && e.target.dataset.insightId) {
+                            const insightId = e.target.dataset.insightId;
+                            const insight = pageData.latestInsights.find(item => item.id === insightId);
+                            if (insight && insight.detail) {
+                                // ✅ Core change: Convert insight detail data to key-value format and use unified modal display function
+                                App.currentDetailType = 'historyDetail'; // Use historyDetail config as it's suitable for key-value pairs
+                                App.allModalData = Object.entries(insight.detail).map(([key, value]) => ({
+                                    key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Format key, e.g., 'intelligence_id' -> 'Intelligence Id'
+                                    value: value !== null ? value : 'N/A' // Handle null or undefined values
+                                }));
+                                App.ui.showDetailListModal(`洞察详情: ${insight.title}`, 'all'); // Call unified modal display function
+                            } else {
+                                alert('未找到该洞察的详细信息。');
+                            }
+                        }
+                    });
+                    tableBody.dataset.listenerAttached = 'true';
+                }
+              }
+            }
+
+            // Render technology hype cycle
+            if (this.hypeCycleChart) {
+              this.hypeCycleChart.hideLoading();
+              if (!pageData.hypeCycleData || pageData.hypeCycleData.length === 0) {
+                const chartContainer = document.getElementById('hype-cycle-chart-container');
+                this.hypeCycleChart.clear(); 
+                chartContainer.innerHTML = `<div class=\"flex items-center justify-center h-full text-gray-500\">暂无有效的技术成熟度数据。</div>`;
+              } else {
+                const option = {
+                  tooltip: { 
+                    trigger: 'item', 
+                    formatter: function (params) { 
+                      if (params.componentType === 'series' && params.seriesType === 'scatter' && Array.isArray(params.data)) { 
+                        const data = params.data; 
+                        const techName = data[4]; 
+                        const commercialScore = data[2]; 
+                        const timeToPlateau = data[3]; 
+
+                        return `<b>${techName}</b><br/>` +
+                               `商业价值评分: ${commercialScore}<br/>` +
+                               `达到成熟期: ${timeToPlateau}`; 
+                      } 
+                      return ''; 
+                    } 
+                  },
+                  xAxis: { type: 'value', min: 0, max: 5.5, show: true, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                  yAxis: { type: 'value', min: 0, max: 100, show: true, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                  graphic: [
+                    // ✅ New: Stage background areas (rectangles)
+                    { type: 'rect', left: '0%', top: '0%', style: { fill: 'rgba(173, 216, 230, 0.2)' }, shape: { x: 0, y: 0, width: 5.5 * (this.hypeCycleChart.getWidth() / 5.5), height: this.hypeCycleChart.getHeight() }, z: 0 }, // Background for the entire chart
+
+                    // Innovation Trigger
+                    { type: 'rect', left: '0%', top: '0%', style: { fill: 'rgba(173, 216, 230, 0.1)' }, shape: { x: 0, y: 0, width: 1.5 * (this.hypeCycleChart.getWidth() / 5.5), height: this.hypeCycleChart.getHeight() }, z: 1 },
+                    { type: 'text', left: '5%', top: '80%', style: { text: '创新萌发期', textAlign: 'center', fill: '#0056b3', fontSize: 12, fontWeight: 'bold' }, z: 2 },
+                    
+                    // Peak of Inflated Expectations
+                    { type: 'rect', left: '27.27%', top: '0%', style: { fill: 'rgba(255, 165, 0, 0.1)' }, shape: { x: 1.5 * (this.hypeCycleChart.getWidth() / 5.5), y: 0, width: 1 * (this.hypeCycleChart.getWidth() / 5.5), height: this.hypeCycleChart.getHeight() }, z: 1 },
+                    { type: 'text', left: '40%', top: '15%', style: { text: '期望膨胀期', textAlign: 'center', fill: '#d9534f', fontSize: 12, fontWeight: 'bold' }, z: 2 },
+                    
+                    // Trough of Disillusionment
+                    { type: 'rect', left: '45.45%', top: '0%', style: { fill: 'rgba(128, 128, 128, 0.1)' }, shape: { x: 2.5 * (this.hypeCycleChart.getWidth() / 5.5), y: 0, width: 1 * (this.hypeCycleChart.getWidth() / 5.5), height: this.hypeCycleChart.getHeight() }, z: 1 },
+                    { type: 'text', left: '55%', top: '80%', style: { text: '泡沫破裂谷底期', textAlign: 'center', fill: '#5bc0de', fontSize: 12, fontWeight: 'bold' }, z: 2 },
+                    
+                    // Slope of Enlightenment
+                    { type: 'rect', left: '63.63%', top: '0%', style: { fill: 'rgba(144, 238, 144, 0.1)' }, shape: { x: 3.5 * (this.hypeCycleChart.getWidth() / 5.5), y: 0, width: 1 * (this.hypeCycleChart.getWidth() / 5.5), height: this.hypeCycleChart.getHeight() }, z: 1 },
+                    { type: 'text', left: '75%', top: '35%', style: { text: '稳步爬升复苏期', textAlign: 'center', fill: '#5cb85c', fontSize: 12, fontWeight: 'bold' }, z: 2 },
+                    
+                    // Plateau of Productivity
+                    { type: 'rect', left: '81.81%', top: '0%', style: { fill: 'rgba(255, 255, 0, 0.1)' }, shape: { x: 4.5 * (this.hypeCycleChart.getWidth() / 5.5), y: 0, width: 1 * (this.hypeCycleChart.getWidth() / 5.5), height: this.hypeCycleChart.getHeight() }, z: 1 },
+                    { type: 'text', left: '90%', top: '50%', style: { text: '生产力成熟期', textAlign: 'center', fill: '#f0ad4e', fontSize: 12, fontWeight: 'bold' }, z: 2 }
+                  ],
+                  series: [
+                    { 
+                      type: 'line', 
+                      // ✅ Adjust curve data points to better match classic shape
+                      // Adjust Y-axis values to be more reasonable within 0-100 range
+                      data: [[0.5, 30], [2.0, 95], [3.0, 25], [4.0, 60], [5.0, 50]], 
+                      smooth: 0.6, // Smooth curve
+                      symbol: 'none', // Do not display data point markers
+                      lineStyle: { 
+                          color: '#5cb85c', // ✅ Curve color, use a more visible green
+                          width: 3, // Curve width
+                          type: 'solid' 
+                      } 
+                    },
+                    { 
+                      type: 'scatter', 
+                      data: pageData.hypeCycleData, 
+                      symbolSize: function (data) { 
+                        const score = data[2] || 1; 
+                        return Math.sqrt(score) * 10; 
+                      }, 
+                      itemStyle: { color: '#0056b3', opacity: 0.7 }, 
+                      emphasis: { focus: 'self', itemStyle: { borderColor: 'rgba(0,0,0,0.6)', borderWidth: 2, opacity: 1 } } 
+                    }
+                  ]
+                };
+                this.hypeCycleChart.setOption(option, true);
+              }
+            }
+
+          } catch(error) { // Catch errors from the aggregation function itself
+            handleFailure(error);
+            // If an error occurs, hide loading animations
+            if (this.trendChart) this.trendChart.hideLoading();
+            if (this.keywordChart) this.keywordChart.hideLoading();
+            if (this.hypeCycleChart) this.hypeCycleChart.hideLoading();
+          }
+        }
+      },
+      actions: { init: function() { clientLogDebug('Initializing Actions Page...'); } },
+      reports: {
+        isInitialized: false,
+        init: async function() {
+          clientLogDebug('正在初始化Reports Page...');
+          if (!this.isInitialized) {
+            // Bind event listeners
+            document.getElementById('generateReportBtn').addEventListener('click', App.pageInitializers.reports.handleGenerateReport);
+            document.querySelectorAll('input[name=\"report-period\"]').forEach(radio => {
+              radio.addEventListener('change', App.pageInitializers.reports.handlePeriodChange); 
+            });
+            document.getElementById('startDate').addEventListener('change', App.pageInitializers.reports.handlePeriodChange); 
+            document.getElementById('endDate').addEventListener('change', App.pageInitializers.reports.handlePeriodChange); 
+            document.getElementById('all-tech-areas').addEventListener('change', App.pageInitializers.reports.toggleAllTechAreas); 
+
+            // **New: Pagination button event listeners**
+            document.getElementById('reportsHistoryPrevPageBtn').addEventListener('click', App.pageInitializers.reports.prevReportsHistoryPage);
+            document.getElementById('reportsHistoryNextPageBtn').addEventListener('click', App.pageInitializers.reports.nextReportsHistoryPage);
+
+            // ✅ On first load, get all active tech areas and render checkboxes
+            this.allAvailableTechAreas = await App.callApi('ReportsService', 'getAllActiveTechNames');
+            this.renderTechAreaCheckboxes(this.allAvailableTechAreas);
+
+            this.isInitialized = true;
+          }
+          // ✅ On each page entry, update tech area checkboxes based on current period
+          // And reset page number for history to 1
+          App.reportsHistoryCurrentPage = 1; // Reset page number
+          this.updateTechAreasBasedOnPeriod(); // Update tech area checkboxes
+          await this.loadReportsHistory(); // Load history each time the page is entered
+        },
+
+        // ✅ Helper function: Render tech area checkboxes
+        renderTechAreaCheckboxes: function(techNames, enabledTechNames = null) {
+          const container = document.getElementById('techAreaCheckboxesContainer'); // ✅ New container ID
+          if (!container) {
+            clientLogError("ERROR: Could not find techAreaCheckboxesContainer.");
+            return;
+          }
+          let html = '';
+          const allTechCheckbox = document.getElementById('all-tech-areas');
+          const allTechCheckboxChecked = allTechCheckbox ? allTechCheckbox.checked : false; // Defensive check
+
+          techNames.forEach(techName => {
+            const isEnabled = enabledTechNames === null || enabledTechNames.includes(techName);
+            const isDisabled = enabledTechNames !== null && !isEnabled; // If enabledTechNames is provided and current techName is not in it, disable
+            const isChecked = allTechCheckboxChecked || isEnabled; // If all selected, then all are checked; otherwise, decided by whether enabled
+            
+            html += `
+              <div class=\"flex items-center\">
+                <input type=\"checkbox\" id=\"${techName.replace(/\s+/g, '_').toLowerCase()}\" name=\"tech-area-checkbox\" value=\"${techName}\" class=\"h-4 w-4 text-primary focus:ring-primary border-gray-300\" 
+                  ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+                <label for=\"${techName.replace(/\s+/g, '_').toLowerCase()}\" class=\"ml-2 block text-sm text-gray-700 ${isDisabled ? 'text-gray-400' : ''}\">${techName}</label>
+              </div>
+            `;
+          });
+          container.innerHTML = html;
+
+          // Re-bind event listeners for individual tech area checkboxes
+          document.querySelectorAll('input[name=\"tech-area-checkbox\"]:not(#all-tech-areas)').forEach(cb => {
+            cb.addEventListener('change', App.pageInitializers.reports.handleSingleTechAreaChange);
+          });
+        },
+
+        // ✅ Helper function: Handle select all/unselect all
+        toggleAllTechAreas: function(event) {
+          const isChecked = event.target.checked;
+          document.querySelectorAll('input[name=\"tech-area-checkbox\"]:not(#all-tech-areas)').forEach(cb => {
+            if (!cb.disabled) { // Only change unchecked checkboxes
+              cb.checked = isChecked;
+            }
+          });
+        },
+
+        // ✅ Helper function: Handle single tech area checkbox change
+        handleSingleTechAreaChange: function() {
+          const allTechCheckbox = document.getElementById('all-tech-areas');
+          const otherCheckboxes = document.querySelectorAll('input[name=\"tech-area-checkbox\"]:not(#all-tech-areas)');
+          const allOthersChecked = Array.from(otherCheckboxes).every(cb => cb.checked || cb.disabled); // If all non-disabled are checked
+          if (allTechCheckbox && allOthersChecked) {
+            allTechCheckbox.checked = true;
+          } else if (allTechCheckbox) {
+            allTechCheckbox.checked = false;
+          }
+        },
+
+        // ✅ Helper function: Handle period change event (including date selection)
+        handlePeriodChange: function() {
+          App.pageInitializers.reports.toggleCustomDateInputs(); // Toggle custom date input display
+          App.pageInitializers.reports.updateTechAreasBasedOnPeriod(); // Update tech area checkbox status
+        },
+
+        // ✅ Helper function: Update tech area checkbox status based on period
+        updateTechAreasBasedOnPeriod: async function() {
+          const selectedPeriodType = document.querySelector('input[name=\"report-period\"]:checked').value;
+          const startDateInput = document.getElementById('startDate');
+          const endDateInput = document.getElementById('endDate');
+
+          let periodStart, periodEnd;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          switch (selectedPeriodType) {
+            case 'weekly':
+              periodEnd = new Date(today);
+              periodStart = new Date(today);
+              periodStart.setDate(today.getDate() - 7);
+              break;
+            case 'monthly':
+              periodEnd = new Date(today);
+              periodStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+              break;
+            case 'quarterly':
+              periodEnd = new Date(today);
+              periodStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+              break;
+            case 'annual':
+              periodEnd = new Date(today);
+              periodStart = new Date(today.getFullYear() - 1, 0, 1);
+              break;
+            case 'custom':
+              periodStart = new Date(startDateInput.value);
+              periodEnd = new Date(endDateInput.value);
+              break;
+            default: // Default to weekly if type doesn't match
+                periodEnd = new Date(today);
+                periodStart = new Date(today);
+                if (selectedPeriodType === 'Daily') { /* Period is today */ }
+                else { periodStart.setDate(today.getDate() - 7); } // Default weekly
+                break;
+          }
+
+          // Format dates to YYYY-MM-DD string
+          const formatToYYYYMMDD = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          };
+          const periodStartStr = formatToYYYYMMDD(periodStart);
+          const periodEndStr = formatToYYYYMMDD(periodEnd);
+
+          // If dates are invalid or not selected, do not call backend
+          if (isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
+            App.pageInitializers.reports.renderTechAreaCheckboxes(this.allAvailableTechAreas); // Re-render all available, no disabling
+            return;
+          }
+
+          try {
+            const techAreasWithInsights = await App.callApi('ReportsService', 'getTechAreasWithInsightsInPeriod', [periodStartStr, periodEndStr]);
+            this.renderTechAreaCheckboxes(this.allAvailableTechAreas, techAreasWithInsights);
+          } catch (e) {
+            clientLogError("Error updating tech areas based on period:", e);
+            // If backend call fails, show all tech areas, no disabling
+            this.renderTechAreaCheckboxes(this.allAvailableTechAreas); 
+          }
+        },
+        // **New: Previous page function**
+        prevReportsHistoryPage: async function() {
+          if (App.reportsHistoryCurrentPage > 1) {
+            App.reportsHistoryCurrentPage--;
+            await App.pageInitializers.reports.loadReportsHistory();
+          }
+        },
+
+        // **New: Next page function**
+        nextReportsHistoryPage: async function() {
+          if (App.reportsHistoryCurrentPage < App.reportsHistoryTotalPages) {
+            App.reportsHistoryCurrentPage++;
+            await App.pageInitializers.reports.loadReportsHistory();
+          }
+        },
+
+        // Load report history
+        loadReportsHistory: async function() {
+          try {
+            const tableBody = document.getElementById('reportHistoryTable');
+            const paginationInfoSpan = document.getElementById('reportsHistoryPaginationInfo');
+            const prevBtn = document.getElementById('reportsHistoryPrevPageBtn');
+            const nextBtn = document.getElementById('reportsHistoryNextPageBtn');
+            
+            if (!tableBody || !paginationInfoSpan || !prevBtn || !nextBtn) {
+                clientLogError("Error: Could not find all reports history pagination elements.");
+                return;
+            }
+
+            tableBody.innerHTML = `<tr><td colspan=\"6\" class=\"text-center py-4 text-gray-500\">正在加载报告历史...</td></tr>`;
+            paginationInfoSpan.textContent = '加载中...';
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+
+            // **Modification: Pass page number and items per page to backend function**
+            const response = await App.callApi('ReportsService', 'getReportsHistory', [App.reportsHistoryCurrentPage, App.reportsHistoryItemsPerPage]);
+            const reports = response.records;
+            const totalRecords = response.totalRecords;
+
+            App.reportsHistoryTotalRecords = totalRecords;
+            App.reportsHistoryTotalPages = Math.ceil(totalRecords / App.reportsHistoryItemsPerPage);
+
+            if (reports && reports.length > 0) {
+              const reportStatusClasses = {
+                'Generated': { text: '已发布', classes: 'bg-green-100 text-green-800' },
+                'Generated_Email_Failed': { text: '已生成(邮件失败)', classes: 'bg-yellow-100 text-yellow-800' },
+                'Failed': { text: '生成失败', classes: 'bg-red-100 text-red-800' },
+                'default': { text: '未知', classes: 'bg-gray-100 text-gray-800' }
+              };
+
+              tableBody.innerHTML = reports.map(report => {
+                const statusKey = report.status || 'default';
+                const statusInfo = reportStatusClasses[statusKey] || reportStatusClasses['default'];
+                const downloadHtml = report.download_url ?
+                    `<a href=\"${report.download_url}\" target=\"_blank\" class=\"text-primary hover:text-primary-dark mr-3\">查看</a><a href=\"${report.download_url}\" download=\"${report.report_name}.html\" class=\"text-gray-500 hover:text-gray-700\">下载</a>` :
+                    `<span class=\"text-gray-400\">无文件</span>`;
+
+                return `
+                  <tr class=\"hover:bg-gray-50\">
+                    <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"报告名称\"><div class=\"font-medium text-gray-900\">${report.report_name || 'N/A'}</div></td>
+                    <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"报告类型\"><div class=\"text-sm text-gray-500\">${report.report_type || 'N/A'}</div></td>
+                    <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"生成日期\"><div class=\"text-sm text-gray-500\">${report.generation_date || 'N/A'}</div></td>
+                    <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"生成者\"><div class=\"text-sm text-gray-500\">${report.generated_by || 'N/A'}</div></td>
+                    <td class=\"px-6 py-4 whitespace-nowrap\" data-label=\"状态\">
+                      <span class=\"px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.classes}\">
+                        ${statusInfo.text}
+                      </span>
+                    </td>
+                    <td class=\"px-6 py-4 whitespace-nowrap text-sm\" data-label=\"操作\">
+                      ${downloadHtml}
+                    </td>
+                  </tr>
+                `;
+              }).join('');
+            } else {
+              tableBody.innerHTML = `<tr><td colspan=\"6\" class=\"text-center py-4 text-gray-500\">暂无报告历史记录。</td></tr>`;
+            }
+
+            // Update pagination info and button states
+            paginationInfoSpan.textContent = `第 ${App.reportsHistoryCurrentPage} / ${App.reportsHistoryTotalPages} 页 (共 ${App.reportsHistoryTotalRecords} 条)`;
+            prevBtn.disabled = App.reportsHistoryCurrentPage === 1;
+            nextBtn.disabled = App.reportsHistoryCurrentPage === App.reportsHistoryTotalPages || App.reportsHistoryTotalRecords === 0;
+
+          } catch (e) {
+            handleFailure(e);
+            document.getElementById('reportHistoryTable').innerHTML = `<tr><td colspan=\"6\" class=\"text-center py-4 text-gray-500\">加载报告历史失败。</td></tr>`;
+          }
+        },
+
+        // Toggle display/hide of custom date input fields
+        toggleCustomDateInputs: function() {
+          const customRadio = document.getElementById('custom');
+          const customDateDiv = document.getElementById('customDateRange');
+          if (customRadio.checked) {
+            customDateDiv.classList.remove('hidden');
+          } else {
+            customDateDiv.classList.add('hidden');
+          }
+        },
+
+        // Handle generate report button click event
+        handleGenerateReport: async function() {
+          // 1. Get form data
+          const reportTypeSelect = document.querySelector('select[name=\"report-type-select\"]');
+          const reportType = reportTypeSelect.value;
+          const reportTitleInput = document.querySelector('input[name=\"report-title-input\"]');
+          const reportTitle = reportTitleInput.value.trim();
+          
+          const periodRadios = document.querySelectorAll('input[name=\"report-period\"]');
+          let selectedPeriodType = 'weekly'; // Default to weekly
+          periodRadios.forEach(radio => {
+            if (radio.checked) {
+              selectedPeriodType = radio.value;
+            }
+          });
+
+          const startDateInput = document.getElementById('startDate');
+          const endDateInput = document.getElementById('endDate');
+          
+          const techAreaCheckboxes = document.querySelectorAll('input[name=\"tech-area-checkbox\"]:checked');
+          const techAreas = Array.from(techAreaCheckboxes).map(cb => cb.value);
+
+          const targetAudienceSelect = document.querySelector('select[name=\"target-audience-select\"]');
+          const targetAudience = targetAudienceSelect.value;
+
+          const reportOwnerInput = document.querySelector('input[name=\"report-owner-input\"]');
+          const reportOwner = reportOwnerInput.value.trim();
+
+          const reportSummaryTextarea = document.querySelector('textarea[name=\"report-summary-textarea\"]');
+          const reportSummary = reportSummaryTextarea.value.trim();
+
+          const recipientEmailInput = document.getElementById('recipient-email-input'); // ✅ New recipient email input
+          const recipientEmail = recipientEmailInput ? recipientEmailInput.value.trim() : ''; 
+
+          // 2. Validate input
+          if (!reportTitle) { alert('请输入报告标题。'); return; }
+          if (!reportOwner) { alert('请输入报告负责人。'); return; }
+          if (!reportSummary) { alert('请输入报告摘要。'); return; }
+          if (selectedPeriodType === 'custom' && (!startDateInput.value || !endDateInput.value)) {
+            alert('请选择自定义报告的开始和结束日期。');
+            return;
+          }
+
+          // 3. Calculate report period dates
+          let periodStart, periodEnd;
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Set time to 00:00:00 to avoid losing current day's data
+
+          switch (selectedPeriodType) {
+            case 'weekly':
+              periodEnd = new Date(today);
+              periodStart = new Date(today);
+              periodStart.setDate(today.getDate() - 7);
+              break;
+            case 'monthly':
+              periodEnd = new Date(today);
+              periodStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+              break;
+            case 'quarterly':
+              periodEnd = new Date(today);
+              periodStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+              break;
+            case 'annual':
+              periodEnd = new Date(today);
+              periodStart = new Date(today.getFullYear() - 1, 0, 1);
+              break;
+            case 'custom':
+              periodStart = new Date(startDateInput.value);
+              periodEnd = new Date(endDateInput.value);
+              break;
+            default:
+              alert('请选择报告周期。');
+              return;
+          }
+
+          // Format dates to YYYY-MM-DD string
+          const formatToYYYYMMDD = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          };
+          const periodStartStr = formatToYYYYMMDD(periodStart);
+          const periodEndStr = formatToYYYYMMDD(periodEnd);
+
+          // 4. Call backend API to generate report
+          try {
+            document.getElementById('generateReportBtn').disabled = true; // Disable button to prevent double click
+            document.getElementById('generateReportBtn').textContent = '生成中...';
+
+            const result = await App.callApi('ReportsService', 'generateReport', [
+              reportType, 
+              reportTitle, 
+              periodStartStr, 
+              periodEndStr, 
+              techAreas, 
+              targetAudience, 
+              reportOwner, 
+              reportSummary,
+              recipientEmail
+            ]);
+
+            if (result.success) {
+              alert('报告生成成功！请在报告历史中查看或下载。');
+              // Refresh history
+              App.pageInitializers.reports.loadReportsHistory(); 
+              // Optional: Clear form
+              reportTitleInput.value = '';
+              document.getElementById('weekly').checked = true; // Restore default weekly
+              App.pageInitializers.reports.toggleCustomDateInputs();
+              techAreaCheckboxes.forEach(cb => cb.checked = false); // Uncheck all tech areas
+              targetAudienceSelect.value = '技术团队';
+              reportOwnerInput.value = '';
+              reportSummaryTextarea.value = '';
+
+            } else {
+              alert('报告生成失败：' + (result.message || '未知错误。'));
+            }
+          } catch (e) {
+            handleFailure(e);
+            alert('报告生成请求失败。详情请查看浏览器控制台。');
+          } finally {
+            document.getElementById('generateReportBtn').disabled = false;
+            document.getElementById('generateReportBtn').textContent = '生成报告';
+          }
+        }
+      }
+    }
+  };
+  window.addEventListener('load', () => App.init());
+</script>
