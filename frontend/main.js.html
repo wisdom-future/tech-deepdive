@@ -402,10 +402,20 @@
       console.log("✅ App has been initialized successfully!");
     },
     switchPage: function(pageId) {
-      // 1. 切换导航栏高亮状态
       document.querySelectorAll('.nav-link').forEach(l => {
-        l.classList.toggle('bg-primary', l.dataset.page === pageId);
-        l.classList.toggle('shadow-md', l.dataset.page === pageId);
+        const isSelected = l.dataset.page === pageId;
+        
+        // ✅ 核心修正: 使用新的样式类来控制高亮
+        // 移除所有可能的高亮样式
+        l.classList.remove('bg-black/30', 'shadow-inner', 'bg-primary');
+        // 添加默认的半透明背景
+        l.classList.add('bg-white/10');
+        
+        // 为选中的项添加特殊样式
+        if (isSelected) {
+          l.classList.add('bg-black/30', 'shadow-inner'); // 添加深色背景和内阴影，营造凹陷感
+          l.classList.remove('bg-white/10'); // 移除默认背景
+        }
       });
 
       // 2. 切换页面容器的可见性
@@ -472,247 +482,347 @@
           } catch(e) { handleFailure(e); }
         }
       },
-      collection: {
+            collection: {
         isInitialized: false,
-        pageData: null,
-        elements: {},
+        activeTab: 'overview', // 默认激活的标签页
+        scrollObserver: null,
+        pageData: null, // 用于缓存从后端获取的数据
         competitorName: null,
-        init: async function() {
-          console.log('正在初始化数据采集页面...');
+        elements: {}, // 缓存DOM元素
+
+        // 总初始化函数，只在第一次进入页面时执行一次性绑定
+        init: function() {
+          console.log('正在初始化数据采集与工作流页面...');
           if (!this.isInitialized) {
             this.elements = {
-              companySelect: document.getElementById('company-select'), filterBtn: document.getElementById('filter-btn'),
-              clearBtn: document.getElementById('clear-filter-btn'), filterStatusText: document.getElementById('filter-status-text'),
-              techGrid: document.getElementById('tech-data-grid'), benchmarkGrid: document.getElementById('benchmark-data-grid'),
-              statsGrid: document.getElementById('collection-stats-grid'), historyTbody: document.querySelector('#page-collection table tbody')
+              tabsContainer: document.getElementById('collection-tabs'),
+              pageContainer: document.getElementById('page-collection'),
+              overviewContainer: document.getElementById('tab-content-overview'),
+              workflowsContainer: document.getElementById('tab-content-workflows'),
+              // ✅ 核心修正: 确保筛选器元素被正确缓存
+              companySelect: document.getElementById('company-select'),
+              filterBtn: document.getElementById('filter-btn'),
+              clearBtn: document.getElementById('clear-filter-btn'),
+              filterStatusText: document.getElementById('filter-status-text')
             };
-            this.elements.techGrid.addEventListener('click', (e) => this.handleCardClick(e));
-            this.elements.benchmarkGrid.addEventListener('click', (e) => this.handleCardClick(e));
-            this.elements.historyTbody.addEventListener('click', (e) => {
-                const button = e.target.closest('.view-history-detail-btn');
-                if (button && button.dataset.executionId) showHistoryDetailModal(button.dataset.executionId);
+            
+            this.elements.tabsContainer.addEventListener('click', this.handleTabClick.bind(this));
+            this.elements.pageContainer.addEventListener('click', this.handlePageClick.bind(this));
+            
+            // ✅ 核心修正: 为筛选器按钮绑定事件
+            this.elements.filterBtn.addEventListener('click', () => {
+              const selectedCompany = this.elements.companySelect.value;
+              this.elements.filterStatusText.textContent = `显示 "${selectedCompany || '所有企业'}" 的数据`;
+              this.processAndRenderOverviewCards(selectedCompany); // 传入筛选值
             });
-            this.elements.filterBtn.addEventListener('click', () => { this.elements.filterStatusText.textContent = `显示 "${this.elements.companySelect.value||'所有企业'}" 的数据`; this.processAndRender(this.elements.companySelect.value); });
-            this.elements.clearBtn.addEventListener('click', () => { this.elements.companySelect.value = ''; this.elements.filterStatusText.textContent = '显示所有企业的数据'; this.processAndRender(); });
+            this.elements.clearBtn.addEventListener('click', () => {
+              this.elements.companySelect.value = '';
+              this.elements.filterStatusText.textContent = '显示所有企业的数据';
+              this.processAndRenderOverviewCards(''); // 传入空字符串以清除筛选
+            });
+
             this.isInitialized = true;
           }
+          this.updateTabStyles();
+          this.loadActiveTabContent();
+        },
+
+        // 处理标签页导航的点击事件
+        handleTabClick: function(event) {
+          const link = event.target.closest('a.collection-tab');
+          if (!link) return;
+          event.preventDefault();
+          const tabName = link.dataset.tab;
+          if (tabName === this.activeTab) return;
+          this.activeTab = tabName;
+          this.updateTabStyles();
+          this.loadActiveTabContent();
+        },
+
+        // 根据激活的标签页加载对应内容
+        loadActiveTabContent: function() {
+          if (this.activeTab === 'overview') {
+            this.renderOverview();
+          } else if (this.activeTab === 'workflows') {
+            this.renderWorkflows();
+            this.setupScrollObserver();
+          }
+        },
+        
+        // 更新标签页的高亮样式
+        updateTabStyles: function() {
+          document.querySelectorAll('.collection-tab').forEach(tab => {
+              const isSelected = tab.dataset.tab === this.activeTab;
+              tab.classList.toggle('border-primary', isSelected);
+              tab.classList.toggle('text-primary', isSelected);
+              tab.classList.toggle('border-transparent', !isSelected);
+              tab.classList.toggle('text-gray-500', !isSelected);
+          });
+          document.querySelectorAll('.tab-content').forEach(content => {
+              content.classList.toggle('hidden', content.id !== `tab-content-${this.activeTab}`);
+          });
+        },
+        
+        // 统一的页面点击事件委托处理器
+        handlePageClick: function(event) {
+            if (this.activeTab === 'overview') {
+                // 检查是否点击了数据源卡片
+                const overviewCard = event.target.closest('.clickable-kpi');
+                if (overviewCard) {
+                    this.handleOverviewCardClick(event);
+                    return; // 处理完毕，退出函数
+                }
+
+                // ✅ 核心修正: 检查是否点击了历史记录的“查看详情”按钮
+                const historyDetailButton = event.target.closest('.view-history-detail-btn');
+                if (historyDetailButton && historyDetailButton.dataset.executionId) {
+                    showHistoryDetailModal(historyDetailButton.dataset.executionId);
+                    return; // 处理完毕，退出函数
+                }
+
+            } else if (this.activeTab === 'workflows') {
+                const workflowButton = event.target.closest('button[data-wffunction]');
+                const navLink = event.target.closest('a.workbench-nav-link');
+                if (workflowButton) {
+                    this.handleWorkflowRunClick(workflowButton);
+                } else if (navLink) {
+                    event.preventDefault();
+                    const targetId = navLink.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        const headerOffset = 150;
+                        const elementPosition = targetElement.getBoundingClientRect().top + window.pageYOffset;
+                        window.scrollTo({ top: elementPosition - headerOffset, behavior: "smooth" });
+                    }
+                }
+            }
+        },
+
+        // --- “数据源概览”标签页的逻辑 ---
+        renderOverview: async function() {
+          const container = document.getElementById('tab-content-overview');
+          
+          // ✅ 核心修正: 提供完整的HTML骨架，包含所有四个部分和筛选器
+          const fullHTML = `
+            <!-- Section 1: 技术数据采集 -->
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+              <div class="flex items-center mb-6 border-b pb-4">
+                <i class="fa fa-cogs text-xl text-primary mr-3"></i>
+                <h3 class="text-xl font-bold text-gray-800">技术数据</h3>
+                <span class="ml-4 text-sm text-gray-500">关注全球技术动态，捕捉前沿技术信号</span>
+              </div>
+              <div id="tech-data-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="skeleton h-56 rounded-lg col-span-full"></div>
+              </div>
+            </div>
+
+            <!-- Section 2: 标杆数据采集 -->
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+              <div class="flex items-center mb-6 border-b pb-4">
+                <i class="fa fa-flag-checkered text-xl text-primary mr-3"></i>
+                <h3 class="text-xl font-bold text-gray-800">标杆数据</h3>
+                <span class="ml-4 text-sm text-gray-500">追踪标杆企业动态，洞察产业发展趋势</span>
+              </div>
+
+              <!-- ✅ 新增: 筛选器UI的HTML结构 -->
+              <div class="bg-white p-4 rounded-lg border border-gray-200 mb-6 shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-y-2">
+                  <!-- 左侧部分：标签和下拉框 -->
+                  <div class="flex items-center space-x-4">
+                    <label for="company-select" class="text-sm font-medium text-gray-700 whitespace-nowrap">筛选企业:</label>
+                    <select id="company-select" class="flex-grow md:flex-grow-0 md:w-64 p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary text-sm">
+                      <option value="">所有企业</option>
+                    </select>
+                  </div>
+                  <!-- 右侧部分：状态文本 -->
+                  <p id="filter-status-text" class="text-xs md:text-sm text-gray-500 md:text-right">显示所有企业的数据</p>
+                </div>
+              </div>
+              
+              <div id="benchmark-data-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                 <div class="skeleton h-56 rounded-lg col-span-full"></div>
+              </div>
+              
+            </div>
+            
+            <!-- Section 3: 采集统计 -->
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+              <div class="flex items-center mb-6 border-b pb-4">
+                <i class="fa fa-line-chart text-xl text-primary mr-3"></i>
+                <h3 class="text-xl font-bold text-gray-800">采集统计</h3>
+              </div>
+              <div id="collection-stats-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="skeleton h-24 rounded-lg"></div>
+                <div class="skeleton h-24 rounded-lg"></div>
+                <div class="skeleton h-24 rounded-lg"></div>
+              </div>
+            </div>
+
+            <!-- Section 4: 最近采集历史 -->
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <div class="flex items-center mb-6 border-b pb-4">
+                <i class="fa fa-history text-xl text-primary mr-3"></i>
+                <h3 class="text-xl font-bold text-gray-800">采集历史</h3>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-100">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">任务名称</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">开始时间</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">结束时间</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="collection-history-tbody" class="bg-white divide-y divide-gray-200">
+                    <tr><td colspan="5" class="text-center py-4 text-gray-500">正在加载历史记录...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+          container.innerHTML = fullHTML;
+
           try {
-            this.elements.techGrid.innerHTML = '<div class="skeleton h-56 rounded-lg"></div>'.repeat(4);
-            this.elements.benchmarkGrid.innerHTML = '<div class="skeleton h-56 rounded-lg"></div>'.repeat(4);
-            this.elements.statsGrid.innerHTML = '<div class="skeleton h-24 rounded-lg"></div>'.repeat(3);
-            this.elements.historyTbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">正在加载...</td></tr>`;
-            
-            // **在前端接收到数据后立即打印**
-            this.pageData = await App.callApi('CollectionStatsService', 'getCollectionPageData');
-            console.log("DEBUG_FRONTEND: Data received by frontend.collection.init:", this.pageData);
-            console.log("DEBUG_FRONTEND: pageData.history content:", this.pageData.history); // **核心调试行**
-
-            this.elements.companySelect.innerHTML = '<option value="">所有企业</option>' + this.pageData.competitors.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
-            this.processAndRender();
-          } catch (e) { handleFailure(e); }
-        },
-        handleCardClick: function(e) {
-            const card = e.target.closest('.clickable-kpi');
-            if (!card) return;
-            const type = card.dataset.type;
-            const adapter = DataAdapters[type];
-            if (!type || !adapter) return console.error(`未找到类型 "${type}" 的适配器`);
-            const detailEl = e.target.closest('.clickable-detail');
-            const detailKind = detailEl ? detailEl.dataset.detail : 'all'; // 'today' or 'all'
-            const title = card.querySelector('h3').innerText;
-            App.currentDetailType = type;
-            App.currentPage = 1;
-            let rawData = [];
-            if (this.pageData.techData && this.pageData.techData[type]) {
-                rawData = this.pageData.techData[type];
-            } else if (type === 'industryDynamics') {
-                const ind = (this.pageData.benchmarkData.industryDynamics || []).filter(item => !this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName));
-                const ciNews = (this.pageData.benchmarkData.competitorIntelligence || []).filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && (item.intelligence_type || '').toLowerCase().replace(/[\s_]/g, '') === 'generalnews')
-                    .map(item => ({ event_title: item.intelligence_title, event_date: item.last_update_timestamp, impact_level: item.threat_level, processing_status: item.processing_status, source_url: item.source_url }));
-                rawData = [...ind, ...ciNews];
-            } else {
-                const typeMapping = { 'techInnovation': 'Tech Innovation', 'productRelease': 'Product Release', 'talentFlow': 'Talent Flow' };
-                if (typeMapping[type]) rawData = (this.pageData.benchmarkData.competitorIntelligence || []).filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && item.intelligence_type === typeMapping[type]);
+            if (!this.pageData) {
+                this.pageData = await App.callApi('CollectionStatsService', 'getCollectionPageData');
             }
             
-            let dataToAdapt = rawData;
-
-            // **修改点 1：统一“今日明细”的过滤逻辑，使用“采集日期”和“近7日”范围**
-            if (detailKind === 'today') { 
-                // 定义用于判断“今日采集”和“最后采集”的字段映射 (与 calculateCardData 中一致)
-                const ingestionDateFieldMap = {
-                    academicPapers: 'created_timestamp', 
-                    patentData: 'created_timestamp',     
-                    openSourceData: 'created_timestamp', 
-                    techNews: 'created_timestamp',       
-                    industryDynamics: 'created_timestamp', 
-                    techInnovation: 'created_timestamp', 
-                    productRelease: 'created_timestamp', 
-                    talentFlow: 'created_timestamp' 
-                };
-                const ingestionDateField = ingestionDateFieldMap[type] || 'created_timestamp'; 
-
-                // 定义“过去7天”的日期范围 (与 calculateCardData 中一致)
-                const today = new Date();
-                today.setHours(0, 0, 0, 0); // 将时间设为00:00:00，确保日期比较准确
-
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(today.getDate() - 6); // 过去7天：包括今天和前6天
+            const companySelect = document.getElementById('company-select');
+            if (companySelect && this.pageData && this.pageData.competitors) {
+                companySelect.innerHTML = '<option value="">所有企业</option>' + 
+                                          this.pageData.competitors.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
                 
-                // 过滤数据，只保留“近7日采集”的记录
-                dataToAdapt = rawData.filter(item => { 
-                    const val = item[ingestionDateField]; 
-                    if (!val) return false; // 如果采集日期字段为空，则跳过
-
-                    const itemDateStr = String(val).slice(0, 10); // 获取 YYYY-MM-DD 格式的日期字符串
-                    const itemDate = new Date(itemDateStr); // 转换为Date对象进行范围比较
-
-                    // 确保日期有效，并且在过去7天内（包括今天）
-                    return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo && itemDate <= today;
-                });
+                // ✅ 核心修正 2: 为下拉框绑定 'change' 事件，实现自动筛选
+                if (!companySelect.dataset.listenerAttached) {
+                    companySelect.addEventListener('change', (event) => {
+                        const selectedCompany = event.target.value;
+                        const statusTextEl = document.getElementById('filter-status-text');
+                        if (statusTextEl) {
+                           statusTextEl.textContent = selectedCompany ? `当前显示 "${selectedCompany}" 的数据` : '显示所有企业的数据';
+                        }
+                        this.processAndRenderOverviewCards(selectedCompany);
+                    });
+                
+                    companySelect.dataset.listenerAttached = 'true';
+                }
             }
-            // **修改点 1 结束**
 
-            App.allModalData = dataToAdapt.map(adapter);
-
-            // **修改点 2：在显示模态框前对数据进行排序 (最新日期在前)**
-            // 这段代码应该已经存在于您的 handleCardClick 函数中了，确保它在 App.allModalData = ... 之后
-            App.allModalData.sort((a, b) => {
-                // 将日期字符串转换为Date对象进行比较，处理可能存在的N/A或无效日期
-                const dateA = new Date(a.date);
-                const dateB = new Date(b.date);
-
-                // 如果日期无效，将其视为最早的日期，以便排到后面
-                const timeA = isNaN(dateA.getTime()) ? -Infinity : dateA.getTime();
-                const timeB = isNaN(dateB.getTime()) ? -Infinity : dateB.getTime();
-
-                return timeB - timeA; // 倒序排序 (b - a)，最新的在前
-            });
-            // **排序逻辑结束**
-
-            App.ui.showDetailListModal(title, detailKind); // detailKind 仍然是 'today' 或 'all'
+            this.processAndRenderOverviewCards(); // 首次加载，不带筛选条件
+          } catch(e) {
+            handleFailure(e);
+          }
         },
-        processAndRender: function(competitorName = null) {
-            this.competitorName = competitorName ? competitorName.toLowerCase() : null;
+        
+        processAndRenderOverviewCards: function(competitorNameToFilter) {
+            // 如果传入了公司名，则更新当前筛选状态
+            this.competitorName = competitorNameToFilter ? competitorNameToFilter.trim().toLowerCase() : null;
+
+            if (!this.pageData) {
+                console.error("processAndRenderOverviewCards被调用，但this.pageData为空。");
+                return;
+            }
+            
+            const techGrid = document.getElementById('tech-data-grid');
+            const benchmarkGrid = document.getElementById('benchmark-data-grid');
+            const statsGrid = document.getElementById('collection-stats-grid');
+            const historyTbody = document.getElementById('collection-history-tbody');
+
             const calculateCardData = (type, title, allData) => {
-              const totalCount = allData.length;
-              
-              // 核心：定义数据被系统采集或记录到Sheet的日期字段映射
-              // ！！！重要：请务必根据您的实际 Google Sheet 原始数据表（如 Raw_Academic_Papers, Raw_Patent_Data 等）
-              // 确认哪个字段记录了数据被系统采集/导入到 Sheet 的时间。
-              // 通常这个字段名为 'created_timestamp' 或 'processed_timestamp'。
-              // 如果您的 Sheet 中是其他名称，请修改这里的映射。
-              const ingestionDateFieldMap = {
-                  academicPapers: 'created_timestamp', 
-                  patentData: 'created_timestamp',     
-                  openSourceData: 'created_timestamp', 
-                  techNews: 'created_timestamp',       
-                  industryDynamics: 'created_timestamp', 
-                  techInnovation: 'created_timestamp', 
-                  productRelease: 'created_timestamp', 
-                  talentFlow: 'created_timestamp' 
-              };
-              const ingestionDateField = ingestionDateFieldMap[type] || 'created_timestamp'; 
-
-              // **修改点 1：定义“过去7天”的日期范围**
-              const today = new Date();
-              today.setHours(0, 0, 0, 0); // 将时间设为00:00:00，确保日期比较准确
-
-              const sevenDaysAgo = new Date(today);
-              sevenDaysAgo.setDate(today.getDate() - 6); // 过去7天：包括今天和前6天
-
-              // 格式化日期为 YYYY-MM-DD 字符串，用于比较
-              const formatToYYYYMMDD = (date) => {
-                  const y = date.getFullYear();
-                  const m = String(date.getMonth() + 1).padStart(2, '0');
-                  const d = String(date.getDate()).padStart(2, '0');
-                  return `${y}-${m}-${d}`;
-              };
-              const sevenDaysAgoStr = formatToYYYYMMDD(sevenDaysAgo);
-              const todayStr = formatToYYYYMMDD(today); // 用于比较“最后采集日期”
-
-              // **修改点 2：计算“近7日采集”数量 (todayCount 变量现在代表这个)**
-              const todayCount = allData.filter(item => { 
-                  const val = item[ingestionDateField]; 
-                  if (!val) return false;
-                  
-                  const itemDateStr = String(val).slice(0, 10);
-                  const itemDate = new Date(itemDateStr); // 转换为Date对象进行范围比较
-
-                  // 确保日期有效，并且在过去7天内（包括今天）
-                  return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo && itemDate <= today;
-              }).length;
-              
-              // --- 以下部分是卡片其他指标的计算，保持不变或已在之前讨论中修改过 ---
-              let qualityScore = '100%';
-              if (totalCount > 0 && allData[0] && allData[0].hasOwnProperty('quality_score')) {
-                  const validCount = allData.filter(item => { const score = Number(item.quality_score); return !isNaN(score) && score >= 80; }).length;
-                  qualityScore = totalCount > 0 ? Math.round(validCount / totalCount * 100) + '%' : '0%';
-              }
-              let success = 0, fail = 0;
-              allData.forEach(item => { const s = (item.processing_status || '').toLowerCase(); if (s.includes('success') || s.includes('processed')) success++; else if (s.includes('fail') || s.includes('error')) fail++; });
-              let successRate = (success + fail) > 0 ? Math.round(success / (success + fail) * 100) + '%' : (totalCount > 0 ? '100%' : '0%');
+              const totalCount = allData ? allData.length : 0;
+              const ingestionDateField = 'created_timestamp';
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              const todayCount = allData ? allData.filter(item => {
+                  const itemDate = new Date(item[ingestionDateField]);
+                  return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo;
+              }).length : 0;
               let status = "正常";
-              // 状态判断可以调整为基于近7日采集量，例如近7日采集量为0则暂停
-              if (todayCount === 0 && totalCount > 0) status = "暂停"; // 如果近7日采集量为0，则暂停
-              if (fail > 0) status = "异常"; // 失败任务优先显示异常
-
-              let trend = '平稳', trendIcon = 'fa-minus', trendColor = 'text-gray-500';
-              if (todayCount > 0) { trend = '上升'; trendIcon = 'fa-arrow-up'; trendColor = 'text-green-500'; } 
-              else if (fail > 0) { trend = '异常'; trendIcon = 'fa-exclamation-triangle'; trendColor = 'text-red-500'; }
-
-              // **修改点 3：计算“最后采集日期” (lastUpdate 变量现在代表这个)**
-              let lastUpdate = '--'; 
+              if (todayCount === 0 && totalCount > 0) status = "暂停";
+              let lastUpdate = '--';
               if (totalCount > 0) {
-                  const allIngestionDates = allData.map(item => item[ingestionDateField])
-                                                    .filter(v => { 
-                                                        if (!v) return false; 
-                                                        const s = String(v).trim(); 
-                                                        return s && s !== '.' && s.toLowerCase() !== 'invalid date' && s !== '--'; 
-                                                    });
-                  
-                  if (allIngestionDates.length > 0) {
-                      allIngestionDates.sort().reverse(); 
-                      lastUpdate = String(allIngestionDates[0]).slice(0, 10); // 取 YYYY-MM-DD 部分
+                  const dates = allData.map(item => new Date(item[ingestionDateField])).filter(d => !isNaN(d.getTime()));
+                  if (dates.length > 0) {
+                      dates.sort((a, b) => b - a);
+                      lastUpdate = dates[0].toISOString().slice(0, 10);
                   }
               }
-              if (!lastUpdate || lastUpdate.trim() === '' || lastUpdate.trim() === '.' || lastUpdate.trim().toLowerCase() === 'invalid date') {
-                  lastUpdate = '--';
-              }
-
-              return { 
-                  sourceType: type, 
-                  title, 
-                  totalCount, 
-                  todayCount, // 这个字段现在是“近7日采集”
-                  qualityScore, 
-                  successRate, 
-                  status, 
-                  trend, 
-                  trendIcon, 
-                  trendColor, 
-                  lastUpdate // 这个字段仍然是“最后采集日期”
-              };
+              return { sourceType: type, title, totalCount, todayCount, status, lastUpdate };
             };
+
             const renderCards = (container, cardData) => {
-                if (!cardData || cardData.length === 0) { container.innerHTML = `<p class="text-gray-500 col-span-4">${container.id === 'benchmark-data-grid' && this.elements.companySelect.value ? '该公司暂无相关数据' : '没有可显示的数据。'}</p>`; return; }
-                const iconMap = { academicPapers: 'fa-book', patentData: 'fa-certificate', techNews: 'fa-newspaper-o', openSourceData: 'fa-github', industryDynamics: 'fa-building-o', techInnovation: 'fa-lightbulb-o', productRelease: 'fa-archive', talentFlow: 'fa-users' };
+                const iconMap = { academicPapers: 'fa-book', patentData: 'fa-certificate', techNews: 'fa-newspaper-o', openSourceData: 'fa-github', industryDynamics: 'fa-building-o' };
                 container.innerHTML = cardData.map(card => {
-                    const statusColors = { '正常': 'bg-blue-100 text-blue-800', '警告': 'bg-yellow-100 text-yellow-800', '异常': 'bg-red-100 text-red-800', '暂停': 'bg-gray-100 text-gray-800' };
-                    const statusClass = statusColors[card.status] || 'bg-gray-100 text-gray-800';
-                    return `<div class="bg-white border border-gray-200 rounded-lg p-4 flex flex-col justify-between min-h-[230px] shadow-sm hover:shadow-lg transition-shadow duration-300 clickable-kpi" data-type="${card.sourceType}"> <div class="flex justify-between items-center mb-3"> <div class="flex items-center gap-2"> <i class="fa ${iconMap[card.sourceType] || 'fa-database'} text-gray-500 text-base"></i> <h3 class="font-semibold text-gray-800 text-base">${card.title}</h3> </div> <span class="text-xs font-medium px-2 py-0.5 rounded-md ${statusClass}">${card.status}</span> </div> <div class="flex text-center my-2"> <div class="w-1/2 pr-4 clickable-detail" data-type="${card.sourceType}" data-detail="today" style="cursor:pointer;"> <p class="text-3xl font-semibold text-primary">${card.todayCount.toLocaleString()}</p> <p class="text-xs text-gray-500 mt-1">近7日采集</p> </div> <div class="w-1/2 pl-4 border-l border-gray-200 clickable-detail" data-type="${card.sourceType}" data-detail="all" style="cursor:pointer;"> <p class="text-3xl font-semibold text-gray-800">${card.totalCount.toLocaleString()}</p> <p class="text-xs text-gray-500 mt-1">合计</p> </div> </div> <div class="flex text-center text-sm text-gray-700 bg-gray-50 p-2 rounded-md"> <div class="w-1/3"><p class="font-semibold">${card.qualityScore}</p><p class="text-xs text-gray-500">质量评分</p></div> <div class="w-1/3"><p class="font-semibold">${card.successRate}</p><p class="text-xs text-gray-500">成功率</p></div> <div class="w-1/3 flex justify-center items-center gap-1 ${card.trendColor}"><span class="font-semibold">${card.trend}</span><i class="fa ${card.trendIcon}"></i></div> </div> <div class="flex justify-center items-center text-xs text-gray-400 mt-3 text-center"> <span>最后更新: ${card.lastUpdate || '--'}</span> </div> </div>`;
+                    const statusColors = { '正常': 'bg-blue-100 text-blue-800', '暂停': 'bg-gray-100 text-gray-800' };
+                    return `<div class="bg-white border border-gray-200 rounded-lg p-4 flex flex-col justify-between min-h-[200px] shadow-sm hover:shadow-lg transition-shadow clickable-kpi" data-type="${card.sourceType}">
+                                <div>
+                                    <div class="flex justify-between items-start mb-3">
+                                        <h3 class="font-semibold text-gray-800 text-base">${card.title}</h3>
+                                        <span class="text-xs font-medium px-2 py-0.5 rounded-md ${statusColors[card.status]}">${card.status}</span>
+                                    </div>
+                                    <div class="flex text-center my-2">
+                                        <div class="w-1/2 pr-4 clickable-detail" data-detail="today" style="cursor:pointer;"><p class="text-3xl font-semibold text-primary">${card.todayCount.toLocaleString()}</p><p class="text-xs text-gray-500 mt-1">近7日采集</p></div>
+                                        <div class="w-1/2 pl-4 border-l border-gray-200 clickable-detail" data-detail="all" style="cursor:pointer;"><p class="text-3xl font-semibold text-gray-800">${card.totalCount.toLocaleString()}</p><p class="text-xs text-gray-500 mt-1">合计</p></div>
+                                    </div>
+                                </div>
+                                <div class="text-center text-xs text-gray-400 mt-3">最后采集: ${card.lastUpdate}</div>
+                            </div>`;
                 }).join('');
             };
+            
+            const techCards = [
+                calculateCardData('academicPapers', '学术论文', this.pageData.techData.academicPapers),
+                calculateCardData('patentData', '技术专利', this.pageData.techData.patentData),
+                calculateCardData('openSourceData', '开源项目', this.pageData.techData.openSourceData),
+                calculateCardData('techNews', '技术新闻', this.pageData.techData.techNews)
+            ];
+
+             const competitorFilter = (item) => !this.competitorName || (item.competitor_name && String(item.competitor_name).toLowerCase().includes(this.competitorName));
+
+            const allIndustryDynamics = this.pageData.benchmarkData.industryDynamics || [];
+            const allCompetitorIntel = this.pageData.benchmarkData.competitorIntelligence || [];
+
+            // ✅ 核心修正 4: 确保所有标杆数据都使用 competitorFilter 进行筛选
+            const industryDynamicsData = allIndustryDynamics.filter(competitorFilter);
+            const techInnovationData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Tech Innovation');
+            const productReleaseData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Product Release');
+            const talentFlowData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Talent Flow');
+            const benchmarkCards = [
+                calculateCardData('industryDynamics', '产业动态', industryDynamicsData),
+                calculateCardData('techInnovation', '技术创新', techInnovationData),
+                calculateCardData('productRelease', '产品发布', productReleaseData),
+                calculateCardData('talentFlow', '人才流动', talentFlowData)
+            ];
+
             const renderStats = (container, statsData) => {
-                if (!statsData) return;
+                if (!container || !statsData) return;
                 const formatChange = (change) => change >= 0 ? `<i class="fa fa-arrow-up mr-1"></i> ${change}% 较上月` : `<i class="fa fa-arrow-down mr-1"></i> ${Math.abs(change)}% 较上月`;
                 const changeColor = (change) => change >= 0 ? 'text-green-500' : 'text-red-500';
                 const failedChangeColor = (change) => change <= 0 ? 'text-green-500' : 'text-red-500';
                 const failedFormatChange = (change) => change <= 0 ? `<i class="fa fa-arrow-down mr-1"></i> ${Math.abs(change)} 较上月` : `<i class="fa fa-arrow-up mr-1"></i> ${change} 较上月`;
-                container.innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border"><div class="text-sm text-gray-500 mb-1">本月采集量</div><div class="text-2xl font-bold">${statsData.monthlyVolume.toLocaleString()}</div><div class="text-sm ${changeColor(statsData.monthlyChange)} flex items-center mt-1">${formatChange(statsData.monthlyChange)}</div></div><div class="bg-white p-4 rounded-lg shadow-sm border"><div class="text-sm text-gray-500 mb-1">成功率</div><div class="text-2xl font-bold">${statsData.successRate}%</div><div class="text-sm ${changeColor(statsData.successRateChange)} flex items-center mt-1">${formatChange(statsData.successRateChange)}</div></div><div class="bg-white p-4 rounded-lg shadow-sm border"><div class="text-sm text-gray-500 mb-1">失败任务</div><div class="text-2xl font-bold">${statsData.failedTasks}</div><div class="text-sm ${failedChangeColor(statsData.failedTasksChange)} flex items-center mt-1">${failedFormatChange(statsData.failedTasksChange)}</div></div>`;
+                container.innerHTML = `
+                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                        <div class="text-sm text-gray-500 mb-1">本月采集量</div>
+                        <div class="text-2xl font-bold">${(statsData.monthlyVolume || 0).toLocaleString()}</div>
+                        <div class="text-sm ${changeColor(statsData.monthlyChange)} flex items-center mt-1">${formatChange(statsData.monthlyChange || 0)}</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                        <div class="text-sm text-gray-500 mb-1">成功率</div>
+                        <div class="text-2xl font-bold">${statsData.successRate || 0}%</div>
+                        <div class="text-sm ${changeColor(statsData.successRateChange)} flex items-center mt-1">${formatChange(statsData.successRateChange || 0)}</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                        <div class="text-sm text-gray-500 mb-1">失败任务</div>
+                        <div class="text-2xl font-bold">${statsData.failedTasks || 0}</div>
+                        <div class="text-sm ${failedChangeColor(statsData.failedTasksChange)} flex items-center mt-1">${failedFormatChange(statsData.failedTasksChange || 0)}</div>
+                    </div>
+                `;
             };
+
+            // ✅ 核心修正 2: 提供 renderHistory 函数的完整实现
             const renderHistory = (container, historyData) => {
-                // **新增：确保 historyData 是数组的防御性检查**
+                if (!container) return;
                 if (!Array.isArray(historyData) || historyData.length === 0) { 
                     container.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">暂无历史记录。</td></tr>`; 
                     return; 
@@ -720,23 +830,208 @@
                 const statusClasses = { 'completed': 'bg-green-100 text-green-800', 'failed': 'bg-red-100 text-red-800', 'running': 'bg-blue-100 text-blue-800', 'success': 'bg-green-100 text-green-800' };
                 container.innerHTML = historyData.map(log => {
                     const actionCellHTML = log.execution_id ? `<button class="text-primary hover:text-primary-dark view-history-detail-btn" data-execution-id="${log.execution_id}">查看详情</button>` : `<span class="text-gray-400 cursor-not-allowed">无详情</span>`;
-                    return `<tr class="hover:bg-gray-50"> <td class="px-6 py-4 whitespace-nowrap"><div class="font-medium text-gray-900">${log.workflow_name || 'N/A'}</div></td> <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${log.start_timestamp || 'N/A'}</div></td> <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${log.end_timestamp || 'N/A'}</div></td> <td class="px-6 py-4 whitespace-nowrap"> <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[String(log.execution_status||'').toLowerCase()]||'bg-gray-100'}">${log.execution_status||'未知'}</span> </td> <td class="px-6 py-4 whitespace-nowrap text-sm"> ${actionCellHTML} </td> </tr>`;
+                    return `<tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap"><div class="font-medium text-gray-900">${log.workflow_name || 'N/A'}</div></td>
+                                <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${log.start_timestamp || 'N/A'}</div></td>
+                                <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${log.end_timestamp || 'N/A'}</div></td>
+                                <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[String(log.execution_status||'').toLowerCase()]||'bg-gray-100'}">${log.execution_status||'未知'}</span></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${actionCellHTML}</td>
+                            </tr>`;
                 }).join('');
             };
-            if (!this.pageData) return;
-            const techCards = [ calculateCardData('academicPapers', '学术论文监控', this.pageData.techData.academicPapers), calculateCardData('patentData', '技术专利监控', this.pageData.techData.patentData), calculateCardData('openSourceData', '开源项目监测', this.pageData.techData.openSourceData), calculateCardData('techNews', '技术新闻获取', this.pageData.techData.techNews) ];
-            const dynamicCaptureData = [...(this.pageData.benchmarkData.industryDynamics.filter(item => !this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName))), ...(this.pageData.benchmarkData.competitorIntelligence.filter(item => (!this.competitorName || String(item.competitor_name || '').toLowerCase().includes(this.competitorName)) && (item.intelligence_type || '').toLowerCase().replace(/[\s_]/g, '') === 'generalnews').map(item => ({ event_title: item.intelligence_title, event_date: item.last_update_timestamp, impact_level: item.threat_level, processing_status: item.processing_status, source_url: item.source_url })))];
-            const techInnovationData = this.pageData.benchmarkData.competitorIntelligence.filter(d => (!this.competitorName || String(d.competitor_name || '').toLowerCase().includes(this.competitorName)) && d.intelligence_type === 'Tech Innovation');
-            const productReleaseData = this.pageData.benchmarkData.competitorIntelligence.filter(d => (!this.competitorName || String(d.competitor_name || '').toLowerCase().includes(this.competitorName)) && d.intelligence_type === 'Product Release');
-            const talentFlowData = this.pageData.benchmarkData.competitorIntelligence.filter(d => (!this.competitorName || String(d.competitor_name || '').toLowerCase().includes(this.competitorName)) && d.intelligence_type === 'Talent Flow');
-            const benchmarkCards = [ calculateCardData('industryDynamics', '企业动态捕获', dynamicCaptureData), calculateCardData('techInnovation', '技术创新追踪', techInnovationData), calculateCardData('productRelease', '产品发布监控', productReleaseData), calculateCardData('talentFlow', '人才流动监测', talentFlowData) ];
-            renderCards(this.elements.techGrid, techCards);
-            renderCards(this.elements.benchmarkGrid, benchmarkCards);
-            renderStats(this.elements.statsGrid, this.pageData.overallStats);
+
+            if(techGrid) renderCards(techGrid, techCards);
+            if(benchmarkGrid) renderCards(benchmarkGrid, benchmarkCards);
+            if(statsGrid && this.pageData.overallStats) renderStats(statsGrid, this.pageData.overallStats);
+            if(historyTbody && this.pageData.history) renderHistory(historyTbody, this.pageData.history);
+        },
+
+        handleOverviewCardClick: function(event) {
+          const card = event.target.closest('.clickable-kpi');
+          if (!card) return;
+          const type = card.dataset.type;
+          const adapter = DataAdapters[type];
+          if (!type || !adapter) return;
+
+          const detailEl = event.target.closest('.clickable-detail');
+          const detailKind = detailEl ? detailEl.dataset.detail : 'all';
+          const title = card.querySelector('h3').innerText;
+          
+          App.currentDetailType = type;
+          App.currentPage = 1;
+          
+          let rawData = [];
+          if (this.pageData.techData && this.pageData.techData[type]) rawData = this.pageData.techData[type];
+          else if (this.pageData.benchmarkData && this.pageData.benchmarkData[type]) rawData = this.pageData.benchmarkData[type];
+
+          let dataToAdapt = rawData;
+          if (detailKind === 'today') {
+              const dateFieldMap = {
+                  academicPapers: 'publication_date', patentData: 'application_date',
+                  openSourceData: 'last_commit_date', techNews: 'publication_date',
+                  industryDynamics: 'event_date',
+              };
+              const dateField = dateFieldMap[type] || 'created_timestamp';
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              
+              dataToAdapt = rawData.filter(item => {
+                  const itemDate = new Date(item[dateField]);
+                  return !isNaN(itemDate.getTime()) && itemDate >= sevenDaysAgo;
+              });
+          }
+          
+          App.allModalData = dataToAdapt.map(adapter);
+          
+          App.allModalData.sort((a, b) => {
+              const dateA = new Date(a.date);
+              const dateB = new Date(b.date);
+              const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
+              const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
+              return timeB - timeA;
+          });
+          
+          App.ui.showDetailListModal(title, detailKind);
+        },
+        
+        // --- “工作流中心”标签页的逻辑 ---
+        renderWorkflows: function() {
+            const container = document.getElementById('tab-content-workflows');
+            const workflowsByLayer = {
+                1: [
+                    { id: 'wf1', title: 'WF1: 学术论文监控', description: '从 arXiv 等来源监控与已注册技术相关的最新学术论文。', runFunction: 'runWf1_AcademicPapers' },
+                    { id: 'wf2', title: 'WF2: 专利申请追踪', description: '从专利数据库追踪相关专利申请和授权情况。', runFunction: 'runWf2_PatentData' },
+                    { id: 'wf3', title: 'WF3: 开源项目监测', description: '监测GitHub等平台上的新兴开源项目和技术趋势。', runFunction: 'runWf3_OpenSource' },
+                    { id: 'wf4', title: 'WF4: 技术新闻获取', description: '从主流科技媒体获取与监控领域相关的产业新闻。', runFunction: 'runWf4_TechNews' },
+                    { id: 'wf5', title: 'WF5: 产业动态捕获', description: '捕获行业会议、财报、法规等关键产业动态。', runFunction: 'runWf5_IndustryDynamics' },
+                    { id: 'wf6', title: 'WF6: 竞争对手收集', description: '收集和整理来自多渠道的竞争对手公开情报。', runFunction: 'runWf6_CompetitorIntel' }
+                ],
+                2: [
+                    { id: 'wf7-1', title: 'WF7-1: 学术论文信号识别', description: '处理待定论文，识别高价值信号并创建情报记录。', runFunction: 'runWf7_1_AcademicSignalIdentification' },
+                    { id: 'wf7-2', title: 'WF7-2: 专利数据信号识别', description: '评估专利的重要性、威胁等级，并生成情报。', runFunction: 'runWf7_2' },
+                    { id: 'wf7-3', title: 'WF7-3: 开源项目信号识别', description: '评估开源项目的潜力、趋势，并生成情报。', runFunction: 'runWf7_3_OpenSourceSignal' },
+                    { id: 'wf7-4', title: 'WF7-4: 技术新闻信号识别', description: '评估技术新闻的价值、影响，并生成情报。', runFunction: 'runWf7_4' },
+                    { id: 'wf7-5', title: 'WF7-5: 产业动态信号识别', description: '评估产业动态的战略影响，并生成情报。', runFunction: 'runWf7_5' },
+                    { id: 'wf7-6', title: 'WF7-6: 竞争情报信号识别', description: '评估竞争情报的威胁等级，并生成情报。', runFunction: 'runWf7_6' }
+                ],
+                3: [{ id: 'wf8', title: 'WF8: 统一证据验证', description: '对所有新生成的情报进行多源交叉验证和质量评分。', runFunction: 'runWf8_EvidenceValidation' }],
+                4: [{ id: 'wf9', title: 'WF9: 商业价值分析', description: '对已验证情报进行TAM/SAM/SOM市场建模和ROI计算。', runFunction: 'runWf9_CommercialValueAnalysis' }, { id: 'wf10', title: 'WF10: 竞争情报分析', description: '评估竞争格局、技术威胁，并识别机会与挑战。', runFunction: 'runWf10_CompetitiveIntelAnalysis' }, { id: 'wf11', title: 'WF11: 技术深度分析', description: '评估技术成熟度(TRL)、技术壁垒和演进路径。', runFunction: 'runWf11_TechnicalDeepAnalysis' }],
+                5: [{ id: 'wf12', title: 'WF12: 情报整合决策', description: '综合所有分析维度，计算综合评分并生成行动建议。', runFunction: 'runWf12_IntelligenceIntegration' }, { id: 'wf13', title: 'WF13: 报告生成输出', description: '自动生成日报、周报，并分发至邮件、仪表板等渠道。', runFunction: 'runWf13_ReportGeneration' }],
+                6: [{ id: 'wf14', title: 'WF14: 数据质量监控', description: '定期检查整个系统的数据质量、完整性和一致性。', runFunction: 'runWf14_DataQualityMonitor' }, { id: 'wf15', title: 'WF15: 系统健康检查', description: '监控所有工作流的运行状态和系统性能指标。', runFunction: 'runWf15_SystemHealthCheck' }]
+            };
+            const layerTitles = ["精准数据采集 (并行)", "分表信号识别 (串行)", "统一证据验证 (统一处理)", "深度分析 (并行)", "决策支撑 (串行)", "监控与维护 (独立运行)"];
             
-            // **在数据传递给 renderHistory 前打印**
-            console.log("DEBUG_FRONTEND: Data passed to renderHistory (from processAndRender):", this.pageData.history); // **核心调试行**
-            renderHistory(this.elements.historyTbody, this.pageData.history);
+            let html = `
+                <div id="workbench-nav" class="sticky top-[var(--header-height)] bg-white/80 backdrop-blur-sm z-30 py-3 mb-6 rounded-lg shadow-sm">
+                  <div class="max-w-7xl mx-auto px-2">
+                    <nav class="flex justify-around items-center space-x-2 text-sm md:text-base">
+                      <a href="#wf-section-1" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第一层: 采集</a>
+                      <a href="#wf-section-2" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第二层: 识别</a>
+                      <a href="#wf-section-3" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第三层: 验证</a>
+                      <a href="#wf-section-4" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第四层: 分析</a>
+                      <a href="#wf-section-5" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第五层: 决策</a>
+                      <a href="#wf-section-6" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第六层: 监控</a>
+                    </nav>
+                  </div>
+                </div>
+                ${Object.keys(workflowsByLayer).map(layerNum => `
+                    <div id="wf-section-${layerNum}" class="mb-8">
+                        <h3 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">第${"一二三四五六"[layerNum-1]}层：${layerTitles[layerNum-1]}</h3>
+                        <div id="wf-layer-${layerNum}" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${(workflowsByLayer[layerNum].length > 0) ? workflowsByLayer[layerNum].map(wf => `
+                                <div id="wf-card-${wf.id}" class="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col shadow-sm transition-all hover:shadow-md">
+                                    <div class="flex justify-between items-center mb-3">
+                                        <h4 class="font-bold text-lg text-gray-800">${wf.title}</h4>
+                                        <span id="${wf.id}-status-badge" class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700">空闲</span>
+                                    </div>
+                                    <p class="text-sm text-gray-600 mb-4 flex-grow">${wf.description}</p>
+                                    <div class="text-xs text-gray-500 space-y-1 mb-4">
+                                        <p><strong>上次运行:</strong> <span id="${wf.id}-last-run">从未</span></p>
+                                        <p><strong>上次结果:</strong> <span id="${wf.id}-last-result">N/A</span></p>
+                                    </div>
+                                    <div class="mt-auto">
+                                        <button data-wfid="${wf.id}" data-wffunction="${wf.runFunction}" class="w-full bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400">
+                                            <i class="fa fa-play-circle mr-2"></i>立即执行
+                                        </button>
+                                    </div>
+                                    <div id="${wf.id}-log-output" class="mt-4 p-2 bg-gray-800 text-white text-xs rounded-md h-24 overflow-y-auto font-mono hidden"></div>
+                                </div>
+                            `).join('') : '<div class="text-gray-400 p-4 col-span-full">此层级暂无工作流。</div>'}
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+            container.innerHTML = html;
+        },
+
+        handleWorkflowRunClick: async function(button) {
+            if (!button || button.disabled) return;
+            const wfId = button.dataset.wfid;
+            const wfName = button.dataset.wffunction;
+            if (!wfId || !wfName) return;
+
+            const statusBadge = document.getElementById(`${wfId}-status-badge`);
+            const lastRunSpan = document.getElementById(`${wfId}-last-run`);
+            const lastResultSpan = document.getElementById(`${wfId}-last-result`);
+            const logOutput = document.getElementById(`${wfId}-log-output`);
+
+            button.disabled = true;
+            button.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>执行中...';
+            statusBadge.textContent = '运行中';
+            logOutput.textContent = '任务已发送，请耐心等待后端返回结果...';
+            lastResultSpan.textContent = 'N/A';
+            logOutput.classList.remove('hidden');
+
+            try {
+                const result = await App.callApi('WorkflowsService', wfName);
+                const isSuccess = result.success;
+                statusBadge.textContent = isSuccess ? '成功' : '失败';
+                statusBadge.className = `px-2 py-1 text-xs font-semibold rounded-full ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                lastRunSpan.textContent = new Date().toLocaleString();
+                lastResultSpan.textContent = result.message || (isSuccess ? '执行完毕' : '未知错误');
+                logOutput.textContent = result.log || '无详细日志。';
+            } catch (e) {
+                statusBadge.textContent = '失败';
+                lastResultSpan.textContent = e.message;
+                logOutput.textContent = e.stack;
+                handleFailure(e);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = '<i class="fa fa-play-circle mr-2"></i>再次执行';
+            }
+        },
+        
+        setupScrollObserver: function() {
+          if (this.scrollObserver) this.scrollObserver.disconnect();
+          const sections = document.querySelectorAll('#tab-content-workflows [id^="wf-section-"]');
+          const navLinks = document.querySelectorAll('#tab-content-workflows .workbench-nav-link');
+          if (sections.length === 0 || navLinks.length === 0) return;
+
+          const observerOptions = { root: null, rootMargin: '-30% 0px -65% 0px', threshold: 0 };
+          
+          this.scrollObserver = new IntersectionObserver(entries => {
+            let topMostIntersectingId = null;
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                if (topMostIntersectingId === null) {
+                    topMostIntersectingId = entry.target.getAttribute('id');
+                }
+              }
+            });
+            
+            if(topMostIntersectingId) {
+                navLinks.forEach(link => {
+                  const isActive = link.getAttribute('href') === `#${topMostIntersectingId}`;
+                  link.classList.toggle('bg-primary', isActive);
+                  link.classList.toggle('text-white', isActive);
+                  link.classList.toggle('text-gray-600', !isActive);
+                });
+            }
+          }, observerOptions);
+
+          sections.forEach(section => {
+              if(section) this.scrollObserver.observe(section);
+          });
         }
       },
       insights: {
@@ -1423,216 +1718,7 @@
       },
       // ✅ 新增：系统工作台页面的初始化器
       system: {
-        isInitialized: false,
-        init: function() {
-          console.log('正在初始化系统工作台页面...');
-          if (!this.isInitialized) {
-            // 使用事件委托来处理所有工作流卡片的点击事件
-            document.getElementById('page-system').addEventListener('click', this.handleSystemPageEvents.bind(this));
-            // ... (可以为其他层级的容器也添加监听器) ...
-            // ✅ 优化：在渲染后，再设置滚动监听
-            this.renderWorkflows();
-            this.setupScrollObserver();
-            this.isInitialized = true;
-          } else {
-            this.renderWorkflows();
-          }
-        },
-
-        // ✅ 新增：统一的事件处理器
-        handleSystemPageEvents: function(event) {
-          const navLink = event.target.closest('a.workbench-nav-link');
-          const workflowButton = event.target.closest('button[data-wfid]');
-
-          // 优先处理导航链接点击
-          if (navLink) {
-            event.preventDefault(); // ✅ 关键：阻止<a>标签的默认跳转行为
-            event.stopPropagation(); // 阻止事件进一步冒泡
-
-            const targetId = navLink.getAttribute('href').substring(1);
-            const targetElement = document.getElementById(targetId);
-            
-            if (targetElement) {
-              const headerOffset = 80 + 60; // 主导航栏(80) + 页面内导航(约60)
-              const elementPosition = targetElement.getBoundingClientRect().top;
-              const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-
-              window.scrollTo({
-                top: offsetPosition,
-                behavior: "smooth"
-              });
-            }
-            return; // 处理完导航点击后，直接返回，不再处理按钮点击
-          }
-
-          // 如果不是导航链接，再处理工作流执行按钮点击
-          if (workflowButton) {
-            this.handleWorkflowRunClick(event);
-            return;
-          }
-        },
-
-      // ✅ 优化：更精确的滚动监听设置
-      setupScrollObserver: function() {
-        if (this.scrollObserver) {
-          this.scrollObserver.disconnect();
-        }
-
-        const sections = document.querySelectorAll('#page-system [id^="wf-section-"]');
-        if (sections.length === 0) return; // 如果没有找到任何section，则不设置观察者
-
-        const navLinks = document.querySelectorAll('.workbench-nav-link');
-        const observerOptions = {
-          root: null,
-          rootMargin: '-30% 0px -65% 0px', // 调整阈值，让高亮更灵敏
-          threshold: 0
-        };
-        
-        this.scrollObserver = new IntersectionObserver(entries => {
-          let intersectingSections = [];
-          entries.forEach(entry => {
-            if (entry.isIntersecting) {
-              intersectingSections.push(entry.target);
-            }
-          });
-          
-          // 如果有交叉的section，高亮最顶部的那一个
-          if (intersectingSections.length > 0) {
-            // 按在文档中的位置排序
-            intersectingSections.sort((a, b) => a.offsetTop - b.offsetTop);
-            const topMostIntersectingId = intersectingSections[0].getAttribute('id');
-            
-            navLinks.forEach(link => {
-              const isActive = link.getAttribute('href') === `#${topMostIntersectingId}`;
-              link.classList.toggle('bg-primary', isActive);
-              link.classList.toggle('text-white', isActive);
-              link.classList.toggle('text-gray-600', !isActive);
-            });
-          }
-        }, observerOptions);
-
-        sections.forEach(section => {
-            if(section) this.scrollObserver.observe(section);
-        });
-      },
-
-        // 渲染所有工作流卡片
-        renderWorkflows: function() {
-          const workflowsByLayer = {
-            1: [
-              { id: 'wf1', title: 'WF1: 学术论文监控', description: '从 arXiv 等来源监控与已注册技术相关的最新学术论文。', runFunction: 'runWf1_AcademicPapers' },
-              { id: 'wf2', title: 'WF2: 专利申请追踪', description: '从专利数据库追踪相关专利申请和授权情况。', runFunction: 'runWf2_PatentData' },
-              { id: 'wf3', title: 'WF3: 开源项目监测', description: '监测GitHub等平台上的新兴开源项目和技术趋势。', runFunction: 'runWf3_OpenSource' },
-              { id: 'wf4', title: 'WF4: 产业新闻获取', description: '从主流科技媒体获取与监控领域相关的产业新闻。', runFunction: 'runWf4_TechNews' },
-              { id: 'wf5', title: 'WF5: 产业动态捕获', description: '捕获行业会议、财报、法规等关键产业动态。', runFunction: 'runWf5_IndustryDynamics' },
-              { id: 'wf6', title: 'WF6: 竞争对手收集', description: '收集和整理来自多渠道的竞争对手公开情报。', runFunction: 'runWf6_CompetitorIntel' }
-            ],
-            2: [
-              { id: 'wf7-1', title: 'WF7-1: 学术论文信号识别', description: '处理待定论文，识别高价值信号并创建情报记录。', runFunction: 'runWf7_1_AcademicSignalIdentification' },
-              { id: 'wf7-2', title: 'WF7-2: 专利数据信号识别', description: '评估专利的重要性、威胁等级，并生成情报。', runFunction: 'runWf7_2' },
-              { id: 'wf7-3', title: 'WF7-3: 开源项目信号识别', description: '评估开源项目的潜力、趋势，并生成情报。', runFunction: 'runWf7_3_OpenSourceSignal' },
-              { id: 'wf7-4', title: 'WF7-4: 技术新闻信号识别', description: '评估技术新闻的价值、影响，并生成情报。', runFunction: 'runWf4_TechNews' },
-              { id: 'wf7-5', title: 'WF7-5: 产业动态信号识别', description: '评估产业动态的战略影响，并生成情报。', runFunction: 'runWf7_5' },
-              { id: 'wf7-6', title: 'WF7-6: 竞争情报信号识别', description: '评估竞争情报的威胁等级，并生成情报。', runFunction: 'runWf7_6' }
-            ],
-            3: [
-              { id: 'wf8', title: 'WF8: 统一证据验证', description: '对所有新生成的情报进行多源交叉验证和质量评分。', runFunction: 'runWf8_EvidenceValidation' }
-            ],
-            4: [
-              { id: 'wf9', title: 'WF9: 商业价值分析', description: '对已验证情报进行TAM/SAM/SOM市场建模和ROI计算。', runFunction: 'runWf9_CommercialValueAnalysis' },
-              { id: 'wf10', title: 'WF10: 竞争情报分析', description: '评估竞争格局、技术威胁，并识别机会与挑战。', runFunction: 'runWf10_CompetitiveIntelAnalysis' },
-              { id: 'wf11', title: 'WF11: 技术深度分析', description: '评估技术成熟度(TRL)、技术壁垒和演进路径。', runFunction: 'runWf11_TechnicalDeepAnalysis' }
-            ],
-            5: [
-              { id: 'wf12', title: 'WF12: 情报整合决策', description: '综合所有分析维度，计算综合评分并生成行动建议。', runFunction: 'runWf12_IntelligenceIntegration' },
-              { id: 'wf13', title: 'WF13: 报告生成输出', description: '自动生成日报、周报，并分发至邮件、仪表板等渠道。', runFunction: 'runWf13_ReportGeneration' }
-            ],
-            6: [
-              { id: 'wf14', title: 'WF14: 数据质量监控', description: '定期检查整个系统的数据质量、完整性和一致性。', runFunction: 'runWf14_DataQualityMonitor' },
-              { id: 'wf15', title: 'WF15: 系统健康检查', description: '监控所有工作流的运行状态和系统性能指标。', runFunction: 'runWf15_SystemHealthCheck' }
-            ]
-          };
-          
-          // ✅ 核心修正：遍历所有层级来清空和渲染
-          for (let layerNum = 1; layerNum <= 6; layerNum++) {
-            const container = document.getElementById(`wf-layer-${layerNum}`);
-            if (container) {
-              const workflows = workflowsByLayer[layerNum] || [];
-              if (workflows.length > 0) {
-                  container.innerHTML = workflows.map(wf => `
-                  <div id="wf-card-${wf.id}" class="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col shadow-sm transition-all hover:shadow-md">
-                      <div class="flex justify-between items-center mb-3">
-                      <h4 class="font-bold text-lg text-gray-800">${wf.title}</h4>
-                      <span id="${wf.id}-status-badge" class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700">空闲</span>
-                      </div>
-                      <p class="text-sm text-gray-600 mb-4 flex-grow">${wf.description}</p>
-                      <div class="text-xs text-gray-500 space-y-1 mb-4">
-                      <p><strong>上次运行:</strong> <span id="${wf.id}-last-run">从未</span></p>
-                      <p><strong>上次结果:</strong> <span id="${wf.id}-last-result">N/A</span></p>
-                      </div>
-                      <div class="mt-auto">
-                      <button data-wfid="${wf.id}" data-wffunction="${wf.runFunction}" class="w-full bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400">
-                          <i class="fa fa-play-circle mr-2"></i>立即执行
-                      </button>
-                      </div>
-                      <div id="${wf.id}-log-output" class="mt-4 p-2 bg-gray-800 text-white text-xs rounded-md h-24 overflow-y-auto font-mono hidden"></div>
-                  </div>
-                  `).join('');
-              } else {
-                  // 如果某个层级没有定义工作流，可以显示一个占位符
-                  container.innerHTML = '<div class="text-gray-400 p-4 col-span-full">此层级暂无工作流。</div>';
-              }
-            }
-          }
-      },
-
-        // 处理工作流执行按钮的点击事件
-        // ✅ 最终版: 处理工作流执行按钮的点击事件 (包含轮询逻辑)
-      handleWorkflowRunClick: async function(event) {
-        const button = event.target.closest('button[data-wfid]');
-        if (!button) return;
-
-        const wfId = button.dataset.wfid;
-        const wfName = button.dataset.wffunction;
-
-        const statusBadge = document.getElementById(`${wfId}-status-badge`);
-        const lastRunSpan = document.getElementById(`${wfId}-last-run`);
-        const lastResultSpan = document.getElementById(`${wfId}-last-result`);
-        const logOutput = document.getElementById(`${wfId}-log-output`);
-
-        // --- 1. 更新UI为“运行中” ---
-        button.disabled = true;
-        button.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>执行中...';
-        statusBadge.textContent = '运行中';
-        statusBadge.className = 'px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800';
-        logOutput.textContent = '任务已发送，请耐心等待后端返回结果...';
-        lastResultSpan.textContent = 'N/A';
-        logOutput.classList.remove('hidden');
-
-        try {
-          // --- 2. 直接调用后端函数并等待其完成 ---
-          const result = await App.callApi('WorkflowsService', wfName);
-          
-          // --- 3. 收到结果后，直接更新UI ---
-          const isSuccess = result.success;
-          statusBadge.textContent = isSuccess ? '成功' : '失败';
-          statusBadge.className = `px-2 py-1 text-xs font-semibold rounded-full ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-          lastRunSpan.textContent = new Date().toLocaleString();
-          lastResultSpan.textContent = result.message || (isSuccess ? '执行完毕' : '未知错误');
-          logOutput.textContent = result.log || '无详细日志。';
-
-        } catch (e) {
-          statusBadge.textContent = '失败';
-          statusBadge.className = 'px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800';
-          lastResultSpan.textContent = e.message;
-          logOutput.textContent = e.stack;
-          handleFailure(e);
-        } finally {
-          // --- 4. 无论成功失败，都恢复按钮状态 ---
-          button.disabled = false;
-          button.innerHTML = '<i class="fa fa-play-circle mr-2"></i>再次执行';
-        }
-      }
+        init: function() {}
       }
     }
   };
