@@ -3,93 +3,136 @@
   //  SECTION 1: CONFIGURATION & DATA ADAPTERS
   // ==================================================================
 
-  const FIELD_CONFIG = {
+    const FIELD_CONFIG = {
     _default: [
-      { key: 'title', label: '标题', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '日期' }, { key: 'infoA', label: '信息 A' },
-      { key: 'infoB', label: '信息 B' }, { key: 'id', label: 'ID' },
+      { key: 'title', label: '标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'date', label: '日期', width: '15%' }, 
+      { key: 'infoA', label: '信息 A', width: '20%' },
+      { key: 'infoB', label: '信息 B', width: '15%' }, 
+      { key: 'id', label: 'ID', width: '10%' },
     ],
     academicPapers: [
-      { key: 'title', label: '技术主题', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'infoA', label: '论文作者' }, { key: 'date', label: '发表日期' },
-      { key: 'infoB', label: '相关性分' }, { key: 'id', label: '原始ID' },
+      { key: 'title', label: '技术主题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'infoA', label: '论文作者', needTrunc: true, width: '25%' }, 
+      { key: 'date', label: '发表日期', width: '15%' },
+      { key: 'infoB', label: '相关性分', width: '10%' }, 
+      { key: 'id', label: '原始ID', needTrunc: true, width: '10%' },
     ],
     patentData: [
-      { key: 'title', label: '专利标题', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'infoA', label: '专利号' }, { key: 'date', label: '申请日期' },
-      { key: 'infoB', label: '状态' }, { key: 'id', label: 'ID' },
+      { key: 'title', label: '专利标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'infoA', label: '专利号', width: '20%' }, 
+      { key: 'date', label: '申请日期', width: '15%' },
+      { key: 'infoB', label: '状态', width: '15%' }, 
+      { key: 'id', label: 'ID', width: '10%' },
     ],
     openSourceData: [
-      { key: 'title', label: '项目名称', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '最新提交' },
-      { key: 'infoA', label: '技术领域' },
-      { key: 'infoB', label: '项目简介', needTrunc: true },
-      { key: 'id', label: 'ID' },
+      { key: 'title', label: '项目名称', needTrunc: true, linkField: 'sourceUrl', width: '30%' },
+      { key: 'date', label: '最新提交', width: '15%' },
+      { key: 'infoA', label: '技术领域', needTrunc: true, width: '20%' },
+      { key: 'infoB', label: '项目简介', needTrunc: true, width: '25%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '10%' },
     ],
     techNews: [
-      { key: 'title', label: '新闻标题', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '发布日期' },
-      { key: 'infoA', label: '新闻来源' },
-      { key: 'infoB', label: '新闻简介', needTrunc: true },
-      { key: 'id', label: 'ID' },
+      { key: 'title', label: '新闻标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'date', label: '发布日期', width: '15%' },
+      { key: 'infoA', label: '新闻来源', width: '15%' },
+      { key: 'infoB', label: '新闻简介', needTrunc: true, width: '20%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '10%' },
     ],
     industryDynamics: [
-      { key: 'title', label: '事件标题', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '事件日期' },
-      { key: 'infoA', label: '影响级别' },
-      { key: 'infoB', label: '状态' },
-      { key: 'id', label: 'ID' },
+      { key: 'title', label: '事件标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'date', label: '事件日期', width: '15%' },
+      { key: 'infoA', label: '影响级别', width: '15%' },
+      { key: 'infoB', label: '状态', width: '15%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '15%' },
     ],
     techInnovation: [
-      { key: 'title', label: '创新点', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '更新时间' },
-      { key: 'infoA', label: '状态' },
-      { key: 'infoB', label: '威胁等级' },
-      { key: 'id', label: 'ID' },
+      { key: 'title', label: '创新点', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'date', label: '更新时间', width: '15%' },
+      { key: 'infoA', label: '状态', width: '15%' },
+      { key: 'infoB', label: '威胁等级', width: '15%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '15%' },
     ],
     productRelease: [
-      { key: 'title', label: '产品名称', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '发布时间' },
-      { key: 'infoA', label: '状态' },
-      { key: 'infoB', label: '' },
-      { key: 'id', label: 'ID' },
+      { key: 'title', label: '产品名称', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'date', label: '发布时间', width: '15%' },
+      { key: 'infoA', label: '状态', width: '15%' },
+      { key: 'infoB', label: '', width: '15%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '15%' },
     ],
     talentFlow: [
-      { key: 'title', label: '流动事件', needTrunc: true, linkField: 'sourceUrl' },
-      { key: 'date', label: '时间' },
-      { key: 'infoA', label: '状态' },
-      { key: 'infoB', label: '' },
-      { key: 'id', label: 'ID' },
+      { key: 'title', label: '流动事件', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'date', label: '时间', width: '15%' },
+      { key: 'infoA', label: '状态', width: '15%' },
+      { key: 'infoB', label: '', width: '15%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '15%' },
     ],
     techDomain: [
-        { key: 'title', label: '技术名称' }, { key: 'infoA', label: '技术类别' },
-        { key: 'infoB', label: '监控状态' }, { key: 'date', label: '创建日期' }, { key: 'id', label: '技术ID' },
+        { key: 'title', label: '技术名称', width: '30%' }, 
+        { key: 'infoA', label: '技术类别', width: '25%' },
+        { key: 'infoB', label: '监控状态', width: '15%' }, 
+        { key: 'date', label: '创建日期', width: '15%' }, 
+        { key: 'id', label: '技术ID', width: '15%' },
     ],
     industryBenchmark: [
-        { key: 'title', label: '公司名称', linkField: 'sourceUrl' }, { key: 'infoA', label: '行业类别' },
-        { key: 'infoB', label: '威胁等级' }, { key: 'date', label: '上次更新' }, { key: 'id', label: '对手ID' },
+        { key: 'title', label: '公司名称', linkField: 'sourceUrl', width: '30%' }, 
+        { key: 'infoA', label: '行业类别', width: '25%' },
+        { key: 'infoB', label: '威胁等级', width: '15%' }, 
+        { key: 'date', label: '上次更新', width: '15%' }, 
+        { key: 'id', label: '对手ID', width: '15%' },
     ],
     conference: [
-        { key: 'title', label: '会议名称', linkField: 'sourceUrl' }, { key: 'infoA', label: '行业焦点' },
-        { key: 'infoB', label: '监控状态' }, { key: 'date', label: '下次活动' }, { key: 'id', label: '会议ID' },
+        { key: 'title', label: '会议名称', linkField: 'sourceUrl', width: '30%' }, 
+        { key: 'infoA', label: '行业焦点', width: '25%' },
+        { key: 'infoB', label: '监控状态', width: '15%' }, 
+        { key: 'date', label: '下次活动', width: '15%' }, 
+        { key: 'id', label: '会议ID', width: '15%' },
     ],
-    // ✅ 新增：为历史记录详情专门创建一个配置
     historyDetail: [
-        { key: 'key', label: '属性' },
-        { key: 'value', label: '值' },
+        { key: 'key', label: '属性', width: '30%' },
+        { key: 'value', label: '值', width: '70%' },
     ]
   };
 
   const DataAdapters = {
-    academicPapers: item => ({ id: item.raw_id, title: item.title, date: item.publication_date, infoA: item.authors, infoB: item.initial_relevance_score, sourceUrl: item.source_url }),
+        academicPapers: item => ({ id: item.raw_id, title: item.title, date: item.publication_date, infoA: item.authors, infoB: item.initial_relevance_score, sourceUrl: item.source_url }),
     patentData: item => ({ id: item.patent_number, title: item.title, date: item.application_date, infoA: item.patent_number, infoB: item.processing_status, sourceUrl: item.source_url }),
     openSourceData: item => ({ id: item.project_name, title: item.project_name, date: item.last_update_timestamp, infoA: item.tech_keywords, infoB: item.description, sourceUrl: item.source_url }),
     techNews: item => ({ id: item.raw_id, title: item.news_title, date: item.publication_date, infoA: item.source_platform, infoB: item.news_summary, sourceUrl: item.source_url }),
-    industryDynamics: item => ({ id: item.event_title, title: item.event_title, date: item.event_date, infoA: item.impact_level, infoB: item.processing_status, sourceUrl: item.source_url }),
-    _competitorIntelligenceAdapter: item => ({ id: item.intelligence_id, title: item.intelligence_title, date: item.last_update_timestamp, infoA: item.processing_status, infoB: item.threat_level || '', sourceUrl: item.source_url }),
-    techInnovation: item => DataAdapters._competitorIntelligenceAdapter(item),
-    productRelease: item => DataAdapters._competitorIntelligenceAdapter(item),
-    talentFlow: item => DataAdapters._competitorIntelligenceAdapter(item),
+    industryDynamics: item => ({ 
+        id: item.raw_id, 
+        title: item.event_title, 
+        date: item.event_date, // 修正点
+        infoA: item.industry_impact_score, 
+        infoB: item.processing_status, 
+        sourceUrl: item.source_url 
+    }),
+    
+    techInnovation: item => ({ 
+        id: item.raw_id, 
+        title: item.intelligence_title, 
+        date: item.last_update_timestamp, 
+        infoA: item.processing_status, 
+        infoB: item.threat_level_score || 'N/A',
+        sourceUrl: item.source_url 
+    }),
+    productRelease: item => ({ 
+        id: item.raw_id, 
+        title: item.intelligence_title, 
+        date: item.last_update_timestamp, 
+        infoA: item.processing_status, 
+        infoB: 'N/A',
+        sourceUrl: item.source_url 
+    }),
+    talentFlow: item => ({ 
+        id: item.raw_id, 
+        title: item.intelligence_title, 
+        date: item.last_update_timestamp, 
+        infoA: item.processing_status, 
+        infoB: 'N/A',
+        sourceUrl: item.source_url 
+    }),
+
     techDomain: item => ({ id: item.tech_id, title: item.tech_name, date: item.created_date, infoA: item.tech_category, infoB: item.monitoring_status, sourceUrl: null }),
     industryBenchmark: item => ({ id: item.competitor_id, title: item.company_name, date: item.last_updated, infoA: item.industry_category, infoB: item.threat_level, sourceUrl: item.website_url }),
     conference: item => ({ id: item.conference_id, title: item.conference_name, date: item.next_event_date, infoA: item.industry_focus, infoB: item.monitoring_status, sourceUrl: item.official_website })
@@ -292,10 +335,12 @@
                     } else if (f.needTrunc) {
                         displayValue = truncate(displayValue);
                     }
-                    const style = f.width ? `style="width: ${f.width}; max-width: ${f.width};"` : 'style="max-width: 400px;"';
-                    const classes = "px-6 py-4 text-sm text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis";
-                    // ✅ 新增 data-label 属性
-                    return `<td class="${classes}" ${style} title="${String(rawValue || '').replace(/"/g, '&quot;')}" data-label="${f.label}">${displayValue}</td>`;
+                    const tdStyle = f.width ? `style="width: ${f.width};"` : '';
+                    return `<td class="px-6 py-4 text-sm text-gray-800" ${tdStyle} data-label="${f.label}">
+                                <div class="whitespace-nowrap overflow-hidden text-ellipsis" title="${String(rawValue || '').replace(/"/g, '&quot;')}">
+                                    ${displayValue}
+                                </div>
+                            </td>`;
                 }).join('')
             }</tr>`).join('')
         }</tbody>`;
@@ -482,7 +527,7 @@
           } catch(e) { handleFailure(e); }
         }
       },
-            collection: {
+      collection: {
         isInitialized: false,
         activeTab: 'overview', // 默认激活的标签页
         scrollObserver: null,
@@ -729,9 +774,22 @@
             const statsGrid = document.getElementById('collection-stats-grid');
             const historyTbody = document.getElementById('collection-history-tbody');
 
+            // ✅ 核心修正 1：定义统一的日期字段映射表
+            const dateFieldMap = {
+                academicPapers: 'publication_date',
+                patentData: 'application_date',
+                openSourceData: 'last_commit_date',
+                techNews: 'publication_date',
+                industryDynamics: 'event_date',
+                techInnovation: 'last_update_timestamp',
+                productRelease: 'last_update_timestamp',
+                talentFlow: 'last_update_timestamp'
+            };
+
             const calculateCardData = (type, title, allData) => {
               const totalCount = allData ? allData.length : 0;
-              const ingestionDateField = 'created_timestamp';
+              // ✅ 核心修正 2：从映射表中获取正确的日期字段
+              const ingestionDateField = dateFieldMap[type] || 'created_timestamp';
               const sevenDaysAgo = new Date();
               sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
               const todayCount = allData ? allData.filter(item => {
@@ -788,12 +846,14 @@
             const techInnovationData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Tech Innovation');
             const productReleaseData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Product Release');
             const talentFlowData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Talent Flow');
+            
             const benchmarkCards = [
                 calculateCardData('industryDynamics', '产业动态', industryDynamicsData),
                 calculateCardData('techInnovation', '技术创新', techInnovationData),
                 calculateCardData('productRelease', '产品发布', productReleaseData),
                 calculateCardData('talentFlow', '人才流动', talentFlowData)
             ];
+
 
             const renderStats = (container, statsData) => {
                 if (!container || !statsData) return;
@@ -861,15 +921,42 @@
           App.currentPage = 1;
           
           let rawData = [];
-          if (this.pageData.techData && this.pageData.techData[type]) rawData = this.pageData.techData[type];
-          else if (this.pageData.benchmarkData && this.pageData.benchmarkData[type]) rawData = this.pageData.benchmarkData[type];
+          const competitorFilter = (item) => !this.competitorName || (item.competitor_name && String(item.competitor_name).toLowerCase().includes(this.competitorName));
+
+          if (this.pageData.techData && this.pageData.techData[type]) 
+          {
+            rawData = this.pageData.techData[type];
+          } else if (this.pageData.benchmarkData) {
+            const allIndustryDynamics = this.pageData.benchmarkData.industryDynamics || [];
+            const allCompetitorIntel = this.pageData.benchmarkData.competitorIntelligence || [];
+            
+            switch (type) {
+                case 'industryDynamics':
+                    rawData = allIndustryDynamics.filter(competitorFilter);
+                    break;
+                case 'techInnovation':
+                    rawData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Tech Innovation');
+                    break;
+                case 'productRelease':
+                    rawData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Product Release');
+                    break;
+                case 'talentFlow':
+                    rawData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Talent Flow');
+                    break;
+            }
+          } 
 
           let dataToAdapt = rawData;
           if (detailKind === 'today') {
               const dateFieldMap = {
-                  academicPapers: 'publication_date', patentData: 'application_date',
-                  openSourceData: 'last_commit_date', techNews: 'publication_date',
-                  industryDynamics: 'event_date',
+                  academicPapers: 'publication_date',
+                  patentData: 'application_date',
+                  openSourceData: 'last_commit_date',
+                  techNews: 'publication_date',
+                  industryDynamics: 'event_date', // 修正为 'event_date'
+                  techInnovation: 'last_update_timestamp',
+                  productRelease: 'last_update_timestamp',
+                  talentFlow: 'last_update_timestamp'
               };
               const dateField = dateFieldMap[type] || 'created_timestamp';
               const sevenDaysAgo = new Date();
@@ -904,7 +991,7 @@
                     { id: 'wf3', title: 'WF3: 开源项目监测', description: '监测GitHub等平台上的新兴开源项目和技术趋势。', runFunction: 'runWf3_OpenSource' },
                     { id: 'wf4', title: 'WF4: 技术新闻获取', description: '从主流科技媒体获取与监控领域相关的产业新闻。', runFunction: 'runWf4_TechNews' },
                     { id: 'wf5', title: 'WF5: 产业动态捕获', description: '捕获行业会议、财报、法规等关键产业动态。', runFunction: 'runWf5_IndustryDynamics' },
-                    { id: 'wf6', title: 'WF6: 竞争对手收集', description: '收集和整理来自多渠道的竞争对手公开情报。', runFunction: 'runWf6_CompetitorIntel' }
+                    { id: 'wf6', title: 'WF6: 竞争对手收集', description: '收集和整理来自多渠道的竞争对手公开情报。', runFunction: 'runWf6_Benchmark' }
                 ],
                 2: [
                     { id: 'wf7-1', title: 'WF7-1: 学术论文信号识别', description: '处理待定论文，识别高价值信号并创建情报记录。', runFunction: 'runWf7_1_AcademicSignalIdentification' },

@@ -448,8 +448,254 @@ const WorkflowsService = {
       return { success: false, message: e.message, log: logMessages.join('\n') };
     }
   },
-  runWf5_IndustryDynamics: function() { return { success: false, message: "WF5 功能尚未实现。", log: "WF5 功能尚未实现。" }; },
-  runWf6_CompetitorIntel: function() { return { success: false, message: "WF6 功能尚未实现。", log: "WF6 功能尚未实现。" }; },
+  runWf5_IndustryDynamics: function() {
+    const wfName = 'WF5: 产业动态/会议新闻捕获';
+    const startTime = new Date();
+    const executionId = `exec_wf5_${startTime.getTime()}`;
+    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let successCount = 0;
+    let processedCount = 0;
+    let errorCount = 0;
+
+    try {
+      // 1. 【核心修改】从 Conference_Registry 获取需要监控的会议
+      const conferenceRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.CONFERENCE_REGISTRY);
+      if (!conferenceRegistry) {
+          throw new Error(`无法从 ${CONFIG.SHEET_NAMES.CONFERENCE_REGISTRY} 获取数据，可能表不存在或为空。`);
+      }
+      
+      const activeConferences = conferenceRegistry.filter(c => c.monitoring_status && String(c.monitoring_status).toLowerCase() === 'active');
+
+      processedCount = activeConferences.length;
+      logMessages.push(`发现 ${processedCount} 个需要监控的活跃会议。`);
+
+      if (processedCount === 0) {
+        const msg = "在 Conference_Registry 中没有找到 'monitoring_status' 为 'active' 的会议。";
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+        return { success: true, message: msg, log: logMessages.join('\n') };
+      }
+
+      // 2. 准备API调用
+      const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
+      if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
+
+      const allNewDynamics = [];
+      const TABLE_HEADERS = [
+        'raw_id', 'source_type', 'event_title', 'event_summary', 'source_url', 'publication_date',
+        'source_platform', 'event_type', 'tech_keywords', 'industry_category', 'processing_status',
+        'linked_intelligence_id', 'industry_impact_score', 'relevance_score', 'duplicate_check_hash',
+        'workflow_execution_id', 'created_timestamp', 'processed_timestamp', 'last_update_timestamp'
+      ];
+
+      // 3. 遍历每个会议，构建查询并获取新闻
+      for (const conf of activeConferences) {
+        // 使用会议名称和ID构建精确的搜索查询
+        const query = `"${conf.conference_name}" OR "${conf.conference_id}"`;
+        logMessages.push(`正在为会议 '${conf.conference_name}' 搜索相关新闻...`);
+
+        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10`;
+        const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
+
+        if (response.getResponseCode() !== 200) {
+          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。跳过此会议。`);
+          errorCount++;
+          continue;
+        }
+
+        const articles = JSON.parse(response.getContentText()).articles || [];
+        logMessages.push(`  -> 找到 ${articles.length} 篇文章。`);
+
+        for (const article of articles) {
+          // 4. 初步AI评估
+          const prompt = `
+            请评估以下新闻的产业影响力和与技术趋势的相关性。请严格以JSON格式返回评分。
+            评分标准为1-10的整数。
+
+            新闻标题: ${article.title}
+            新闻摘要: ${article.description || ''}
+
+            返回JSON格式:
+            {
+              "industry_impact_score": <产业影响分数>,
+              "relevance_score": <技术相关性分数>
+            }
+          `;
+          const aiScores = this._callAIForScoring(prompt, { wfName, executionId, logMessages });
+
+          if (!aiScores || typeof aiScores.industry_impact_score === 'undefined') {
+            logMessages.push(`  -> 跳过文章 '${(article.title || "无标题").substring(0,30)}...'，因为AI评估失败或返回格式不正确。`);
+            continue;
+          }
+
+          const industryImpactScore = parseFloat(aiScores.industry_impact_score);
+          const relevanceScore = parseFloat(aiScores.relevance_score);
+
+          // 只有当产业影响力和相关性都较高时才记录
+          if (industryImpactScore >= 6.0 && relevanceScore >= 7.0) {
+            const articleUrl = article.url;
+            const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, articleUrl);
+            const duplicateHash = this._bytesToHex(hashBytes);
+            const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+            const rawId = `RAW_ID_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+
+            const rowDataObject = {
+              raw_id: rawId,
+              source_type: 'industry_dynamics',
+              event_title: article.title,
+              event_summary: (article.description || '').substring(0, 500),
+              source_url: articleUrl,
+              publication_date: (article.publishedAt || '').split('T')[0],
+              source_platform: article.source.name,
+              event_type: 'Conference News', // 事件类型明确为会议新闻
+              tech_keywords: conf.industry_focus, // 使用会议的行业焦点作为技术关键词
+              industry_category: conf.industry_focus, // 使用会议的行业焦点作为产业分类
+              processing_status: 'pending',
+              linked_intelligence_id: '',
+              industry_impact_score: industryImpactScore.toFixed(1),
+              relevance_score: relevanceScore.toFixed(1),
+              duplicate_check_hash: duplicateHash,
+              workflow_execution_id: executionId,
+              created_timestamp: nowTimestamp,
+              processed_timestamp: '',
+              last_update_timestamp: nowTimestamp
+            };
+
+            const dynamicsDataRow = TABLE_HEADERS.map(header => rowDataObject[header] !== undefined ? rowDataObject[header] : '');
+            allNewDynamics.push(dynamicsDataRow);
+            successCount++;
+            logMessages.push(`  -> 记录高价值会议新闻: '${article.title.substring(0, 50)}...' (影响分: ${industryImpactScore}, 相关分: ${relevanceScore})`);
+          }
+        }
+      }
+
+      // 5. 批量写入数据
+      if (allNewDynamics.length > 0) {
+        const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS);
+        sheet.getRange(sheet.getLastRow() + 1, 1, allNewDynamics.length, TABLE_HEADERS.length).setValues(allNewDynamics);
+        logMessages.push(`成功写入 ${allNewDynamics.length} 条新产业动态数据。`);
+      }
+
+      const finalMessage = `成功处理 ${processedCount} 个会议，发现并写入了 ${successCount} 条相关新闻。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+      return { success: true, message: finalMessage, log: logMessages.join('\n') };
+
+    } catch (e) {
+      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+    }
+  },
+  runWf6_Benchmark: function() {
+    const wfName = 'WF6: 竞争对手情报收集';
+    const startTime = new Date();
+    const executionId = `exec_wf6_${startTime.getTime()}`;
+    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let successCount = 0, processedCount = 0, errorCount = 0;
+
+    try {
+      // 1. 从 Competitor_Registry 获取需要监控的竞争对手
+      const competitorRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY);
+      if (!competitorRegistry) {
+        throw new Error(`无法从 ${CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY} 获取数据。`);
+      }
+      
+      const activeCompetitors = competitorRegistry.filter(c => 
+        c.monitoring_status && String(c.monitoring_status).toLowerCase() === 'active' &&
+        c.news_monitoring && String(c.news_monitoring).toLowerCase() === 'true'
+      );
+
+      processedCount = activeCompetitors.length;
+      logMessages.push(`发现 ${processedCount} 个需要监控新闻的活跃竞争对手。`);
+
+      if (processedCount === 0) {
+        const msg = "在 Competitor_Registry 中没有找到需要监控新闻的活跃竞争对手。";
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+        return { success: true, message: msg, log: logMessages.join('\n') };
+      }
+
+      // 2. 准备API调用
+      const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
+      if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
+
+      const allNewIntel = [];
+      const TABLE_HEADERS = [
+        'raw_id', 'source_type', 'intelligence_title', 'intelligence_summary', 'source_url', 'publication_date',
+        'source_platform', 'author', 'competitor_name', 'intelligence_type', 'tech_keywords', 'processing_status',
+        'linked_intelligence_id', 'threat_level_score', 'business_impact_score', 'duplicate_check_hash',
+        'workflow_execution_id', 'created_timestamp', 'processed_timestamp', 'last_update_timestamp'
+      ];
+
+      // 3. 遍历每个竞争对手，获取新闻
+      for (const competitor of activeCompetitors) {
+        const query = `"${competitor.company_name}"`;
+        logMessages.push(`正在为竞争对手 '${competitor.company_name}' 搜索新闻...`);
+
+        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10`;
+        const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
+
+        if (response.getResponseCode() !== 200) {
+          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。跳过此竞争对手。`);
+          errorCount++;
+          continue;
+        }
+
+        const articles = JSON.parse(response.getContentText()).articles || [];
+        logMessages.push(`  -> 找到 ${articles.length} 篇文章。`);
+
+        for (const article of articles) {
+          // 4. 数据准备，此处不进行AI评分，留到WF7-6处理
+          const articleUrl = article.url;
+          const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, articleUrl);
+          const duplicateHash = this._bytesToHex(hashBytes);
+          const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+          const rawId = `RAW_CI_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+
+          const rowDataObject = {
+            raw_id: rawId,
+            source_type: 'competitor_intelligence',
+            intelligence_title: article.title,
+            intelligence_summary: (article.description || '').substring(0, 500),
+            source_url: articleUrl,
+            publication_date: (article.publishedAt || '').split('T')[0],
+            source_platform: article.source.name,
+            author: article.author || '',
+            competitor_name: competitor.company_name,
+            intelligence_type: 'General News', // 初始类型，可在WF7-6中由AI细化
+            tech_keywords: '', // 留空，待AI分析
+            processing_status: 'pending', // 核心状态
+            linked_intelligence_id: '',
+            threat_level_score: 0, // 待AI评估
+            business_impact_score: 0, // 待AI评估
+            duplicate_check_hash: duplicateHash,
+            workflow_execution_id: executionId,
+            created_timestamp: nowTimestamp,
+            processed_timestamp: '',
+            last_update_timestamp: nowTimestamp
+          };
+
+          const intelDataRow = TABLE_HEADERS.map(header => rowDataObject[header] !== undefined ? rowDataObject[header] : '');
+          allNewIntel.push(intelDataRow);
+          successCount++;
+        }
+      }
+
+      // 5. 批量写入数据
+      if (allNewIntel.length > 0) {
+        const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
+        sheet.getRange(sheet.getLastRow() + 1, 1, allNewIntel.length, TABLE_HEADERS.length).setValues(allNewIntel);
+        logMessages.push(`成功写入 ${allNewIntel.length} 条新竞争情报数据。`);
+      }
+
+      const finalMessage = `成功处理 ${processedCount} 个竞争对手，发现并写入了 ${successCount} 条相关新闻。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+      return { success: true, message: finalMessage, log: logMessages.join('\n') };
+
+    } catch (e) {
+      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+    }
+  },
 
   // =========================================================================
   //  第二层：信号识别工作流 (WF7-1 - WF7-6)
@@ -550,7 +796,7 @@ const WorkflowsService = {
           ];
           newIntelligenceRecords.push(intelligenceRecord);
           updatesForRawSheet.push({ raw_id: paper.raw_id, status: 'processed', linkedId: intelligenceId });
-          logMessages.push(`  -> 高价值信号！已生成情报ID: ${intelligenceId}`);
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
         } else {
             updatesForRawSheet.push({ raw_id: paper.raw_id, status: 'processed', linkedId: '' });
         }
@@ -559,7 +805,7 @@ const WorkflowsService = {
       // 批量写入和回填
       if (newIntelligenceRecords.length > 0) {
         intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
-        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新情报记录。`);
+        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新线索记录。`);
       }
 
       if (updatesForRawSheet.length > 0) {
@@ -588,7 +834,7 @@ const WorkflowsService = {
         }
       }
       
-      const finalMessage = `处理了 ${processedCount} 篇论文，生成了 ${newSignalsCount} 条新情报。`;
+      const finalMessage = `处理了 ${processedCount} 篇论文，生成了 ${newSignalsCount} 条新线索。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, 0, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -699,7 +945,7 @@ const WorkflowsService = {
           ];
           newIntelligenceRecords.push(intelligenceRecord);
           updatesForRawSheet.push({ raw_id: project.raw_id, status: 'processed', linkedId: intelligenceId });
-          logMessages.push(`  -> 高价值信号！已生成情报ID: ${intelligenceId}`);
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
         } else {
             // ✅ 核心修正：将被跳过的状态也更新为 'processed'，以符合数据验证规则
             updatesForRawSheet.push({ raw_id: project.raw_id, status: 'processed', linkedId: '' });
@@ -708,7 +954,7 @@ const WorkflowsService = {
 
       if (newIntelligenceRecords.length > 0) {
         intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
-        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新情报记录。`);
+        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新线索记录。`);
       }
 
       if (updatesForRawSheet.length > 0) {
@@ -741,7 +987,7 @@ const WorkflowsService = {
         }
       }
       
-      const finalMessage = `处理了 ${processedCount} 个开源项目，生成了 ${newSignalsCount} 条新情报。`;
+      const finalMessage = `处理了 ${processedCount} 个开源项目，生成了 ${newSignalsCount} 条新线索。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, 0, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -757,7 +1003,7 @@ const WorkflowsService = {
     /**
    * ✅ 修正版: 执行 WF7-4: 技术新闻信号识别 (修复 pending 记录识别问题)
    */
-  runWf7_4: function() {
+  runWf7_4TechNewsSignal: function() {
     const wfName = 'WF7-4: 技术新闻信号识别';
     const startTime = new Date();
     const executionId = `exec_wf7_4_${startTime.getTime()}`;
@@ -850,7 +1096,7 @@ const WorkflowsService = {
           ];
           newIntelligenceRecords.push(intelligenceRecord);
           updatesForRawSheet.push({ raw_id: news.raw_id, status: 'processed', linkedId: intelligenceId });
-          logMessages.push(`  -> 高价值信号！已生成情报ID: ${intelligenceId}`);
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
         } else {
             updatesForRawSheet.push({ raw_id: news.raw_id, status: 'processed', linkedId: '' });
         }
@@ -859,7 +1105,7 @@ const WorkflowsService = {
       if (newIntelligenceRecords.length > 0) {
         const intelSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.INTELLIGENCE_DB).getSheetByName(CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
         intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
-        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新情报记录。`);
+        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新线索记录。`);
       }
 
       if (updatesForRawSheet.length > 0) {
@@ -876,7 +1122,7 @@ const WorkflowsService = {
         logMessages.push(`成功更新 ${updatesForRawSheet.length} 条原始记录的状态。`);
       }
 
-      const finalMessage = `处理了 ${processedCount} 篇新闻，生成了 ${newSignalsCount} 条新情报。`;
+      const finalMessage = `处理了 ${processedCount} 篇新闻，生成了 ${newSignalsCount} 条新线索。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, 0, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -886,8 +1132,328 @@ const WorkflowsService = {
       return { success: false, message: e.message, log: logMessages.join('\n') };
     }
   },
-  runWf7_5: function() { return { success: false, message: "WF7-5 功能尚未实现。", log: "WF7-5 功能尚未实现。" }; },
-  runWf7_6: function() { return { success: false, message: "WF7-6 功能尚未实现。", log: "WF7-6 功能尚未实现。" }; },
+  runWf7_5IndustryDynamics: function() {
+    const wfName = 'WF7-5: 产业动态信号识别';
+    const startTime = new Date();
+    const executionId = `exec_wf7_5_${startTime.getTime()}`;
+    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let processedCount = 0;
+    let newSignalsCount = 0;
+    let errorCount = 0;
+
+    try {
+      const allDynamics = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS);
+      const pendingDynamics = allDynamics.filter(item => item.processing_status && String(item.processing_status).trim().toLowerCase() === 'pending');
+
+      logMessages.push(`发现 ${pendingDynamics.length} 条待处理的产业动态记录。`);
+      if (pendingDynamics.length === 0) {
+        const msg = "没有待处理的产业动态记录。";
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+        return { success: true, message: msg, log: logMessages.join('\n') };
+      }
+
+      const rawDynamicsSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS);
+      const intelSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.INTELLIGENCE_DB).getSheetByName(CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
+      
+      const newIntelligenceRecords = [];
+      const updatesForRawSheet = [];
+
+      for (const dynamic of pendingDynamics) {
+        processedCount++;
+        logMessages.push(`正在处理产业动态: ${dynamic.event_title.substring(0, 50)}...`);
+
+        // 1. 设计AI Prompt进行深度分析
+        const prompt = `
+          请作为一名资深的市场与技术战略分析师，深入分析以下产业动态信息，并严格以JSON格式返回。
+          
+          事件标题: ${dynamic.event_title}
+          事件摘要: ${dynamic.event_summary}
+          相关技术关键词: ${dynamic.tech_keywords}
+          产业分类: ${dynamic.industry_category}
+
+          你需要完成以下任务:
+          1. 评估此动态对相关技术领域的潜在商业价值 (commercial_value_score)，评分1-10。
+          2. 评估此动态所揭示的技术突破性或应用创新性 (breakthrough_score)，评分1-10。
+          3. 评估此动态对我们可能产生的战略机遇或威胁 (strategic_impact_score)，评分1-10。
+          4. 总结其核心的价值主张 (value_proposition)，描述它解决了什么问题或带来了什么新机会。
+          5. 列出1-3个关键创新点或新闻要点 (key_innovations)，以数组形式表示。
+          6. 预测其可能影响的目标行业 (target_industries)，以数组形式表示。
+
+          返回的 JSON 格式必须是:
+          {
+            "commercial_value_score": <商业价值评分>,
+            "breakthrough_score": <技术突破性评分>,
+            "strategic_impact_score": <战略影响评分>,
+            "value_proposition": "<价值主张的详细描述>",
+            "key_innovations": ["关键点1", "关键点2"],
+            "target_industries": ["行业1", "行业2"]
+          }
+        `;
+
+        const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
+
+        if (!aiAssessment) {
+          logMessages.push(`  -> AI评估失败，跳过此动态。`);
+          updatesForRawSheet.push({ raw_id: dynamic.raw_id, status: 'failed', linkedId: '' });
+          errorCount++;
+          continue;
+        }
+
+        // 2. 计算信号强度
+        const commercialValue = parseFloat(aiAssessment.commercial_value_score) || 0;
+        const breakthroughScore = parseFloat(aiAssessment.breakthrough_score) || 0;
+        const strategicImpact = parseFloat(aiAssessment.strategic_impact_score) || 0;
+        
+        // 信号强度加权计算，更侧重商业和战略影响
+        const signalStrength = (commercialValue * 0.4) + (strategicImpact * 0.4) + (breakthroughScore * 0.2);
+        
+        logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
+
+        // 3. 判断是否生成线索
+        if (signalStrength >= 7.5) {
+          newSignalsCount++;
+          const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+          const intelligenceId = `TI${Utilities.formatDate(new Date(), 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
+          
+          const intelligenceRecord = [
+            intelligenceId,
+            dynamic.tech_id || '', // 尝试关联tech_id
+            dynamic.tech_keywords,
+            dynamic.event_title,
+            String(dynamic.event_summary).substring(0, 500),
+            'industry_dynamics', // 触发源
+            dynamic.source_url,
+            wfName,
+            signalStrength.toFixed(2),
+            breakthroughScore.toFixed(2),
+            commercialValue.toFixed(2),
+            'medium', // confidence_level 初始值
+            'high', // priority 初始值
+            'signal_identified',
+            `战略影响评分: ${strategicImpact.toFixed(1)}. ${aiAssessment.reasoning || ''}`,
+            aiAssessment.value_proposition || "N/A",
+            (aiAssessment.key_innovations || []).join(', '),
+            (aiAssessment.target_industries || []).join(', '),
+            1, 0, nowTimestamp, nowTimestamp, 'Raw_Industry_Dynamics', dynamic.raw_id
+          ];
+          newIntelligenceRecords.push(intelligenceRecord);
+          updatesForRawSheet.push({ raw_id: dynamic.raw_id, status: 'processed', linkedId: intelligenceId });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
+        } else {
+          updatesForRawSheet.push({ raw_id: dynamic.raw_id, status: 'processed', linkedId: '' });
+          logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
+        }
+      }
+
+      // 4. 批量写入和回填
+      if (newIntelligenceRecords.length > 0) {
+        intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
+        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新线索记录。`);
+      }
+
+      if (updatesForRawSheet.length > 0) {
+        // 使用更健壮的回填逻辑
+        const rawDataForUpdate = rawDynamicsSheet.getDataRange().getValues();
+        const rawHeaders = rawDataForUpdate[0];
+        const rawHeaderMap = rawHeaders.reduce((acc, h, i) => { acc[String(h).trim()] = i; return acc; }, {});
+        
+        const idCol = rawHeaderMap['raw_id'];
+        const statusCol = rawHeaderMap['processing_status'];
+        const linkedIdCol = rawHeaderMap['linked_intelligence_id'];
+
+        if (typeof idCol === 'undefined' || typeof statusCol === 'undefined' || typeof linkedIdCol === 'undefined') {
+            throw new Error("在 Raw_Industry_Dynamics 表中找不到关键列 (raw_id, processing_status, or linked_intelligence_id)。");
+        }
+
+        const updateMap = updatesForRawSheet.reduce((acc, u) => { acc[u.raw_id] = u; return acc; }, {});
+        let changesMade = false;
+        for (let i = 2; i < rawDataForUpdate.length; i++) { // 数据从第3行开始
+            const rowId = rawDataForUpdate[i][idCol];
+            if (rowId && updateMap[rowId]) {
+                rawDataForUpdate[i][statusCol] = updateMap[rowId].status;
+                rawDataForUpdate[i][linkedIdCol] = updateMap[rowId].linkedId;
+                changesMade = true;
+                delete updateMap[rowId];
+            }
+        }
+        if (changesMade) {
+            rawDynamicsSheet.getRange(1, 1, rawDataForUpdate.length, rawDataForUpdate[0].length).setValues(rawDataForUpdate);
+            logMessages.push(`成功回填更新 ${updatesForRawSheet.length} 条原始记录的状态。`);
+        }
+      }
+      
+      const finalMessage = `处理了 ${processedCount} 条产业动态，生成了 ${newSignalsCount} 条新线索。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, errorCount, finalMessage);
+      return { success: true, message: finalMessage, log: logMessages.join('\n') };
+
+    } catch (e) {
+      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+    }
+  },
+  runWf7_6Benchmark: function() {
+    const wfName = 'WF7-6: 竞争情报信号识别';
+    const startTime = new Date();
+    const executionId = `exec_wf7_6_${startTime.getTime()}`;
+    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let processedCount = 0;
+    let newSignalsCount = 0;
+    let errorCount = 0;
+
+    try {
+      const allCompIntel = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
+      const pendingIntel = allCompIntel.filter(item => item.processing_status && String(item.processing_status).trim().toLowerCase() === 'pending');
+
+      logMessages.push(`发现 ${pendingIntel.length} 条待处理的竞争情报记录。`);
+      if (pendingIntel.length === 0) {
+        const msg = "没有待处理的竞争情报记录。";
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+        return { success: true, message: msg, log: logMessages.join('\n') };
+      }
+
+      const rawCompIntelSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
+      const intelSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.INTELLIGENCE_DB).getSheetByName(CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
+      
+      const newIntelligenceRecords = [];
+      const updatesForRawSheet = [];
+
+      for (const intel of pendingIntel) {
+        processedCount++;
+        logMessages.push(`正在处理竞情: ${intel.intelligence_title.substring(0, 50)}...`);
+
+        // 1. 设计AI Prompt进行深度分析
+        const prompt = `
+          请作为一名资深的行业与竞争战略分析师，深入分析以下关于竞争对手的新闻情报，并严格以JSON格式返回。
+          
+          新闻标题: ${intel.intelligence_title}
+          新闻摘要: ${intel.intelligence_summary}
+          涉及公司: ${intel.competitor_name}
+
+          你需要完成以下任务:
+          1. 评估此情报对我们的威胁等级 (threat_level_score)，评分1-10。
+          2. 评估此情报对我们业务的潜在影响 (business_impact_score)，评分1-10。
+          3. 总结此情报的核心价值主张 (value_proposition)，即它揭示了对手的何种战略意图、技术突破或市场动向。
+          4. 提炼出这项情报中涉及的关键技术关键词 (tech_keywords)，以数组形式表示。
+          5. 将此情报分类为以下类型之一：'Product Release', 'Tech Innovation', 'Talent Flow', 'Financial Report', 'Strategic Partnership', 'General News'。将结果放在 intelligence_type 字段。
+
+          返回的 JSON 格式必须是:
+          {
+            "threat_level_score": <威胁等级评分>,
+            "business_impact_score": <业务影响评分>,
+            "value_proposition": "<对情报核心价值的精炼总结>",
+            "tech_keywords": ["关键词1", "关键词2"],
+            "intelligence_type": "<情报分类>"
+          }
+        `;
+
+        const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
+
+        if (!aiAssessment) {
+          logMessages.push(`  -> AI评估失败，跳过此情报。`);
+          updatesForRawSheet.push({ raw_id: intel.raw_id, status: 'failed', linkedId: '' });
+          errorCount++;
+          continue;
+        }
+
+        // 2. 计算信号强度
+        const threatLevel = parseFloat(aiAssessment.threat_level_score) || 0;
+        const businessImpact = parseFloat(aiAssessment.business_impact_score) || 0;
+        
+        // 信号强度加权计算
+        const signalStrength = (threatLevel * 0.5) + (businessImpact * 0.5);
+        
+        logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
+
+        // 3. 判断是否生成情报
+        if (signalStrength >= 7.0) {
+          newSignalsCount++;
+          const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+          const intelligenceId = `TI${Utilities.formatDate(new Date(), 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
+          
+          const intelligenceRecord = [
+            intelligenceId,
+            '', // tech_id 留空，因为这是竞情，不直接关联技术
+            (aiAssessment.tech_keywords || []).join(', '), // 从AI结果中获取技术关键词
+            intel.intelligence_title,
+            String(intel.intelligence_summary).substring(0, 500),
+            'competitor_intelligence', // 触发源
+            intel.source_url,
+            wfName,
+            signalStrength.toFixed(2),
+            0, // breakthrough_score 设为0，或根据需要由AI评估
+            businessImpact.toFixed(2), // commercial_value_score 用 business_impact_score 代替
+            'medium', 
+            'high',
+            'signal_identified',
+            `威胁等级评分: ${threatLevel.toFixed(1)}.`,
+            aiAssessment.value_proposition || "N/A",
+            (aiAssessment.key_innovations || ["N/A"]).join(', '), // key_innovations 可能不存在，提供默认值
+            aiAssessment.target_industries ? (aiAssessment.target_industries || []).join(', ') : '',
+            1, 0, nowTimestamp, nowTimestamp, 'Raw_Competitor_Intelligence', intel.raw_id
+          ];
+          newIntelligenceRecords.push(intelligenceRecord);
+          updatesForRawSheet.push({ raw_id: intel.raw_id, status: 'processed', linkedId: intelligenceId, intelType: aiAssessment.intelligence_type, threat: threatLevel, impact: businessImpact });
+          logMessages.push(`  -> 高价值信号！已生成情报ID: ${intelligenceId}`);
+        } else {
+          updatesForRawSheet.push({ raw_id: intel.raw_id, status: 'processed_low_value', linkedId: '', intelType: aiAssessment.intelligence_type, threat: threatLevel, impact: businessImpact });
+          logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
+        }
+      }
+
+      // 4. 批量写入和回填
+      if (newIntelligenceRecords.length > 0) {
+        intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
+        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新情报记录。`);
+      }
+
+      if (updatesForRawSheet.length > 0) {
+        const rawDataForUpdate = rawCompIntelSheet.getDataRange().getValues();
+        const rawHeaders = rawDataForUpdate[0];
+        const rawHeaderMap = rawHeaders.reduce((acc, h, i) => { acc[String(h).trim()] = i; return acc; }, {});
+        
+        const idCol = rawHeaderMap['raw_id'];
+        const statusCol = rawHeaderMap['processing_status'];
+        const linkedIdCol = rawHeaderMap['linked_intelligence_id'];
+        const intelTypeCol = rawHeaderMap['intelligence_type'];
+        const threatCol = rawHeaderMap['threat_level_score'];
+        const impactCol = rawHeaderMap['business_impact_score'];
+
+        if ([idCol, statusCol, linkedIdCol, intelTypeCol, threatCol, impactCol].some(c => typeof c === 'undefined')) {
+            throw new Error("在 Raw_Competitor_Intelligence 表中找不到所有关键列。");
+        }
+
+        const updateMap = updatesForRawSheet.reduce((acc, u) => { acc[u.raw_id] = u; return acc; }, {});
+        let changesMade = false;
+        for (let i = 2; i < rawDataForUpdate.length; i++) {
+            const rowId = rawDataForUpdate[i][idCol];
+            if (rowId && updateMap[rowId]) {
+                const update = updateMap[rowId];
+                rawDataForUpdate[i][statusCol] = update.status;
+                rawDataForUpdate[i][linkedIdCol] = update.linkedId;
+                rawDataForUpdate[i][intelTypeCol] = update.intelType;
+                rawDataForUpdate[i][threatCol] = update.threat.toFixed(1);
+                rawDataForUpdate[i][impactCol] = update.impact.toFixed(1);
+                changesMade = true;
+                delete updateMap[rowId];
+            }
+        }
+        if (changesMade) {
+            rawCompIntelSheet.getRange(1, 1, rawDataForUpdate.length, rawDataForUpdate[0].length).setValues(rawDataForUpdate);
+            logMessages.push(`成功回填更新 ${updatesForRawSheet.length} 条原始竞情记录的状态和评分。`);
+        }
+      }
+      
+      const finalMessage = `处理了 ${processedCount} 条竞争情报，生成了 ${newSignalsCount} 条新核心情报。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, errorCount, finalMessage);
+      return { success: true, message: finalMessage, log: logMessages.join('\n') };
+
+    } catch (e) {
+      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+    }
+  },
 
   // =========================================================================
   //  第三层：统一证据验证 (WF8)
@@ -903,7 +1469,7 @@ const WorkflowsService = {
       const allIntelligences = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.INTELLIGENCE_DB, CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
       const pendingIntels = allIntelligences.filter(row => String(row.processing_status || '').trim().toLowerCase() === 'signal_identified');
       
-      logMessages.push(`发现 ${pendingIntels.length} 条待验证情报。`);
+      logMessages.push(`发现 ${pendingIntels.length} 条待验证线索。`);
       if (pendingIntels.length === 0) {
         const msg = "没有待处理记录。";
         this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
@@ -918,7 +1484,7 @@ const WorkflowsService = {
 
       for (const intel of pendingIntels) {
         processedCount++;
-        logMessages.push(`正在处理情报ID: ${intel.intelligence_id}`);
+        logMessages.push(`正在处理线索ID: ${intel.intelligence_id}`);
 
         let urlValidityStatus = 'invalid';
         if (intel.source_url && typeof intel.source_url === 'string' && intel.source_url.startsWith('http')) {
@@ -936,11 +1502,11 @@ const WorkflowsService = {
         }
         
         const prompt = `
-          请作为一名技术情报分析师，基于以下验证数据，为这条情报的整体可信度进行评分。
+          请作为一名技术线索分析师，基于以下验证数据，为这条线索的整体可信度进行评分。
           评分标准为1-100的整数。
           请严格以 JSON 格式返回。
 
-          情报标题: ${intel.title}
+          线索标题: ${intel.title}
           链接有效性: ${urlValidityStatus}
           来源权威性评分 (1-10): ${sourceAuthorityScore}
 
@@ -997,7 +1563,7 @@ const WorkflowsService = {
         }
       }
 
-      const finalMessage = `处理了 ${processedCount} 条情报，通过验证 ${verifiedCount} 条，拒绝/待审 ${rejectedCount} 条。`;
+      const finalMessage = `处理了 ${processedCount} 条线索，通过验证 ${verifiedCount} 条，拒绝/待审 ${rejectedCount} 条。`;
       logMessages.push(`[${new Date().toLocaleTimeString()}] ${wfName} 执行成功。`);
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, verifiedCount, 0, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };

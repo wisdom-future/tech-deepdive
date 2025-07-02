@@ -66,6 +66,8 @@ const CollectionStatsService = {
       const newRow = {};
       for (const key in row) {
         if (row[key] instanceof Date) {
+          // 使用 toISOString() 获取 UTC 标准格式 "YYYY-MM-DDTHH:mm:ss.sssZ"
+          // 然后用 split('T')[0] 精确地截取日期部分
           newRow[key] = row[key].toISOString().split('T')[0];
         } else {
           newRow[key] = row[key];
@@ -228,64 +230,23 @@ const CollectionStatsService = {
       const todayStr = new Date().toISOString().slice(0, 10); // 获取当前日期的 YYYY-MM-DD 字符串
 
       Logger.log("DEBUG: getCollectionPageData - 开始获取技术类数据源...");
-      // 1. 获取并处理技术类数据源
       pageData.techData = {
-        academicPapers: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS),
-        patentData: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_PATENT_DATA),
-        openSourceData: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_OPENSOURCE_DATA),
-        techNews: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_TECH_NEWS)
+        academicPapers: this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS)),
+        patentData: this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_PATENT_DATA)),
+        openSourceData: this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_OPENSOURCE_DATA)),
+        techNews: this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_TECH_NEWS))
       };
-      // 检查techData是否正常，并格式化日期
-      for (const key in pageData.techData) {
-        if (pageData.techData[key] === null || typeof pageData.techData[key] === 'undefined') {
-            throw new Error(`DataService returned null/undefined for techData.${key}. Check sheet name or ID.`);
-        }
-
-        if (pageData.techData[key].length > 0) {
-            const ingestionDateField = ingestionDateFieldMap[key] || 'created_timestamp'; // 确保这里使用了正确的映射
-            Logger.log(`DEBUG: Checking todayCount for ${key}. TodayStr: ${todayStr}. Sample ingestion dates (first 5):`);
-            pageData.techData[key].slice(0, 5).forEach((item, idx) => {
-                const dateVal = item[ingestionDateField];
-                Logger.log(`  [${idx}] ${ingestionDateField}: ${dateVal} (sliced: ${String(dateVal || '').slice(0, 10)})`);
-            });
-        }
-
-        pageData.techData[key] = this._formatDatesInArray(pageData.techData[key]);
-
-      // **新增调试日志：打印 _formatDatesInArray 处理后的 created_timestamp 值**
-      if (pageData.techData.techNews && pageData.techData.techNews.length > 0) {
-          Logger.log(`DEBUG_FORMATTED_DATES: TodayStr: ${todayStr}`);
-          Logger.log(`DEBUG_FORMATTED_DATES: First 5 records of techNews AFTER _formatDatesInArray:`);
-          pageData.techData.techNews.slice(0, 5).forEach((item, idx) => {
-              const createdTsVal = item.created_timestamp;
-              Logger.log(`  [${idx}] created_timestamp: '${createdTsVal}' (Type: ${typeof createdTsVal})`);
-              Logger.log(`  [${idx}] Sliced: '${String(createdTsVal || '').slice(0, 10)}'`);
-              Logger.log(`  [${idx}] Match with TodayStr: ${String(createdTsVal || '').slice(0, 10) === todayStr}`);
-          });
-      }
-      // **调试日志结束**
-
-        Logger.log(`DEBUG:   - techData.${key} fetched: ${pageData.techData[key].length} records.`);
-      }
+      Logger.log(`DEBUG:   - 技术类数据已获取并格式化完毕。`);
 
       Logger.log("DEBUG: getCollectionPageData - 开始获取标杆类数据源...");
-      // 2. 获取并处理标杆类数据源
       pageData.benchmarkData = {
-        industryDynamics: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS),
-        competitorIntelligence: DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE)
+        industryDynamics: this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS)),
+        competitorIntelligence: this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE))
       };
-      // 检查benchmarkData是否正常，并格式化日期
-      for (const key in pageData.benchmarkData) {
-        if (pageData.benchmarkData[key] === null || typeof pageData.benchmarkData[key] === 'undefined') {
-            throw new Error(`DataService returned null/undefined for benchmarkData.${key}. Check sheet name or ID.`);
-        }
-        pageData.benchmarkData[key] = this._formatDatesInArray(pageData.benchmarkData[key]);
-        Logger.log(`DEBUG:   - benchmarkData.${key} fetched: ${pageData.benchmarkData[key].length} records.`);
-      }
+      Logger.log(`DEBUG:   - 标杆类数据已获取并格式化完毕。`);
 
       Logger.log("DEBUG: getCollectionPageData - 开始获取配置信息 (competitors)...");
-      // 3. 获取配置信息 (通常不含日期，无需处理)
-      const rawCompetitors = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY);
+      const rawCompetitors = this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY));
       if (rawCompetitors === null || typeof rawCompetitors === 'undefined') {
           throw new Error(`DataService returned null/undefined for competitors. Check sheet name or ID.`);
       }
@@ -293,16 +254,14 @@ const CollectionStatsService = {
       Logger.log(`DEBUG:   - competitors fetched: ${pageData.competitors.length} records.`);
       
       Logger.log("DEBUG: getCollectionPageData - 开始获取历史记录 (workflow logs)...");
-      // 4. 获取所有工作流日志，然后由 _formatHistoryLogs 进行排序和截取
-      const historyLogsRaw = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.OPERATIONS_DB, CONFIG.SHEET_NAMES.WORKFLOW_LOG);
+      const historyLogsRaw = this._formatDatesInArray(DataService.getDataAsObjects(CONFIG.DATABASE_IDS.OPERATIONS_DB, CONFIG.SHEET_NAMES.WORKFLOW_LOG));
       if (historyLogsRaw === null || typeof historyLogsRaw === 'undefined') {
           throw new Error(`DataService returned null/undefined for historyLogsRaw. Check sheet name or ID.`);
       }
-      pageData.history = this._formatHistoryLogs(historyLogsRaw); // _formatHistoryLogs 内部已经处理了排序和截取
+      pageData.history = this._formatHistoryLogs(historyLogsRaw);
       Logger.log(`DEBUG:   - history fetched: ${pageData.history.length} records (after format and slice).`);
 
       Logger.log("DEBUG: getCollectionPageData - 开始获取采集统计数据...");
-      // 5. 获取统计数据
       pageData.overallStats = computeCollectionStats();
       if (pageData.overallStats === null || typeof pageData.overallStats === 'undefined') {
           throw new Error(`computeCollectionStats returned null/undefined.`);
@@ -310,12 +269,10 @@ const CollectionStatsService = {
       Logger.log(`DEBUG:   - overallStats fetched: OK.`);
 
       Logger.log("DEBUG: getCollectionPageData - 所有数据获取完成，准备返回 pageData。");
-      // 核心：在返回之前将 pageData 序列化为 JSON 字符串
       return JSON.stringify(pageData); 
 
     } catch(e) {
       Logger.log(`ERROR in getCollectionPageData: ${e.message} \n ${e.stack}`);
-      // 即使在错误情况下，也返回一个可解析的JSON字符串，包含错误信息
       return JSON.stringify({ error: `获取采集页数据时发生服务器内部错误: ${e.message}. 请检查Apps Script日志获取更多详情。` });
     }
   }
