@@ -154,7 +154,11 @@
     App.currentPage = 1;
     App.ui.showDetailListModal(`任务详情: ${executionId}`, 'all');
     document.getElementById('detailTable').innerHTML = '<tbody><tr><td class="text-center p-4">正在加载...</td></tr></tbody>';
-    document.querySelector('#detailModal .modal-footer').style.display = 'none';
+    // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+    const footer = document.querySelector('#detailModal .modal-footer');
+    if (footer) {
+        footer.style.display = 'none';
+    }
 
     App.callApi('CollectionStatsService', 'getWorkflowExecutionDetail', [executionId])
       .then(detail => {
@@ -164,17 +168,26 @@
             value: value != null ? value : 'N/A'
           }));
           App.ui.renderPagedKpiDetails();
-          document.querySelector('#detailModal .modal-footer').style.display = 'none';
+          // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+          if (footer) {
+            footer.style.display = 'none';
+          }
         } else {
           App.allModalData = [{ key: '错误信息', value: detail.error || '未能获取详情。' }];
           App.ui.renderPagedKpiDetails();
-          document.querySelector('#detailModal .modal-footer').style.display = 'none';
+          // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+          if (footer) {
+            footer.style.display = 'none';
+          }
         }
       })
       .catch(error => {
         App.allModalData = [{ key: '严重错误', value: error.message }];
         App.ui.renderPagedKpiDetails();
-        document.querySelector('#detailModal .modal-footer').style.display = 'none';
+        // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+        if (footer) {
+            footer.style.display = 'none';
+        }
       });
   }
 
@@ -298,8 +311,7 @@
                 resolve(parsedRes);
             }
           })
-          // ✅ 修复：显式包装 reject 函数，避免潜在的解析问题
-          .withFailureHandler(err => reject(err))
+          .withFailureHandler(err => reject(err)) // 确保错误处理器的正确性
           .callApi(svc, mtd, args);
       });
 },
@@ -310,8 +322,17 @@
         const table = document.getElementById('detailTable');
         const footer = document.querySelector('#detailModal .modal-footer');
         const noData = document.getElementById('noDataMessage');
-        if (!App.allModalData || App.allModalData.length === 0) { table.innerHTML = ''; noData.style.display = 'block'; footer.style.display = 'none'; return; }
+        if (!App.allModalData || App.allModalData.length === 0) { 
+            table.innerHTML = ''; 
+            noData.style.display = 'block'; 
+            // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+            if (footer) {
+                footer.style.display = 'none'; 
+            }
+            return; 
+        }
         noData.style.display = 'none';
+
         const totalItems = App.allModalData.length;
         const totalPages = Math.ceil(totalItems / App.itemsPerPage);
         const pageData = App.allModalData.slice((App.currentPage - 1) * App.itemsPerPage, App.currentPage * App.itemsPerPage);
@@ -319,12 +340,14 @@
         let theadHTML = '';
         let tbodyHTML = '';
 
-        // **新增：为 'historyDetail' 类型（用于洞察详情）的自定义渲染**
-        if (App.currentDetailType === 'historyDetail' && pageData.length > 0 && pageData[0].key === 'Intelligence Id') { // 检查是否存在特定键，表明这是洞察详情
-            const insightDetail = pageData; // pageData 已包含洞察的键值对
+        // **此处是证据链追溯的核心逻辑**
+        if (App.currentDetailType === 'historyDetail' && pageData.length > 0 && pageData[0].key === 'Intelligence Id') { // 检查是否为洞察详情
+            const insightDetail = pageData; 
             let evidenceChainHtml = '';
+            // 找到 evidence_chain 对应的条目
             const evidenceChainEntry = insightDetail.find(item => item.key === 'Evidence Chain');
 
+            // 如果存在 evidence_chain 并且它是一个非空数组
             if (evidenceChainEntry && Array.isArray(evidenceChainEntry.value) && evidenceChainEntry.value.length > 0) {
                 evidenceChainHtml = `
                     <div class="mt-6 border-t pt-4">
@@ -371,7 +394,7 @@
                         return `
                             <tr>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" data-label="${item.key}">${item.key}</td>
-                                <td class="px-6 py-4 text-sm text-gray-800 break-all" data-label="值">${displayValue}</td>
+                                <td class="px-6 py-4 text-sm text-gray-800 break-all" data-label="值"><pre>${displayValue}</pre></td>
                             </tr>
                         `;
                     }).join('')}
@@ -379,11 +402,14 @@
             `;
             // 对于洞察详情，表格内容将后跟证据链 HTML
             table.innerHTML = theadHTML + tbodyHTML;
-            document.querySelector('#detailModal .p-6.overflow-y-auto').insertAdjacentHTML('beforeend', evidenceChainHtml); // 在表格后插入证据链
-            footer.style.display = 'none'; // 单个洞察详情无需分页
+            document.querySelector('#detailModal .p-6.overflow-y-auto').insertAdjacentHTML('beforeend', evidenceChainHtml); 
+            // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+            if (footer) {
+                footer.style.display = 'none'; 
+            }
             return;
         }
-          // **自定义渲染结束**
+        // **自定义渲染结束**
 
         const displayFields = FIELD_CONFIG[App.currentDetailType] || FIELD_CONFIG._default || [];
         theadHTML = `<thead class="bg-gray-50"><tr>${
@@ -418,12 +444,19 @@
         document.getElementById('paginationInfo').textContent = `第 ${App.currentPage} / ${totalPages} 页 (共 ${totalItems} 条)`;
         document.getElementById('prevPageBtn').disabled = App.currentPage === 1;
         document.getElementById('nextPageBtn').disabled = App.currentPage === totalPages;
-        footer.style.display = 'flex';
+        // ✅ 修复：在访问 style 属性前检查 footer 是否存在
+        if (footer) {
+            footer.style.display = 'flex';
+        }
       },
       showDetailListModal: function(title, detailKind) {
         document.getElementById('modalTitle').textContent = `${title} - ${detailKind === 'today' ? '近7日明细' : '全部明细'}`;
-        this.renderPagedKpiDetails();
-        document.getElementById('detailModal').style.display = 'flex';
+        // ✅ 修复：先将模态框设置为可见，再渲染内容
+        document.getElementById('detailModal').style.display = 'flex'; 
+        // ✅ 修复：将渲染内容推迟到下一个事件循环，确保DOM稳定
+        setTimeout(() => {
+            this.renderPagedKpiDetails();
+        }, 0);
       },
       handleCollectionCardClick: function(e, pageData) {
         const card = e.target.closest('.clickable-kpi');
@@ -781,7 +814,7 @@
               <div class="flex items-center mb-6 border-b pb-4">
                 <i class="fa fa-flag-checkered text-xl text-primary mr-3"></i>
                 <h3 class="text-xl font-bold text-gray-800">标杆数据</h3>
-                <span class="ml-4 text-sm text-gray-500">追踪标杆企业动态，洞察产业发展趋势</span>
+                <span class="ml-4 text-sm text-gray-500">追踪标杆企业动态，洞察产业发展趋势</span></span>
               </div>
 
               <!-- ✅ 新增: 筛选器UI的HTML结构 -->
@@ -1100,7 +1133,7 @@
               const dateA = new Date(a.date);
               const dateB = new Date(b.date);
               const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
-              const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime();
+              const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime(); // 修正：b.date 可能是字符串，需要 new Date()
               return timeB - timeA;
           });
           
@@ -1128,7 +1161,7 @@
                     { id: 'wf7-6', title: 'WF7-6: 竞争线索信号识别', description: '评估竞争线索的威胁等级，并生成线索。', runFunction: 'runWf7_6Benchmark' }
                 ],
                 3: [{ id: 'wf8', title: 'WF8: 统一证据验证', description: '对所有新生成的线索进行多源交叉验证和质量评分。', runFunction: 'runWf8_EvidenceValidation' }],
-                4: [{ id: 'wf9', title: 'WF9: 商业价值分析', description: '对已验证线索进行TAM/SAM/SOM市场建模和ROI计算。', runFunction: 'runWf9_CommercialValueAnalysis' }, { id: 'wf10', title: 'WF10: 竞争线索分析', description: '评估竞争格局、技术威胁，并识别机会与挑战。', runFunction: 'runWf10_CompetitiveIntelAnalysis' }, { id: 'wf11', title: 'WF11: 技术深度分析', description: '评估技术成熟度(TRL)、技术壁垒和演进路径。', runFunction: 'runWf11_TechnicalDeepAnalysis' }],
+                4: [{ id: 'wf9', title: 'WF9: 商业价值分析', description: '对已验证线索进行TAM/SAM/SOM市场建模和ROI计算。', runFunction: 'runWf9_CommercialValueAnalysis' }, { id: 'wf10', 'title': 'WF10: 竞争线索分析', description: '评估竞争格局、技术威胁，并识别机会与挑战。', runFunction: 'runWf10_CompetitiveIntelAnalysis' }, { id: 'wf11', title: 'WF11: 技术深度分析', description: '评估技术成熟度(TRL)、技术壁垒和演进路径。', runFunction: 'runWf11_TechnicalDeepAnalysis' }],
                 5: [{ id: 'wf12', title: 'WF12: 线索整合决策', description: '综合所有分析维度，计算综合评分并生成行动建议。', runFunction: 'runWf12_IntelligenceIntegration' }, { id: 'wf13', title: 'WF13: 报告生成输出', description: '自动生成日报、周报，并分发至邮件、仪表板等渠道。', runFunction: 'runWf13_ReportGeneration' }],
                 6: [{ id: 'wf14', title: 'WF14: 数据质量监控', description: '定期检查整个系统的数据质量、完整性和一致性。', runFunction: 'runWf14_DataQualityMonitor' }, { id: 'wf15', title: 'WF15: 系统健康检查', description: '监控所有工作流的运行状态和系统性能指标。', runFunction: 'runWf15_SystemHealthCheck' }]
             };
@@ -1375,9 +1408,18 @@
                 }).join('');
                 if (!tableBody.dataset.listenerAttached) {
                     tableBody.addEventListener('click', (e) => {
+                        // 检查点击的元素是否是“查看详情”按钮
                         if (e.target.tagName === 'BUTTON' && e.target.dataset.insightId) {
                             const insightId = e.target.dataset.insightId;
+                            console.log(`DEBUG: 用户点击了洞察ID为: ${insightId} 的“查看详情”按钮。`); // 调试日志
+
+                            // 尝试在当前加载的洞察列表中查找匹配的洞察对象
                             const insight = pageData.latestInsights.find(item => item.id === insightId);
+                            
+                            console.log(`DEBUG: 通过find方法找到的洞察对象:`, insight); // 调试日志
+                            console.log(`DEBUG: 洞察对象的detail属性:`, insight ? insight.detail : '洞察对象为null/undefined'); // 调试日志
+                            console.log(`DEBUG: 条件 (insight && insight.detail) 的结果:`, !!(insight && insight.detail)); // 调试日志
+
                             if (insight && insight.detail) {
                                 // ✅ 核心修改：将 insight 详情数据转换为 key-value 格式，并使用统一的模态框显示函数
                                 App.currentDetailType = 'historyDetail'; // 使用 historyDetail 的配置，因为它适合显示 key-value 对
@@ -1389,7 +1431,8 @@
                                 document.querySelector('#detailModal .p-6.overflow-y-auto').innerHTML = '';
                                 App.ui.showDetailListModal(`洞察详情: ${insight.title}`, 'all'); // 调用统一的模态框显示函数
                             } else {
-                                alert('未找到该洞察的详细信息。');
+                                console.error(`ERROR: 无法找到洞察的详细信息。洞察对象:`, insight); // 更具体的错误日志
+                                alert('未找到该洞察的详细信息。'); // 弹出提示
                             }
                         }
                     });
