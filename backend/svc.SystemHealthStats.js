@@ -14,7 +14,7 @@ const SystemHealthStatsService = {
   getStats: function() {
     try {
       // 1. 整体健康度（示例算法：所有核心流程近24小时成功率的均值/或自定义健康分数）
-      const logs = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.OPERATIONS_DB, CONFIG.SHEET_NAMES.WORKFLOW_LOG);
+      const logs = DataService.getDataAsObjects('WORKFLOW_LOG');
       // 只统计最近24小时的日志
       const now = new Date();
       const oneDayAgo = new Date(now.getTime() - 24*60*60*1000);

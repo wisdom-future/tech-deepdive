@@ -14,10 +14,8 @@ function scheduleAllReports() {
   const scriptProperties = PropertiesService.getScriptProperties(); // 用于获取API Key等
 
   try {
-    const scheduledConfigs = DataService.getDataAsObjects(
-      CONFIG.DATABASE_IDS.CONFIG_DB,
-      CONFIG.SHEET_NAMES.SCHEDULED_REPORTS_CONFIG
-    );
+    // ✅ 调用方式简化，直接使用集合键名
+    const scheduledConfigs = DataService.getDataAsObjects('SCHEDULED_REPORTS_CONFIG');
 
     if (!scheduledConfigs || scheduledConfigs.length === 0) {
       Logger.log("未找到任何计划报告配置。");
@@ -201,55 +199,38 @@ function replaceTitlePlaceholders(template, periodStartStr, periodEndStr) {
 }
 
 /**
- * 更新Scheduled_Reports_Config表中任务的上次运行时间和状态。
- * @param {string} jobId - 任务的job_id。
+ * 更新 Firestore 中任务的上次运行时间和状态。
+ * @param {string} jobId - 任务的 job_id，现在是 Firestore 文档 ID。
  * @param {string} status - 运行状态 ('SUCCESS' 或 'FAILED')。
  * @param {string} [errorMessage] - 如果失败，可选的错误信息。
  */
 function updateScheduledReportStatus(jobId, status, errorMessage = '') {
   try {
-    const dbId = CONFIG.DATABASE_IDS.CONFIG_DB;
-    const sheetName = CONFIG.SHEET_NAMES.SCHEDULED_REPORTS_CONFIG;
-    const sheet = SpreadsheetApp.openById(dbId).getSheetByName(sheetName);
+    // 准备要更新的数据对象
+    const dataToUpdate = {
+      last_run_timestamp: new Date(), // FirestoreService 会自动处理 Date 对象
+      last_run_status: status
+    };
 
-    if (!sheet) {
-      Logger.log(`Error: Sheet "${sheetName}" not found for status update.`);
-      return;
+    // 如果任务失败，添加错误信息。建议使用一个新字段，而不是覆盖 description
+    if (status === 'FAILED') {
+      dataToUpdate.last_run_error_message = errorMessage;
+    } else {
+      // 成功时，可以清空之前的错误信息
+      dataToUpdate.last_run_error_message = '';
     }
+    
+    // ✅ 使用新的 DataService.updateObject 方法直接更新文档
+    // 第一个参数是 CONFIG.FIRESTORE_COLLECTIONS 中的键名
+    // 第二个参数是文档 ID (jobId)
+    // 第三个参数是包含更新数据的对象
+    DataService.updateObject('SCHEDULED_REPORTS_CONFIG', jobId, dataToUpdate);
 
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0]; // 第二行是英文表头
-    const jobIdColIndex = headers.indexOf('job_id');
-    const lastRunTimestampColIndex = headers.indexOf('last_run_timestamp');
-    const lastRunStatusColIndex = headers.indexOf('last_run_status');
-    const descriptionColIndex = headers.indexOf('description'); // 假设description列也可以用于记录简要错误
+    Logger.log(`Task '${jobId}' status updated to ${status}.`);
 
-    if (jobIdColIndex === -1 || lastRunTimestampColIndex === -1 || lastRunStatusColIndex === -1) {
-      Logger.log(`Error: Required columns not found in ${sheetName} for status update.`);
-      return;
-    }
-
-    for (let i = 2; i < data.length; i++) { // 从第三行开始查找数据
-      if (String(data[i][jobIdColIndex]).trim() === String(jobId).trim()) {
-        const rowRange = sheet.getRange(i + 1, 1, 1, sheet.getLastColumn()); // 获取整行
-        const rowValues = rowRange.getValues()[0];
-
-        // 更新时间戳和状态
-        rowValues[lastRunTimestampColIndex] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-        rowValues[lastRunStatusColIndex] = status;
-
-        // 如果是失败状态，可以在description或专门的错误信息列记录
-        if (status === 'FAILED' && descriptionColIndex !== -1) {
-            rowValues[descriptionColIndex] = `FAILED: ${errorMessage.substring(0, 200)}... (原描述: ${rowValues[descriptionColIndex] || ''})`;
-        }
-
-        rowRange.setValues([rowValues]); // 写入更新后的行
-        Logger.log(`Task '${jobId}' status updated to ${status}.`);
-        return;
-      }
-    }
-    Logger.log(`Task '${jobId}' not found for status update.`);
   } catch (e) {
+    // 错误日志记录保持不变
     Logger.log(`Error updating scheduled report status for '${jobId}': ${e.message}\n${e.stack}`);
   }
 }
+

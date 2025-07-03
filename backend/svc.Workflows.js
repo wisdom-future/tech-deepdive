@@ -30,15 +30,34 @@ const WorkflowsService = {
    */
   _logExecution: function(wfName, executionId, startTime, status, processedCount, successCount, errorCount, message) {
     try {
-      const logSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.OPERATIONS_DB).getSheetByName(CONFIG.SHEET_NAMES.WORKFLOW_LOG);
       const endTime = new Date();
       const duration = (endTime.getTime() - startTime.getTime()) / 1000;
-      logSheet.appendRow([
-        executionId, wfName, '1.0', status, 
-        Utilities.formatDate(startTime, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
-        Utilities.formatDate(endTime, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
-        duration, processedCount, successCount, errorCount, 0, 'scheduled', 'manual', '', message, '', 'system', new Date()
-      ]);
+
+      const logObject = {
+        id: executionId, // 使用 executionId 作为 Firestore 文档的主键
+        execution_id: executionId,
+        workflow_name: wfName,
+        version: '2.0', // 版本号
+        execution_status: status,
+        start_timestamp: startTime,
+        end_timestamp: endTime,
+        duration_seconds: duration,
+        items_processed: processedCount,
+        items_succeeded: successCount,
+        items_failed: errorCount,
+        items_skipped: 0, // 默认跳过为0
+        trigger_source: 'manual', // 假设为手动触发
+        trigger_type: 'on-demand', // 触发类型
+        operator_id: Session.getActiveUser().getEmail() || 'system', // ✅ 正确的 operator_id
+        summary_message: message, // ✅ 正确的 summary_message
+        error_details: status === 'failed' ? message : '', // ✅ 只有失败时才记录错误详情
+        run_by: 'system' // 执行者
+        // created_timestamp 会由 Firestore 自动生成，无需手动添加
+      };
+      
+      // 使用 batchUpsert 确保日志可以被创建或更新
+      DataService.batchUpsert('WORKFLOW_LOG', [logObject], 'id');
+
     } catch (e) {
       Logger.log(`Failed to write execution log for ${wfName}: ${e.message}`);
     }
@@ -105,32 +124,32 @@ const WorkflowsService = {
     const wfName = 'WF1: 学术论文监控';
     const startTime = new Date();
     const executionId = `exec_wf1_${startTime.getTime()}`;
-    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0;
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let successCount = 0, processedCount = 0, errorCount = 0;
 
     try {
-      const techRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
+      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY');
       const activeTechs = techRegistry.filter(t => t.monitoring_status === 'active' && t.data_source_academic === true);
       logMessages.push(`发现 ${activeTechs.length} 个活跃的技术监控项。`);
       processedCount = activeTechs.length;
 
       if (activeTechs.length === 0) {
-        logMessages.push("没有需要监控的活跃技术项，任务结束。");
         this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, "没有需要监控的活跃技术项。");
         return { success: true, message: "没有需要监控的活跃技术项。", log: logMessages.join('\n') };
       }
       
-      let allNewPapersData = [];
+      let allNewPaperObjects = [];
 
       for (const tech of activeTechs) {
         const searchTerms = (tech.academic_search_terms || "").split(',').map(s => s.trim()).filter(Boolean);
         for (const term of searchTerms) {
           logMessages.push(`正在为技术 '${tech.tech_name}' 搜索关键词: '${term}'...`);
-          const apiUrl = `http://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(term)}&sortBy=submittedDate&sortOrder=descending&max_results=10`;
+          const apiUrl = `http://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(term)}&sortBy=submittedDate&sortOrder=descending&max_results=5`; // 减少每次获取的数量，避免超时
           const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
           
-          if(response.getResponseCode() !== 200) {
+          if (response.getResponseCode() !== 200) {
               logMessages.push(`警告: 调用arXiv API失败，状态码: ${response.getResponseCode()}`);
+              errorCount++;
               continue;
           }
 
@@ -141,46 +160,79 @@ const WorkflowsService = {
           const entries = root.getChildren('entry', atomNs);
 
           for (const entry of entries) {
-            const innovationScore = (Math.random() * 4 + 6).toFixed(1);
-            if (parseFloat(innovationScore) >= 7.0) {
+            const title = entry.getChild('title', atomNs).getText();
+            const summary = entry.getChild('summary', atomNs).getText();
+            
+            // ✅ 核心修改：调用 AI 进行评分
+            logMessages.push(`  -> 正在为论文 "${title.substring(0,30)}..." 调用 AI 评估...`);
+            const prompt = `
+              请评估以下学术论文的创新程度，并严格以 JSON 格式返回评分。
+              创新程度 (innovation_score) 标准为1-10的整数，10为最高创新。
+              
+              论文标题: ${title}
+              论文摘要: ${summary}
+              
+              返回JSON格式:
+              {
+                "innovation_score": <分数>
+              }
+            `;
+            const aiAssessment = this._callAIForScoring(prompt, { wfName, executionId, logMessages });
+
+            if (!aiAssessment || typeof aiAssessment.innovation_score === 'undefined') {
+                logMessages.push(`  -> AI 评估失败或返回格式不正确，跳过此论文。`);
+                errorCount++;
+                continue;
+            }
+            
+            const innovationScore = parseFloat(aiAssessment.innovation_score);
+            logMessages.push(`  -> AI 评估创新分: ${innovationScore}`);
+
+            // 只处理 AI 认为有较高创新性的论文
+            if (innovationScore >= 7.0) {
               const paperUrl = entry.getChild('id', atomNs).getText();
-              const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
               const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paperUrl);
               const duplicateHash = this._bytesToHex(hashBytes);
-              const rawId = `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+              const raw_id = `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
 
-              const paperDataRow = [
-                rawId, 'academic_papers',
-                entry.getChild('title', atomNs).getText(), entry.getChild('summary', atomNs).getText(),
-                entry.getChildren('author', atomNs).map(a => a.getChild('name', atomNs).getText()).join(', '),
-                entry.getChild('published', atomNs).getText().split('T')[0], paperUrl, 'arXiv',
-                innovationScore, tech.tech_keywords, 'pending', '', innovationScore, innovationScore,
-                duplicateHash, executionId, nowTimestamp, '', nowTimestamp
-              ];
-              allNewPapersData.push(paperDataRow);
+              const paperDataObject = {
+                raw_id: raw_id,
+                id: raw_id,
+                source_type: 'academic_papers',
+                title: title,
+                abstract: summary,
+                authors: entry.getChildren('author', atomNs).map(a => a.getChild('name', atomNs).getText()).join(', '),
+                publication_date: new Date(entry.getChild('published', atomNs).getText()),
+                source_url: paperUrl,
+                source_platform: 'arXiv',
+                innovation_score: innovationScore,
+                tech_keywords: tech.tech_keywords,
+                processing_status: 'pending',
+                workflow_execution_id: executionId,
+                created_timestamp: new Date(),
+                last_update_timestamp: new Date(),
+                duplicate_check_hash: duplicateHash
+              };
+              allNewPaperObjects.push(paperDataObject);
               successCount++;
             }
           }
         }
       }
       
-      if (allNewPapersData.length > 0) {
-        const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS);
-        const headerCount = 2; // 假设有两行表头
-        sheet.getRange(sheet.getLastRow() + 1, 1, allNewPapersData.length, allNewPapersData[0].length).setValues(allNewPapersData);
-        logMessages.push(`成功写入 ${allNewPapersData.length} 条新论文数据。`);
+      if (allNewPaperObjects.length > 0) {
+        DataService.batchUpsert('RAW_ACADEMIC_PAPERS', allNewPaperObjects, 'raw_id');
+        logMessages.push(`成功写入 ${allNewPaperObjects.length} 条高创新性论文数据。`);
       }
       
-      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇新论文。`;
-      logMessages.push(`[${new Date().toLocaleTimeString()}] ${wfName} 执行成功。`);
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, 0, finalMessage);
+      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇高创新性论文。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
       const errorMessage = `严重错误: ${e.message}`;
-      logMessages.push(`[${new Date().toLocaleTimeString()}] ${errorMessage}`);
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, 1, errorMessage);
-      return { success: false, message: e.message, log: logMessages.join('\n') };
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
 
@@ -189,16 +241,18 @@ const WorkflowsService = {
     /**
    * ✅ 新增实现: 执行 WF3: 开源项目监测
    */
-  runWf3_OpenSource: function() {
+  // 在 backend/svc.Workflows.gs 中
+
+runWf3_OpenSource: function() {
     const wfName = 'WF3: 开源项目监测';
     const startTime = new Date();
     const executionId = `exec_wf3_${startTime.getTime()}`;
-    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0;
-    let processedCount = 0;
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let successCount = 0, processedCount = 0, errorCount = 0;
 
     try {
-      const techRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY)
+      // ✅ 核心修正 1: 使用新的 DataService 从 Firestore 获取数据
+      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY')
                                      .filter(t => t.monitoring_status === 'active' && t.data_source_opensource === true);
       
       processedCount = techRegistry.length;
@@ -210,7 +264,7 @@ const WorkflowsService = {
         return { success: true, message: msg, log: logMessages.join('\n') };
       }
 
-      const allNewProjectsData = [];
+      let allNewProjectsObjects = [];
       const githubToken = PropertiesService.getScriptProperties().getProperty('GITHUB_API_KEY');
       
       const headers = {
@@ -219,45 +273,23 @@ const WorkflowsService = {
       };
       if (githubToken) {
         headers['Authorization'] = `token ${githubToken}`;
-        logMessages.push("检测到GitHub API Token，将以授权模式执行。");
       } else {
-        logMessages.push("未检测到GitHub API Token，将以匿名模式执行（注意速率限制）。");
+        logMessages.push("警告: 未配置 GitHub API Token，将以匿名模式执行。");
       }
       
-      const options = {
-        headers: headers,
-        muteHttpExceptions: true
-      };
-
-      const TABLE_HEADERS = [
-        'raw_id', 'source_type', 'project_name', 'description', 'main_language', 
-        'source_url', 'github_stars', 'github_forks', 'last_commit_date', 
-        'contributor_count', 'tech_keywords', 'processing_status', 
-        'linked_intelligence_id', 'project_potential_score', 'adoption_trend', 
-        'duplicate_check_hash', 'workflow_execution_id', 'created_timestamp', 
-        'processed_timestamp', 'last_update_timestamp'
-      ];
+      const options = { headers: headers, muteHttpExceptions: true };
 
       for (const tech of techRegistry) {
         const searchTerms = (tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
         for (const term of searchTerms) {
           logMessages.push(`正在为技术 '${tech.tech_name}' 搜索开源项目: '${term}'...`);
           
-          // ✅ 核心修正: 移除 URLSearchParams，改用手动拼接字符串
-          const baseUrl = 'https://api.github.com/search/repositories';
-          const query = `q=${encodeURIComponent(term)}`;
-          const sort = `sort=updated`;
-          const order = `order=desc`;
-          const perPage = `per_page=5`;
-          const page = `page=1`;
-          const apiUrl = `${baseUrl}?${query}&${sort}&${order}&${perPage}&${page}`;
-          
-          logMessages.push(`  -> 调用API: ${apiUrl}`);
-          
+          const apiUrl = `https://api.github.com/search/repositories?q=${encodeURIComponent(term)}&sort=updated&order=desc&per_page=5`;
           const response = UrlFetchApp.fetch(apiUrl, options);
 
           if (response.getResponseCode() !== 200) {
-            logMessages.push(`警告: 调用GitHub API失败，状态码: ${response.getResponseCode()}, 响应: ${response.getContentText()}`);
+            logMessages.push(`警告: 调用GitHub API失败，状态码: ${response.getResponseCode()}`);
+            errorCount++;
             continue;
           }
 
@@ -265,15 +297,15 @@ const WorkflowsService = {
           const projects = searchResult.items || [];
 
           for (const project of projects) {
-            if (project.stargazers_count < 50) continue;
+            if (project.stargazers_count < 50) continue; // 过滤掉星数过低的项目
 
-            const nowTimestamp = Utilities.formatDate(new Date(), 'UTC', 'yyyy-MM-dd HH:mm:ss');
-            const duplicateHashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, project.html_url);
-            const duplicateHash = this._bytesToHex(duplicateHashBytes);
-            const rawId = `RAW_OS_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+            const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, project.html_url);
+            const duplicateHash = this._bytesToHex(hashBytes);
+            const raw_id = `RAW_OS_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
             
             const projectDataObject = {
-                raw_id: rawId,
+                raw_id: raw_id,
+                id: raw_id,
                 source_type: 'opensource_data',
                 project_name: project.full_name,
                 description: (project.description || '').substring(0, 500),
@@ -281,42 +313,39 @@ const WorkflowsService = {
                 source_url: project.html_url,
                 github_stars: project.stargazers_count,
                 github_forks: project.forks_count,
-                last_commit_date: (project.updated_at || '').split('T')[0],
-                contributor_count: project.watchers_count,
+                last_commit_date: new Date(project.updated_at),
+                contributor_count: project.watchers_count, // watchers_count 通常代表关注者
                 tech_keywords: tech.tech_keywords,
-                processing_status: 'pending',
-                linked_intelligence_id: '',
-                project_potential_score: 0,
-                adoption_trend: 0,
+                processing_status: 'pending', // 初始状态为待处理，等待 WF7-3 进行 AI 评估
                 duplicate_check_hash: duplicateHash,
                 workflow_execution_id: executionId,
-                created_timestamp: nowTimestamp,
-                processed_timestamp: '',
-                last_update_timestamp: nowTimestamp
+                created_timestamp: new Date(),
+                last_update_timestamp: new Date()
             };
 
-            allNewProjectsData.push(TABLE_HEADERS.map(header => projectDataObject[header] !== undefined ? projectDataObject[header] : ''));
+            allNewProjectsObjects.push(projectDataObject);
             successCount++;
           }
         }
       }
 
-      if (allNewProjectsData.length > 0) {
-        const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_OPENSOURCE_DATA);
-        sheet.getRange(sheet.getLastRow() + 1, 1, allNewProjectsData.length, TABLE_HEADERS.length).setValues(allNewProjectsData);
-        logMessages.push(`成功写入 ${allNewProjectsData.length} 条新开源项目数据。`);
+      if (allNewProjectsObjects.length > 0) {
+        // ✅ 核心修正 2: 使用新的 DataService 批量写入
+        DataService.batchUpsert('RAW_OPENSOURCE_DATA', allNewProjectsObjects, 'raw_id');
+        logMessages.push(`成功写入 ${allNewProjectsObjects.length} 条新开源项目数据。`);
       }
 
       const finalMessage = `成功处理 ${processedCount} 个技术领域，发现并写入了 ${successCount} 个相关开源项目。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, 0, finalMessage);
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, 1, errorMessage);
+      const errorMessage = `严重错误: ${e.message}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
+
     /**
    * ✅ 新增实现: 执行 WF4: 技术新闻获取
    */
@@ -324,18 +353,16 @@ const WorkflowsService = {
     const wfName = 'WF4: 技术新闻获取';
     const startTime = new Date();
     const executionId = `exec_wf4_${startTime.getTime()}`;
-    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0;
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let successCount = 0, processedCount = 0, errorCount = 0;
 
     try {
-      const techRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY)
-                                     .filter(t => t.monitoring_status === 'active' && t.data_source_news === true);
-      const competitorRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY)
-                                            .filter(c => c.monitoring_status === 'active' && c.news_monitoring === true);
+      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY').filter(t => t.monitoring_status === 'active' && t.data_source_news === true);
+      const competitorRegistry = DataService.getDataAsObjects('COMPETITOR_REGISTRY').filter(c => c.monitoring_status === 'active' && c.news_monitoring === true);
       
       const searchEntities = [...techRegistry, ...competitorRegistry];
       processedCount = searchEntities.length;
-      logMessages.push(`发现 ${techRegistry.length} 个技术监控项和 ${competitorRegistry.length} 个竞争对手监控项。`);
+      logMessages.push(`发现 ${techRegistry.length} 个技术监控项和 ${competitorRegistry.length} 个业绩标杆监控项。`);
 
       if (searchEntities.length === 0) {
         const msg = "没有需要监控新闻的活跃实体。";
@@ -343,129 +370,117 @@ const WorkflowsService = {
         return { success: true, message: msg, log: logMessages.join('\n') };
       }
 
-      const allNewArticles = []; // ✅ 确保它在 try 块的顶层作用域
+      const allNewArticles = [];
       const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
       if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置。");
-
-      // ✅ 核心修正 1: 定义表头顺序，作为写入的唯一标准
-      const TABLE_HEADERS = [
-        'raw_id', 'source_type', 'news_title', 'news_summary', 'source_url', 
-        'publication_date', 'source_platform', 'author', 'related_companies', 'tech_keywords', 
-        'processing_status', 'linked_intelligence_id', 'news_value_score', 'market_impact_score', 
-        'duplicate_check_hash', 'workflow_execution_id', 'created_timestamp', 
-        'processed_timestamp', 'last_update_timestamp'
-      ];
 
       for (const entity of searchEntities) {
         const isTech = !!entity.tech_name;
         const query = isTech ? `"${entity.tech_name}" OR (${(entity.tech_keywords || '').replace(/,/g, ' OR ')})` : `"${entity.company_name}"`;
-        logMessages.push(`正在为 '${isTech ? entity.tech_name : entity.company_name}' 搜索新闻，查询: ${query}`);
+        logMessages.push(`正在为 '${isTech ? entity.tech_name : entity.company_name}' 搜索新闻...`);
 
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10`;
+        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=5`;
         const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
 
         if (response.getResponseCode() !== 200) {
           logMessages.push(`警告: 调用 NewsAPI 失败，状态码: ${response.getResponseCode()}`);
+          errorCount++;
           continue;
         }
 
         const articles = JSON.parse(response.getContentText()).articles || [];
         for (const article of articles) {
-          
-          // ✅ 核心修正 1: 调用真实AI进行初步评估
+          // ✅ 核心修改：调用 AI 进行评分
+          logMessages.push(`  -> 正在为新闻 "${(article.title || "").substring(0,30)}..." 调用 AI 评估...`);
           const prompt = `
-            请评估以下技术新闻的价值和市场影响，并严格以JSON格式返回评分。
+            请评估以下技术新闻的新闻价值和市场影响，并严格以JSON格式返回评分。
             评分标准为1-10的整数。
             新闻标题: ${article.title}
             新闻摘要: ${article.description || ''}
             
             返回JSON格式:
             {
-              "news_value_score": <分数>,
-              "market_impact_score": <分数>
+              "news_value_score": <新闻价值分数>,
+              "market_impact_score": <市场影响分数>
             }
           `;
           const aiScores = this._callAIForScoring(prompt, { wfName, executionId, logMessages });
 
-          if (!aiScores || !aiScores.news_value_score) {
-              logMessages.push(`跳过文章 '${article.title.substring(0,30)}...'，因为AI评估失败。`);
-              continue; // 如果AI评估失败，跳过这篇文章
+          if (!aiScores || typeof aiScores.news_value_score === 'undefined') {
+              logMessages.push(`  -> AI 评估失败，跳过此新闻。`);
+              errorCount++;
+              continue;
           }
           
           const newsValueScore = parseFloat(aiScores.news_value_score);
           const marketImpactScore = parseFloat(aiScores.market_impact_score);
+          logMessages.push(`  -> AI 评估新闻价值分: ${newsValueScore}, 市场影响分: ${marketImpactScore}`);
 
+          // 只处理 AI 认为有较高价值的新闻
           if (newsValueScore >= 7.0) {
               const articleUrl = article.url;
               const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, articleUrl);
               const duplicateHash = this._bytesToHex(hashBytes);
-              const nowTimestamp = Utilities.formatDate(new Date(), 'UTC', 'yyyy-MM-dd HH:mm:ss');
-              const rawId = `RAW_TN_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+              const raw_id = `RAW_TN_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
 
-              // ✅ 核心修正 2: 使用一个数据对象来构造行，更清晰且不易出错
-              const rowDataObject = {
-                raw_id: rawId,
+              const newsDataObject = {
+                raw_id: raw_id,
+                id: raw_id,
                 source_type: 'tech_news',
                 news_title: article.title,
                 news_summary: (article.description || '').substring(0, 500),
                 source_url: articleUrl,
-                publication_date: (article.publishedAt || '').split('T')[0],
+                publication_date: new Date(article.publishedAt),
                 source_platform: article.source.name,
                 author: article.author || '',
                 related_companies: isTech ? '' : entity.company_name,
                 tech_keywords: isTech ? entity.tech_keywords : '',
                 processing_status: 'pending',
-                linked_intelligence_id: '',
-                news_value_score: newsValueScore.toFixed(1),
-                market_impact_score: (parseFloat(aiScores.market_impact_score) || 0).toFixed(1),
+                news_value_score: newsValueScore,
+                market_impact_score: marketImpactScore,
                 duplicate_check_hash: duplicateHash,
                 workflow_execution_id: executionId,
-                created_timestamp: nowTimestamp,
-                processed_timestamp: '',
-                last_update_timestamp: nowTimestamp
+                created_timestamp: new Date(),
+                last_update_timestamp: new Date()
               };
 
-              // ✅ 核心修正 3: 根据表头顺序将对象转换为数组
-              const newsDataRow = TABLE_HEADERS.map(header => rowDataObject[header]);
-              allNewArticles.push(newsDataRow);
+              allNewArticles.push(newsDataObject);
               successCount++;
           }
         }
       }
       if (allNewArticles.length > 0) {
-        const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_TECH_NEWS);
-        sheet.getRange(sheet.getLastRow() + 1, 1, allNewArticles.length, allNewArticles[0].length).setValues(allNewArticles);
+        DataService.batchUpsert('RAW_TECH_NEWS', allNewArticles, 'raw_id');
         logMessages.push(`成功写入 ${allNewArticles.length} 条新新闻数据。`);
       }
 
-      const finalMessage = `成功处理 ${processedCount} 个实体，发现 ${successCount} 篇新文章。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, 0, finalMessage);
+      const finalMessage = `成功处理 ${processedCount} 个实体，发现 ${successCount} 篇高价值文章。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
       const errorMessage = `严重错误: ${e.message}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, 1, errorMessage);
-      return { success: false, message: e.message, log: logMessages.join('\n') };
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
-  runWf5_IndustryDynamics: function() {
+  // 在 backend/svc.Workflows.gs 中
+
+runWf5_IndustryDynamics: function() {
     const wfName = 'WF5: 产业动态/会议新闻捕获';
     const startTime = new Date();
     const executionId = `exec_wf5_${startTime.getTime()}`;
-    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0;
-    let processedCount = 0;
-    let errorCount = 0;
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let successCount = 0, processedCount = 0, errorCount = 0;
 
     try {
-      // 1. 【核心修改】从 Conference_Registry 获取需要监控的会议
-      const conferenceRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.CONFERENCE_REGISTRY);
+      // ✅ 核心修正 1: 使用新的 DataService 从 Firestore 获取数据
+      const conferenceRegistry = DataService.getDataAsObjects('CONFERENCE_REGISTRY');
       if (!conferenceRegistry) {
-          throw new Error(`无法从 ${CONFIG.SHEET_NAMES.CONFERENCE_REGISTRY} 获取数据，可能表不存在或为空。`);
+          throw new Error("无法从 'CONFERENCE_REGISTRY' 获取数据，可能集合不存在或为空。");
       }
       
       const activeConferences = conferenceRegistry.filter(c => c.monitoring_status && String(c.monitoring_status).toLowerCase() === 'active');
-
       processedCount = activeConferences.length;
       logMessages.push(`发现 ${processedCount} 个需要监控的活跃会议。`);
 
@@ -475,29 +490,20 @@ const WorkflowsService = {
         return { success: true, message: msg, log: logMessages.join('\n') };
       }
 
-      // 2. 准备API调用
       const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
       if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
 
-      const allNewDynamics = [];
-      const TABLE_HEADERS = [
-        'raw_id', 'source_type', 'event_title', 'event_summary', 'source_url', 'publication_date',
-        'source_platform', 'event_type', 'tech_keywords', 'industry_category', 'processing_status',
-        'linked_intelligence_id', 'industry_impact_score', 'relevance_score', 'duplicate_check_hash',
-        'workflow_execution_id', 'created_timestamp', 'processed_timestamp', 'last_update_timestamp'
-      ];
+      let allNewDynamicsObjects = [];
 
-      // 3. 遍历每个会议，构建查询并获取新闻
       for (const conf of activeConferences) {
-        // 使用会议名称和ID构建精确的搜索查询
         const query = `"${conf.conference_name}" OR "${conf.conference_id}"`;
         logMessages.push(`正在为会议 '${conf.conference_name}' 搜索相关新闻...`);
 
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10`;
+        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=5`;
         const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
 
         if (response.getResponseCode() !== 200) {
-          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。跳过此会议。`);
+          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。`);
           errorCount++;
           continue;
         }
@@ -506,7 +512,7 @@ const WorkflowsService = {
         logMessages.push(`  -> 找到 ${articles.length} 篇文章。`);
 
         for (const article of articles) {
-          // 4. 初步AI评估
+          // ✅ 核心修正 2: 调用 AI 进行评分
           const prompt = `
             请评估以下新闻的产业影响力和与技术趋势的相关性。请严格以JSON格式返回评分。
             评分标准为1-10的整数。
@@ -523,56 +529,51 @@ const WorkflowsService = {
           const aiScores = this._callAIForScoring(prompt, { wfName, executionId, logMessages });
 
           if (!aiScores || typeof aiScores.industry_impact_score === 'undefined') {
-            logMessages.push(`  -> 跳过文章 '${(article.title || "无标题").substring(0,30)}...'，因为AI评估失败或返回格式不正确。`);
+            logMessages.push(`  -> 跳过文章，因为AI评估失败或返回格式不正确。`);
+            errorCount++;
             continue;
           }
 
           const industryImpactScore = parseFloat(aiScores.industry_impact_score);
           const relevanceScore = parseFloat(aiScores.relevance_score);
 
-          // 只有当产业影响力和相关性都较高时才记录
           if (industryImpactScore >= 6.0 && relevanceScore >= 7.0) {
             const articleUrl = article.url;
             const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, articleUrl);
             const duplicateHash = this._bytesToHex(hashBytes);
-            const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-            const rawId = `RAW_ID_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+            const raw_id = `RAW_ID_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
 
-            const rowDataObject = {
-              raw_id: rawId,
+            const dynamicsDataObject = {
+              raw_id: raw_id,
+              id: raw_id,
               source_type: 'industry_dynamics',
               event_title: article.title,
               event_summary: (article.description || '').substring(0, 500),
               source_url: articleUrl,
-              publication_date: (article.publishedAt || '').split('T')[0],
+              publication_date: new Date(article.publishedAt),
               source_platform: article.source.name,
-              event_type: 'Conference News', // 事件类型明确为会议新闻
-              tech_keywords: conf.industry_focus, // 使用会议的行业焦点作为技术关键词
-              industry_category: conf.industry_focus, // 使用会议的行业焦点作为产业分类
+              event_type: 'Conference News',
+              tech_keywords: conf.industry_focus,
+              industry_category: conf.industry_focus,
               processing_status: 'pending',
-              linked_intelligence_id: '',
-              industry_impact_score: industryImpactScore.toFixed(1),
-              relevance_score: relevanceScore.toFixed(1),
+              industry_impact_score: industryImpactScore,
+              relevance_score: relevanceScore,
               duplicate_check_hash: duplicateHash,
               workflow_execution_id: executionId,
-              created_timestamp: nowTimestamp,
-              processed_timestamp: '',
-              last_update_timestamp: nowTimestamp
+              created_timestamp: new Date(),
+              last_update_timestamp: new Date()
             };
-
-            const dynamicsDataRow = TABLE_HEADERS.map(header => rowDataObject[header] !== undefined ? rowDataObject[header] : '');
-            allNewDynamics.push(dynamicsDataRow);
+            allNewDynamicsObjects.push(dynamicsDataObject);
             successCount++;
-            logMessages.push(`  -> 记录高价值会议新闻: '${article.title.substring(0, 50)}...' (影响分: ${industryImpactScore}, 相关分: ${relevanceScore})`);
+            logMessages.push(`  -> 记录高价值会议新闻: '...' (影响分: ${industryImpactScore}, 相关分: ${relevanceScore})`);
           }
         }
       }
 
-      // 5. 批量写入数据
-      if (allNewDynamics.length > 0) {
-        const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_INDUSTRY_DYNAMICS);
-        sheet.getRange(sheet.getLastRow() + 1, 1, allNewDynamics.length, TABLE_HEADERS.length).setValues(allNewDynamics);
-        logMessages.push(`成功写入 ${allNewDynamics.length} 条新产业动态数据。`);
+      if (allNewDynamicsObjects.length > 0) {
+        // ✅ 核心修正 3: 使用新的 DataService 批量写入
+        DataService.batchUpsert('RAW_INDUSTRY_DYNAMICS', allNewDynamicsObjects, 'raw_id');
+        logMessages.push(`成功写入 ${allNewDynamicsObjects.length} 条新产业动态数据。`);
       }
 
       const finalMessage = `成功处理 ${processedCount} 个会议，发现并写入了 ${successCount} 条相关新闻。`;
@@ -580,20 +581,21 @@ const WorkflowsService = {
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, 1, errorMessage);
+      const errorMessage = `严重错误: ${e.message}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
+
   runWf6_Benchmark: function() {
-    const wfName = 'WF6: 竞争对手情报收集';
+    const wfName = 'WF6: 业绩标杆线索收集';
     const startTime = new Date();
     const executionId = `exec_wf6_${startTime.getTime()}`;
     let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
     let successCount = 0, processedCount = 0, errorCount = 0;
 
     try {
-      // 1. 从 Competitor_Registry 获取需要监控的竞争对手
+      // 1. 从 Competitor_Registry 获取需要监控的业绩标杆
       const competitorRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY);
       if (!competitorRegistry) {
         throw new Error(`无法从 ${CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY} 获取数据。`);
@@ -605,10 +607,10 @@ const WorkflowsService = {
       );
 
       processedCount = activeCompetitors.length;
-      logMessages.push(`发现 ${processedCount} 个需要监控新闻的活跃竞争对手。`);
+      logMessages.push(`发现 ${processedCount} 个需要监控新闻的活跃业绩标杆。`);
 
       if (processedCount === 0) {
-        const msg = "在 Competitor_Registry 中没有找到需要监控新闻的活跃竞争对手。";
+        const msg = "在 Competitor_Registry 中没有找到需要监控新闻的活跃业绩标杆。";
         this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
         return { success: true, message: msg, log: logMessages.join('\n') };
       }
@@ -625,16 +627,16 @@ const WorkflowsService = {
         'workflow_execution_id', 'created_timestamp', 'processed_timestamp', 'last_update_timestamp'
       ];
 
-      // 3. 遍历每个竞争对手，获取新闻
+      // 3. 遍历每个业绩标杆，获取新闻
       for (const competitor of activeCompetitors) {
         const query = `"${competitor.company_name}"`;
-        logMessages.push(`正在为竞争对手 '${competitor.company_name}' 搜索新闻...`);
+        logMessages.push(`正在为业绩标杆 '${competitor.company_name}' 搜索新闻...`);
 
         const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=10`;
         const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
 
         if (response.getResponseCode() !== 200) {
-          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。跳过此竞争对手。`);
+          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。跳过此业绩标杆。`);
           errorCount++;
           continue;
         }
@@ -683,10 +685,10 @@ const WorkflowsService = {
       if (allNewIntel.length > 0) {
         const sheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
         sheet.getRange(sheet.getLastRow() + 1, 1, allNewIntel.length, TABLE_HEADERS.length).setValues(allNewIntel);
-        logMessages.push(`成功写入 ${allNewIntel.length} 条新竞争情报数据。`);
+        logMessages.push(`成功写入 ${allNewIntel.length} 条新竞争线索数据。`);
       }
 
-      const finalMessage = `成功处理 ${processedCount} 个竞争对手，发现并写入了 ${successCount} 条相关新闻。`;
+      const finalMessage = `成功处理 ${processedCount} 个业绩标杆，发现并写入了 ${successCount} 条相关新闻。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -713,7 +715,8 @@ const WorkflowsService = {
     let newSignalsCount = 0;
 
     try {
-      const allPapers = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS);
+      // 1. 读取数据 (调用方式简化)
+      const allPapers = DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS');
       const pendingPapers = allPapers.filter(paper => paper.processing_status && String(paper.processing_status).trim().toLowerCase() === 'pending');
 
       logMessages.push(`发现 ${pendingPapers.length} 条待处理的论文记录。`);
@@ -725,8 +728,9 @@ const WorkflowsService = {
       const rawPaperSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.RAWDATA_DB).getSheetByName(CONFIG.SHEET_NAMES.RAW_ACADEMIC_PAPERS);
       const intelSheet = SpreadsheetApp.openById(CONFIG.DATABASE_IDS.INTELLIGENCE_DB).getSheetByName(CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
       
-      const newIntelligenceRecords = [];
-      const updatesForRawSheet = [];
+      // 2. 准备写入 (不再需要 SpreadsheetApp 对象)
+      const newIntelligenceObjects = []; // ✅ 存放对象，而不是数组
+      const updatesForRawSheet = []; // 保持不变，存放更新任务
 
       for (const paper of pendingPapers) {
         processedCount++;
@@ -783,55 +787,57 @@ const WorkflowsService = {
           const intelligenceId = `TI${Utilities.formatDate(new Date(), 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           
           // ✅ 核心修正 2: 使用AI返回的真实分析内容填充记录
-          const intelligenceRecord = [
-            intelligenceId, paper.tech_id || '', paper.tech_keywords, paper.title,
-            String(paper.abstract).substring(0, 500), 'academic_papers', paper.source_url, wfName,
-            signalStrength.toFixed(2), breakthroughScore.toFixed(2), revenuePotential.toFixed(2),
-            'medium', 'high', 'signal_identified', 
-            aiAssessment.breakthrough_reason || "N/A",      // [O] breakthrough_reason
-            aiAssessment.value_proposition || "N/A",       // [P] value_proposition
-            (aiAssessment.key_innovations || []).join(', '), // [Q] key_innovations (将数组转为字符串)
-            (aiAssessment.target_industries || []).join(', '),// [R] target_industries (将数组转为字符串)
-            1, 0, nowTimestamp, nowTimestamp, 'Raw_Academic_Papers', paper.raw_id
-          ];
-          newIntelligenceRecords.push(intelligenceRecord);
-          updatesForRawSheet.push({ raw_id: paper.raw_id, status: 'processed', linkedId: intelligenceId });
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
+          const intelligenceObject = {
+            intelligence_id: intelligenceId,
+            tech_id: paper.tech_id || '',
+            tech_keywords: paper.tech_keywords,
+            title: paper.title,
+            content_summary: String(paper.abstract).substring(0, 500),
+            trigger_source: 'academic_papers',
+            source_url: paper.source_url,
+            trigger_workflow: wfName,
+            signal_strength: parseFloat(signalStrength.toFixed(2)),
+            breakthrough_score: parseFloat(breakthroughScore.toFixed(2)),
+            commercial_value_score: parseFloat(revenuePotential.toFixed(2)),
+            confidence_level: 'medium',
+            priority: 'high',
+            processing_status: 'signal_identified',
+            breakthrough_reason: aiAssessment.breakthrough_reason || "N/A",
+            value_proposition: aiAssessment.value_proposition || "N/A",
+            key_innovations: (aiAssessment.key_innovations || []).join(', '),
+            target_industries: (aiAssessment.target_industries || []).join(', '),
+            version: 1,
+            is_deleted: 0,
+            created_timestamp: new Date(),
+            updated_timestamp: new Date(),
+            source_table: 'Raw_Academic_Papers',
+            source_record_id: paper.raw_id
+        };
+        newIntelligenceObjects.push(intelligenceObject); // ✅ 添加对象
+        updatesForRawSheet.push({ raw_id: paper.raw_id, status: 'processed', linkedId: intelligenceId });
         } else {
             updatesForRawSheet.push({ raw_id: paper.raw_id, status: 'processed', linkedId: '' });
         }
       }
 
       // 批量写入和回填
-      if (newIntelligenceRecords.length > 0) {
-        intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
-        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新线索记录。`);
+      if (newIntelligenceObjects.length > 0) {
+          // ✅ 直接调用新的写入方法
+          DataService.batchAppendObjects('TECH_INSIGHTS_MASTER', newIntelligenceObjects);
+          logMessages.push(`成功写入 ${newIntelligenceObjects.length} 条新线索记录。`);
       }
 
       if (updatesForRawSheet.length > 0) {
-        // 使用更健壮的回填逻辑
-        const rawDataForUpdate = rawPaperSheet.getDataRange().getValues();
-        const rawHeaders = rawDataForUpdate[0];
-        const rawHeaderMap = rawHeaders.reduce((acc, h, i) => { acc[String(h).trim()] = i; return acc; }, {});
-        const idCol = rawHeaderMap['raw_id'];
-        const statusCol = rawHeaderMap['processing_status'];
-        const linkedIdCol = rawHeaderMap['linked_intelligence_id'];
-
-        const updateMap = updatesForRawSheet.reduce((acc, u) => { acc[u.raw_id] = u; return acc; }, {});
-        let changesMade = false;
-        for (let i = 2; i < rawDataForUpdate.length; i++) {
-            const rowId = rawDataForUpdate[i][idCol];
-            if (rowId && updateMap[rowId]) {
-                rawDataForUpdate[i][statusCol] = updateMap[rowId].status;
-                rawDataForUpdate[i][linkedIdCol] = updateMap[rowId].linkedId;
-                changesMade = true;
-                delete updateMap[rowId];
-            }
+        // ✅ 直接循环并调用更新方法，无需再读取整个表格
+        logMessages.push(`准备回填更新 ${updatesForRawSheet.length} 条原始记录...`);
+        for (const update of updatesForRawSheet) {
+            DataService.updateObject('RAW_ACADEMIC_PAPERS', update.raw_id, {
+                processing_status: update.status,
+                linked_intelligence_id: update.linkedId,
+                processed_timestamp: new Date() // ✅ 同时更新处理时间戳
+            });
         }
-        if (changesMade) {
-            rawPaperSheet.getRange(1, 1, rawDataForUpdate.length, rawDataForUpdate[0].length).setValues(rawDataForUpdate);
-            logMessages.push(`成功回填更新 ${updatesForRawSheet.length} 条原始记录的状态。`);
-        }
+        logMessages.push(`成功回填更新 ${updatesForRawSheet.length} 条原始记录的状态。`);
       }
       
       const finalMessage = `处理了 ${processedCount} 篇论文，生成了 ${newSignalsCount} 条新线索。`;
@@ -1293,7 +1299,7 @@ const WorkflowsService = {
     }
   },
   runWf7_6Benchmark: function() {
-    const wfName = 'WF7-6: 竞争情报信号识别';
+    const wfName = 'WF7-6: 竞争线索信号识别';
     const startTime = new Date();
     const executionId = `exec_wf7_6_${startTime.getTime()}`;
     let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
@@ -1305,9 +1311,9 @@ const WorkflowsService = {
       const allCompIntel = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.RAWDATA_DB, CONFIG.SHEET_NAMES.RAW_COMPETITOR_INTELLIGENCE);
       const pendingIntel = allCompIntel.filter(item => item.processing_status && String(item.processing_status).trim().toLowerCase() === 'pending');
 
-      logMessages.push(`发现 ${pendingIntel.length} 条待处理的竞争情报记录。`);
+      logMessages.push(`发现 ${pendingIntel.length} 条待处理的竞争线索记录。`);
       if (pendingIntel.length === 0) {
-        const msg = "没有待处理的竞争情报记录。";
+        const msg = "没有待处理的竞争线索记录。";
         this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
         return { success: true, message: msg, log: logMessages.join('\n') };
       }
@@ -1324,33 +1330,33 @@ const WorkflowsService = {
 
         // 1. 设计AI Prompt进行深度分析
         const prompt = `
-          请作为一名资深的行业与竞争战略分析师，深入分析以下关于竞争对手的新闻情报，并严格以JSON格式返回。
+          请作为一名资深的行业与竞争战略分析师，深入分析以下关于业绩标杆的新闻线索，并严格以JSON格式返回。
           
           新闻标题: ${intel.intelligence_title}
           新闻摘要: ${intel.intelligence_summary}
           涉及公司: ${intel.competitor_name}
 
           你需要完成以下任务:
-          1. 评估此情报对我们的威胁等级 (threat_level_score)，评分1-10。
-          2. 评估此情报对我们业务的潜在影响 (business_impact_score)，评分1-10。
-          3. 总结此情报的核心价值主张 (value_proposition)，即它揭示了对手的何种战略意图、技术突破或市场动向。
-          4. 提炼出这项情报中涉及的关键技术关键词 (tech_keywords)，以数组形式表示。
-          5. 将此情报分类为以下类型之一：'Product Release', 'Tech Innovation', 'Talent Flow', 'Financial Report', 'Strategic Partnership', 'General News'。将结果放在 intelligence_type 字段。
+          1. 评估此线索对我们的威胁等级 (threat_level_score)，评分1-10。
+          2. 评估此线索对我们业务的潜在影响 (business_impact_score)，评分1-10。
+          3. 总结此线索的核心价值主张 (value_proposition)，即它揭示了对手的何种战略意图、技术突破或市场动向。
+          4. 提炼出这项线索中涉及的关键技术关键词 (tech_keywords)，以数组形式表示。
+          5. 将此线索分类为以下类型之一：'Product Release', 'Tech Innovation', 'Talent Flow', 'Financial Report', 'Strategic Partnership', 'General News'。将结果放在 intelligence_type 字段。
 
           返回的 JSON 格式必须是:
           {
             "threat_level_score": <威胁等级评分>,
             "business_impact_score": <业务影响评分>,
-            "value_proposition": "<对情报核心价值的精炼总结>",
+            "value_proposition": "<对线索核心价值的精炼总结>",
             "tech_keywords": ["关键词1", "关键词2"],
-            "intelligence_type": "<情报分类>"
+            "intelligence_type": "<线索分类>"
           }
         `;
 
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
         if (!aiAssessment) {
-          logMessages.push(`  -> AI评估失败，跳过此情报。`);
+          logMessages.push(`  -> AI评估失败，跳过此线索。`);
           updatesForRawSheet.push({ raw_id: intel.raw_id, status: 'failed', linkedId: '' });
           errorCount++;
           continue;
@@ -1365,7 +1371,7 @@ const WorkflowsService = {
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
 
-        // 3. 判断是否生成情报
+        // 3. 判断是否生成线索
         if (signalStrength >= 7.0) {
           newSignalsCount++;
           const nowTimestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
@@ -1394,7 +1400,7 @@ const WorkflowsService = {
           ];
           newIntelligenceRecords.push(intelligenceRecord);
           updatesForRawSheet.push({ raw_id: intel.raw_id, status: 'processed', linkedId: intelligenceId, intelType: aiAssessment.intelligence_type, threat: threatLevel, impact: businessImpact });
-          logMessages.push(`  -> 高价值信号！已生成情报ID: ${intelligenceId}`);
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
         } else {
           updatesForRawSheet.push({ raw_id: intel.raw_id, status: 'processed_low_value', linkedId: '', intelType: aiAssessment.intelligence_type, threat: threatLevel, impact: businessImpact });
           logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
@@ -1404,7 +1410,7 @@ const WorkflowsService = {
       // 4. 批量写入和回填
       if (newIntelligenceRecords.length > 0) {
         intelSheet.getRange(intelSheet.getLastRow() + 1, 1, newIntelligenceRecords.length, newIntelligenceRecords[0].length).setValues(newIntelligenceRecords);
-        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新情报记录。`);
+        logMessages.push(`成功写入 ${newIntelligenceRecords.length} 条新线索记录。`);
       }
 
       if (updatesForRawSheet.length > 0) {
@@ -1444,7 +1450,7 @@ const WorkflowsService = {
         }
       }
       
-      const finalMessage = `处理了 ${processedCount} 条竞争情报，生成了 ${newSignalsCount} 条新核心情报。`;
+      const finalMessage = `处理了 ${processedCount} 条竞争线索，生成了 ${newSignalsCount} 条新核心线索。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 

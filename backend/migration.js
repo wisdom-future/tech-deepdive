@@ -4,7 +4,7 @@
  * @file 一次性数据迁移脚本
  * 版本 2.3 - 增加对源数据中重复ID的处理逻辑，确保批量写入成功。
  */
-
+/*
 function runFullMigrationToFirestore() {
   Logger.log("========= [开始] 全量数据迁移至 Firestore =========");
 
@@ -46,10 +46,12 @@ function runFullMigrationToFirestore() {
     Logger.log(e.stack);
   }
 }
+*/
 
 /**
  * ✅ 核心改造：采用覆盖写入模式
  */
+/*
 function _migrateSingleSheet(sheetId, sheetName, collectionName, idField) {
   Logger.log(`--- 开始迁移: ${sheetName} -> ${collectionName} (模式: 覆盖写入) ---`);
   
@@ -103,7 +105,7 @@ function _migrateSingleSheet(sheetId, sheetName, collectionName, idField) {
         };
       });
       
-      FirestoreService.executeBatchWrites(writes);
+      //FirestoreService.executeBatchWrites(writes);
 
       successCount += batchObjects.length;
       Logger.log(`  - 已成功提交 ${successCount} / ${uniqueObjects.length} 条记录...`);
@@ -117,11 +119,12 @@ function _migrateSingleSheet(sheetId, sheetName, collectionName, idField) {
     Logger.log(e.stack);
   }
 }
-
+*/
 /**
  * [TEST FUNCTION]
  * 版本 2.0 - 修复 Browser.msgBox 错误
  */
+/*
 function testFirestoreConnection() {
   Logger.log("========= [开始] Firestore 连接测试 =========");
   
@@ -164,4 +167,4 @@ function testFirestoreConnection() {
     Logger.log("测试结果：失败！");
   }
 }
-
+*/

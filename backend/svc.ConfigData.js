@@ -28,7 +28,7 @@ const ConfigDataService = {
 
   getTechnologyDomainStats() {
     try {
-      const techRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
+      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY');
       const total = techRegistry.length;
       const active = techRegistry.filter(item => String(item.monitoring_status || '').toLowerCase() === 'active').length;
       return { total, active };
@@ -39,7 +39,7 @@ const ConfigDataService = {
 
   getIndustryBenchmarkStats() {
     try {
-      const competitorRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY);
+      const competitorRegistry = DataService.getDataAsObjects('COMPETITOR_REGISTRY');
       const total = competitorRegistry.length;
       const focus = competitorRegistry.filter(item => {
         const priority = String(item.monitoring_priority || '').toLowerCase();
@@ -53,7 +53,7 @@ const ConfigDataService = {
 
   getConferenceStats() {
     try {
-      const conferenceRegistry = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.CONFERENCE_REGISTRY);
+      const conferenceRegistry = DataService.getDataAsObjects('CONFERENCE_REGISTRY');
       const total = conferenceRegistry.length;
       const monitoring = conferenceRegistry.filter(item => String(item.monitoring_status || '').toLowerCase() === 'active').length;
       return { total, monitoring };
@@ -67,7 +67,7 @@ const ConfigDataService = {
   //================================================
   getTechnologyDomainDetails() {
     try {
-      const rawData = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.TECH_REGISTRY);
+      const rawData = DataService.getDataAsObjects('TECH_REGISTRY');
       if (!rawData) return []; // 如果没数据，返回空数组
       
       return rawData.map(item => ({
@@ -90,7 +90,7 @@ const ConfigDataService = {
    */
   getIndustryBenchmarkDetails() {
     try {
-      const rawData = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.COMPETITOR_REGISTRY);
+      const rawData = DataService.getDataAsObjects('COMPETITOR_REGISTRY');
       if (!rawData) return [];
 
       return rawData.map(item => ({
@@ -115,7 +115,7 @@ const ConfigDataService = {
    */
   getConferenceDetails() {
     try {
-      const rawData = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.CONFIG_DB, CONFIG.SHEET_NAMES.CONFERENCE_REGISTRY);
+      const rawData = DataService.getDataAsObjects('CONFERENCE_REGISTRY');
       if (!rawData) return [];
       
       return rawData.map(item => ({

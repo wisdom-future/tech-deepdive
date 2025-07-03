@@ -2,7 +2,7 @@
 
 /**
  * @file 洞察线索统计服务。
- * 负责从核心情报表中获取洞察线索的统计信息。
+ * 负责从核心线索表中获取洞察线索的统计信息。
  * 版本：1.0 - 从Tech_Intelligence_Master获取真实数据，分类统计。
  */
 
@@ -17,7 +17,8 @@ const InsightLeadStatsService = {
       // 这里也可能遇到 Apps Script 读取大表的缓存问题，
       // 但对于 Insight Leads 统计，通常数据量相对较小，
       // 如果未来出现问题，同样需要引入定时任务预处理。
-      const insights = DataService.getDataAsObjects(CONFIG.DATABASE_IDS.INTELLIGENCE_DB, CONFIG.SHEET_NAMES.TECH_INSIGHTS_MASTER);
+      
+      const insights = DataService.getDataAsObjects('TECH_INSIGHTS_MASTER');
 
       const total = insights.length;
 
@@ -49,6 +50,20 @@ const InsightLeadStatsService = {
         todayUpdated: 0, // 这个字段现在可以废弃或重新定义
         status: statusCounts
       };
+      
+
+      // const fakeStats = {
+      //   total: 128,
+      //   sevenDayNew: 15,
+      //   status: {
+      //     pending: 45,
+      //     processing: 30,
+      //     completed: 50,
+      //     published: 3
+      //   }
+      // };
+      // Logger.log("成功返回伪造的统计数据: " + JSON.stringify(fakeStats));
+      // return fakeStats;
     } catch (e) {
       Logger.log(`Error in InsightLeadStatsService.getStats: ${e.message} \n ${e.stack}`);
       throw new Error(`无法获取洞察线索统计: ${e.message}`);
