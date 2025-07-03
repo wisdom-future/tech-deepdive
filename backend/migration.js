@@ -2,9 +2,9 @@
 
 /**
  * @file 一次性数据迁移脚本
- * 版本 2.3 - 增加对源数据中重复ID的处理逻辑，确保批量写入成功。
+ * 版本 2.5 - 增加迁移前清空集合的功能，确保幂等性。
  */
-/*
+
 function runFullMigrationToFirestore() {
   Logger.log("========= [开始] 全量数据迁移至 Firestore =========");
 
@@ -46,20 +46,22 @@ function runFullMigrationToFirestore() {
     Logger.log(e.stack);
   }
 }
-*/
 
 /**
- * ✅ 核心改造：采用覆盖写入模式
+ * ✅ 核心改造：在写入前清空集合
  */
-/*
 function _migrateSingleSheet(sheetId, sheetName, collectionName, idField) {
-  Logger.log(`--- 开始迁移: ${sheetName} -> ${collectionName} (模式: 覆盖写入) ---`);
+  Logger.log(`--- 开始迁移: ${sheetName} -> ${collectionName} (模式: 清空后写入) ---`);
   
   try {
+    // ✅ 新增：在写入数据之前，先清空目标集合
+    FirestoreService.deleteCollection(collectionName);
+    Utilities.sleep(2000); // 暂停2秒，确保删除操作有足够时间生效
+
     const firestore = FirestoreService._getFirestoreInstance();
     const allObjects = DataService.getDataAsObjects(sheetId, sheetName);
     if (!allObjects || allObjects.length === 0) {
-      Logger.log(`  - 表 '${sheetName}' 为空，跳过迁移。`);
+      Logger.log(`  - 表 '${sheetName}' 为空，跳过写入。`);
       return;
     }
 
@@ -91,21 +93,16 @@ function _migrateSingleSheet(sheetId, sheetName, collectionName, idField) {
         const path = `projects/${firestore.projectId}/databases/(default)/documents/${collectionName}/${docId}`;
         const firestoreFields = firestore.create(obj);
         
-        // **核心修改：**
-        // 不再使用 currentDocument 条件，直接使用 update。
-        // 在 Firestore 中，一个不带前提条件的 update/patch 操作如果指定了完整路径，
-        // 效果就是 "Upsert"：如果文档存在则更新，不存在则创建。
-        // 但 FirestoreApp 库的 batch() 不支持直接的 upsert，所以我们使用 update。
-        // 在执行前，我们应该先清空集合。
         return {
-          update: {
+          update: { // ✅ 使用 update 操作，因为集合已经被清空，等同于创建
             name: path,
             fields: firestoreFields.fields
-          }
+          },
+          // 这里不需要 currentDocument: { exists: false }，因为我们已经清空了集合
         };
       });
       
-      //FirestoreService.executeBatchWrites(writes);
+      FirestoreService.executeBatchWrites(writes);
 
       successCount += batchObjects.length;
       Logger.log(`  - 已成功提交 ${successCount} / ${uniqueObjects.length} 条记录...`);
@@ -119,7 +116,7 @@ function _migrateSingleSheet(sheetId, sheetName, collectionName, idField) {
     Logger.log(e.stack);
   }
 }
-*/
+
 /**
  * [TEST FUNCTION]
  * 版本 2.0 - 修复 Browser.msgBox 错误

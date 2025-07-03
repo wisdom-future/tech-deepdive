@@ -1047,11 +1047,11 @@
                 ],
                 2: [
                     { id: 'wf7-1', title: 'WF7-1: 学术论文信号识别', description: '处理待定论文，识别高价值信号并创建线索记录。', runFunction: 'runWf7_1_AcademicSignalIdentification' },
-                    { id: 'wf7-2', title: 'WF7-2: 专利数据信号识别', description: '评估专利的重要性、威胁等级，并生成线索。', runFunction: 'runWf7_2' },
+                    { id: 'wf7-2', title: 'WF7-2: 专利数据信号识别', description: '评估专利的重要性、威胁等级，并生成线索。', runFunction: 'runWf7_2_PatentSignal' },
                     { id: 'wf7-3', title: 'WF7-3: 开源项目信号识别', description: '评估开源项目的潜力、趋势，并生成线索。', runFunction: 'runWf7_3_OpenSourceSignal' },
-                    { id: 'wf7-4', title: 'WF7-4: 技术新闻信号识别', description: '评估技术新闻的价值、影响，并生成线索。', runFunction: 'runWf7_4' },
-                    { id: 'wf7-5', title: 'WF7-5: 产业动态信号识别', description: '评估产业动态的战略影响，并生成线索。', runFunction: 'runWf7_5' },
-                    { id: 'wf7-6', title: 'WF7-6: 竞争线索信号识别', description: '评估竞争线索的威胁等级，并生成线索。', runFunction: 'runWf7_6' }
+                    { id: 'wf7-4', title: 'WF7-4: 技术新闻信号识别', description: '评估技术新闻的价值、影响，并生成线索。', runFunction: 'runWf7_4TechNewsSignal' },
+                    { id: 'wf7-5', title: 'WF7-5: 产业动态信号识别', description: '评估产业动态的战略影响，并生成线索。', runFunction: 'runWf7_5IndustryDynamics' },
+                    { id: 'wf7-6', title: 'WF7-6: 竞争线索信号识别', description: '评估竞争线索的威胁等级，并生成线索。', runFunction: 'runWf7_6Benchmark' }
                 ],
                 3: [{ id: 'wf8', title: 'WF8: 统一证据验证', description: '对所有新生成的线索进行多源交叉验证和质量评分。', runFunction: 'runWf8_EvidenceValidation' }],
                 4: [{ id: 'wf9', title: 'WF9: 商业价值分析', description: '对已验证线索进行TAM/SAM/SOM市场建模和ROI计算。', runFunction: 'runWf9_CommercialValueAnalysis' }, { id: 'wf10', title: 'WF10: 竞争线索分析', description: '评估竞争格局、技术威胁，并识别机会与挑战。', runFunction: 'runWf10_CompetitiveIntelAnalysis' }, { id: 'wf11', title: 'WF11: 技术深度分析', description: '评估技术成熟度(TRL)、技术壁垒和演进路径。', runFunction: 'runWf11_TechnicalDeepAnalysis' }],

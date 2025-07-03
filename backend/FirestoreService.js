@@ -79,9 +79,7 @@ const FirestoreService = {
   /**
    * 封装的底层 API 请求函数
    */
-  /**
-   * ✅ 核心修正：让 _request 函数能够处理完整的 URL
-   */
+  // ✅ 核心修正：让 _request 函数能够处理完整的 URL
   _request: function(url, method = 'GET', payload = null) {
     const options = {
       method: method.toLowerCase(),
@@ -103,7 +101,7 @@ const FirestoreService = {
   },
 
   /**
-   * 将 JS 对象转换为 Firestore 的 "fields" 格式
+   * ✅ 关键修正：确保 _wrapFields 的 this 指向正确
    */
   _wrapFields: function(obj) {
       const fields = {};
@@ -119,7 +117,11 @@ const FirestoreService = {
               else if (value instanceof Date) fields[key] = { timestampValue: value.toISOString() };
               else if (value === null || value === undefined) fields[key] = { nullValue: null };
               else if (Array.isArray(value)) {
-                  fields[key] = { arrayValue: { values: value.map(v => this._wrapFields({v}).fields.v) } };
+                  // ✅ 确保这里递归调用时，也使用正确的 this
+                  fields[key] = { arrayValue: { values: value.map(v => {
+                      const wrappedValue = FirestoreService._wrapFields({ temp: v }); // 使用 FirestoreService 而不是 this
+                      return wrappedValue.fields.temp;
+                  })} };
               }
               else fields[key] = { stringValue: JSON.stringify(value) };
           }
@@ -128,7 +130,7 @@ const FirestoreService = {
   },
 
   /**
-   * 将 Firestore 的 "fields" 格式解析为 JS 对象
+   * ✅ 关键修正：确保 _unwrapFields 的 this 指向正确
    */
   _unwrapFields: function(firestoreDoc) {
       if (!firestoreDoc) return null;
@@ -145,6 +147,12 @@ const FirestoreService = {
                   obj[key] = new Date(valueWrapper[valueType]);
                 } else if (valueType === 'nullValue') {
                   obj[key] = null;
+                } else if (valueType === 'arrayValue') {
+                  // ✅ 确保这里递归调用时，也使用正确的 this
+                  obj[key] = valueWrapper.arrayValue.values ? valueWrapper.arrayValue.values.map(v => FirestoreService._unwrapFields({fields: {temp: v}}).temp) : [];
+                } else if (valueType === 'mapValue') {
+                  // ✅ 确保这里递归调用时，也使用正确的 this
+                  obj[key] = FirestoreService._unwrapFields(valueWrapper.mapValue);
                 } else {
                   obj[key] = valueWrapper[valueType];
                 }
@@ -171,13 +179,93 @@ const FirestoreService = {
   queryCollection: function(collectionName) {
     if (!this.projectId) { this._getAuthToken(); }
     const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents/${collectionName}`;
-    const response = this._request(url); // ✅ 直接传递完整 URL
+    const response = this._request(url);
     if (response && Array.isArray(response.documents)) {
-      return response.documents.map(doc => this._unwrapFields(doc)).filter(Boolean);
+      // ✅ 确保这里调用时，_unwrapFields 的 this 指向正确
+      return response.documents.map(doc => FirestoreService._unwrapFields(doc)).filter(Boolean);
     }
     return [];
   },
 
+  /**
+   * 获取单个文档
+   * @param {string} path - 文档的完整路径 (e.g., 'collectionName/documentId')
+   * @returns {object|null} 文档数据，如果不存在则返回 null
+   */
+  getDocument: function(path) {
+    if (!this.projectId) { this._getAuthToken(); }
+    const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents/${path}`;
+    try {
+      const response = this._request(url);
+      return response ? FirestoreService._unwrapFields(response) : null;
+    } catch (e) {
+      if (e.message.includes("NOT_FOUND")) {
+        Logger.log(`INFO: Document not found at path: ${path}`);
+        return null;
+      }
+      Logger.log(`ERROR getting document at ${path}: ${e.message}`);
+      throw e;
+    }
+  },
+
+  /**
+   * 更新一个文档
+   * @param {string} path - 文档的完整路径 (e.g., 'collectionName/documentId')
+   * @param {object} data - 要更新的字段和值
+   * @returns {object} 更新后的文档对象
+   */
+  updateDocument: function(path, data) {
+    if (!this.projectId) { this._getAuthToken(); }
+    const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents/${path}`;
+    const payload = this._wrapFields(data);
+    
+    // Firestore 的 PATCH 方法要求路径中不能有未编码的字符
+    // path 已经包含了 collectionName/documentId，这里不需要再拼接
+    const response = this._request(url, 'PATCH', payload);
+    return response ? FirestoreService._unwrapFields(response) : null;
+  },
+
+  /**
+   * ✅ 新增方法：删除集合中的所有文档
+   * 警告：此操作会永久删除集合中的所有数据。
+   * Apps Script 的执行时间限制可能导致删除大型集合失败。
+   * @param {string} collectionName - 要删除的集合名称。
+   */
+  deleteCollection: function(collectionName) {
+    Logger.log(`[FirestoreService] 开始清空集合: ${collectionName}`);
+    const firestore = this._getFirestoreInstance(); // 确保获取实例
+    const batchSize = 200; // Firestore 每次批量删除的文档数量限制
+
+    let deletedCount = 0;
+    while (true) {
+      // 获取一批文档的名称
+      const documents = firestore.query(collectionName).select(['__name__']).limit(batchSize).run();
+
+      if (documents.length === 0) {
+        break; // 集合已清空
+      }
+
+      const writes = documents.map(doc => {
+        // 构建删除操作
+        return {
+          delete: {
+            name: doc.name // doc.name 是完整的文档路径
+          }
+        };
+      });
+
+      // 执行批量删除
+      const commitUrl = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents:commit`;
+      this._request(commitUrl, 'POST', { writes: writes });
+      
+      deletedCount += documents.length;
+      Logger.log(`  -> 已删除 ${deletedCount} 个文档。`);
+
+      // Firestore API 有速率限制，避免删除过快
+      Utilities.sleep(1000); 
+    }
+    Logger.log(`[FirestoreService] 集合 '${collectionName}' 已清空。总共删除了 ${deletedCount} 个文档。`);
+  },
 
   /**
    * 批量创建/更新文档 (Upsert)
@@ -185,7 +273,6 @@ const FirestoreService = {
   batchUpsert: function(collectionName, objects, idField) {
     if (!objects || objects.length === 0) return 0;
     
-    // 确保 projectId 已被初始化
     if (!this.projectId) {
         this._getAuthToken();
     }
@@ -206,7 +293,8 @@ const FirestoreService = {
         return {
             update: {
                 name: `projects/${this.projectId}/databases/(default)/documents/${path}`,
-                fields: this._wrapFields(dataToWrite).fields 
+                // ✅ 确保这里调用时，_wrapFields 的 this 指向正确
+                fields: FirestoreService._wrapFields(dataToWrite).fields 
             },
             updateMask: {
                 fieldPaths: Object.keys(dataToWrite)
@@ -216,7 +304,6 @@ const FirestoreService = {
 
     if (writes.length === 0) return 0;
     
-    // ✅ 构造正确的 commit URL
     const commitUrl = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents:commit`;
     this._request(commitUrl, 'POST', { writes: writes });
     
