@@ -128,5 +128,122 @@ const InsightsService = {
       // 返回一个包含错误信息的对象，让前端可以优雅地处理
       return { error: `获取智能分析页面数据时发生严重错误: ${e.message}` };
     }
+  },
+  /**
+   * 获取知识图谱所需的数据 (节点和边)。
+   * 节点可以是技术关键词、公司名等，边表示它们在洞察中共同出现的频率。
+   * @returns {{nodes: Array, edges: Array}} 知识图谱数据
+   */
+  getKnowledgeGraphData: function() {
+    try {
+      Logger.log("DEBUG: InsightsService.getKnowledgeGraphData - 开始获取数据...");
+
+      const allInsights = DataService.getDataAsObjects('TECH_INSIGHTS_MASTER') || [];
+      const allTechnologies = DataService.getDataAsObjects('TECH_REGISTRY') || [];
+      const allCompetitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY') || [];
+
+      const nodesMap = new Map(); // Map 用于存储唯一节点 { id: nodeObject }
+      const edgesMap = new Map(); // Map 用于存储唯一边 { "sourceId-targetId": edgeObject }
+
+      // 辅助函数：添加/更新节点
+      const addNode = (id, name, type, category = '') => {
+        if (!nodesMap.has(id)) {
+          nodesMap.set(id, {
+            id: id,
+            name: name,
+            category: type, // 用于 ECharts 类别
+            value: 1, // 初始值，可根据频率增加
+            symbolSize: 10 // 基础大小
+          });
+        } else {
+          nodesMap.get(id).value++; // 增加重要性/大小（基于提及次数）
+        }
+      };
+
+      // 辅助函数：添加/更新边
+      const addEdge = (sourceId, targetId) => {
+        // 确保边键的顺序一致 (例如，始终是 "id1-id2")
+        const edgeKey = sourceId < targetId ? `${sourceId}-${targetId}` : `${targetId}-${sourceId}`;
+        if (!edgesMap.has(edgeKey)) {
+          edgesMap.set(edgeKey, {
+            source: sourceId,
+            target: targetId,
+            value: 1, // 初始值，根据共同出现频率增加
+            lineStyle: { width: 1, opacity: 0.6 }
+          });
+        } else {
+          edgesMap.get(edgeKey).value++; // 增加权重
+          edgesMap.get(edgeKey).lineStyle.width = Math.min(5, edgesMap.get(edgeKey).value); // 最大宽度 5
+        }
+      };
+
+      // 1. 将技术作为节点处理
+      allTechnologies.forEach(tech => {
+        addNode(tech.tech_id, tech.tech_name, '技术领域', tech.tech_category);
+      });
+
+      // 2. 将竞争对手作为节点处理
+      allCompetitors.forEach(comp => {
+        addNode(comp.competitor_id, comp.company_name, '竞争对手', comp.industry_category);
+      });
+
+      // 3. 处理洞察以发现关系并添加关键词作为节点
+      allInsights.forEach(insight => {
+        const insightEntities = new Set(); // 与此特定洞察相关的实体
+
+        // 添加洞察的技术关键词作为节点并链接到洞察
+        if (insight.tech_keywords) {
+          String(insight.tech_keywords).split(',').map(k => k.trim()).filter(Boolean).forEach(keyword => {
+            const keywordId = `kw_${Utilities.base64EncodeWebSafe(keyword).replace(/=/g, '')}`; // 关键词的简单 ID
+            addNode(keywordId, keyword, '关键词');
+            insightEntities.add(keywordId);
+          });
+        }
+
+        // 如果 evidence_chain 中有原始数据，则添加相关公司/技术
+        if (insight.evidence_chain && Array.isArray(insight.evidence_chain)) {
+          insight.evidence_chain.forEach(evidence => {
+            if (evidence.source_type === 'competitor_intelligence' && evidence.competitor_name) {
+              const comp = allCompetitors.find(c => c.company_name === evidence.competitor_name);
+              if (comp) {
+                insightEntities.add(comp.competitor_id);
+              }
+            } else if (evidence.source_type === 'tech_news' && evidence.tech_keywords) { // 与技术相关的新闻
+              String(evidence.tech_keywords).split(',').map(k => k.trim()).filter(Boolean).forEach(keyword => {
+                const keywordId = `kw_${Utilities.base64EncodeWebSafe(keyword).replace(/=/g, '')}`;
+                addNode(keywordId, keyword, '关键词');
+                insightEntities.add(keywordId);
+              });
+            }
+            // 您可以在此处添加更多逻辑，将其他原始数据类型链接到现有节点
+          });
+        }
+
+        // 在同一洞察中发现的实体之间创建边
+        const entitiesArray = Array.from(insightEntities);
+        for (let i = 0; i < entitiesArray.length; i++) {
+          for (let j = i + 1; j < entitiesArray.length; j++) {
+            addEdge(entitiesArray[i], entitiesArray[j]);
+          }
+        }
+      });
+
+      // 将 Map 转换为数组
+      const nodes = Array.from(nodesMap.values());
+      const edges = Array.from(edgesMap.values());
+
+      // 根据值（频率）规范化节点大小
+      const maxVal = nodes.reduce((max, node) => Math.max(max, node.value), 0);
+      nodes.forEach(node => {
+          node.symbolSize = 10 + (node.value / maxVal) * 30; // 将大小缩放到 10 到 40
+      });
+
+      Logger.log(`DEBUG: InsightsService - 知识图谱数据准备完成: ${nodes.length} 个节点, ${edges.length} 条边。`);
+      return { nodes, edges };
+
+    } catch (e) {
+      Logger.log(`!!! ERROR in InsightsService.getKnowledgeGraphData: ${e.message}\n${e.stack}`);
+      return { error: `获取知识图谱数据时发生错误: ${e.message}` };
+    }
   }
 };

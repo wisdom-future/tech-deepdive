@@ -7,9 +7,9 @@
  */
 const WorkflowsService = {
 
-  // =========================================================================
+  // ====================================================================================================================
   //  辅助函数 (HELPER FUNCTIONS)
-  // =========================================================================
+  // ====================================================================================================================
 
   /**
    * 将 MD5 字节数组转换为十六进制字符串
@@ -198,9 +198,9 @@ const WorkflowsService = {
     }
   },
 
-  // =========================================================================
+  // ====================================================================================================================
   //  第一层：数据采集工作流 (WF1 - WF6)
-  // =========================================================================
+  // ====================================================================================================================
 
   runWf1_AcademicPapers: function() {
     const wfName = 'WF1: 学术论文监控';
@@ -211,7 +211,8 @@ const WorkflowsService = {
 
     try {
       const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY');
-      const activeTechs = techRegistry.filter(t => t.monitoring_status === 'active' && t.data_source_academic === true);
+      const activeTechs = techRegistry.filter(t =>
+        t.monitoring_status === 'active' && t.data_source_academic === true);
       logMessages.push(`发现 ${activeTechs.length} 个活跃的技术监控项。`);
       processedCount = activeTechs.length;
 
@@ -342,7 +343,8 @@ const WorkflowsService = {
           
           // 模拟专利API调用，实际需要替换为真实API
           const mockPatentData = [
-            { title: `Patent for ${term} AI`, abstract: `This patent describes an innovative method for ${term} based AI...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 5, Math.floor(Math.random()*30)+1), inventors: 'John Doe', status: 'pending' },
+            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK1`, title: `Patent for ${term} AI`, abstract: `This patent describes an innovative method for ${term} based AI...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 5, Math.floor(Math.random()*30)+1), inventors: 'John Doe', status: 'pending', source_url: 'https://mockpatent.com/1' },
+            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK2`, title: `Another Patent on ${term} Robotics`, abstract: `This covers new robotic applications of ${term} technology...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 4, Math.floor(Math.random()*30)+1), inventors: 'Jane Smith', status: 'granted', source_url: 'https://mockpatent.com/2' },
           ];
           
           if (mockPatentData.length === 0) {
@@ -372,8 +374,8 @@ const WorkflowsService = {
             const embeddingVector = this._callAIForEmbedding(textForEmbedding);
 
             const patentDataObject = {
-                raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${Math.floor(Math.random()*1e6)}`,
-                id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${Math.floor(Math.random()*1e6)}`,
+                raw_id: patent.raw_id, // Use the mock ID or generate a real one
+                id: patent.raw_id, // Use the mock ID or generate a real one
                 source_type: 'patent_data',
                 title: patent.title,
                 abstract: patent.abstract,
@@ -862,9 +864,9 @@ const WorkflowsService = {
     }
   },
 
-  // =========================================================================
+  // ====================================================================================================================
   //  第二层：信号识别工作流 (WF7-1 - WF7-6)
-  // =========================================================================
+  // ====================================================================================================================
 
     /**
    * ✅ 修正版: 执行 WF7-1: 学术论文信号识别 (修正表头和数据行索引)
@@ -970,7 +972,15 @@ const WorkflowsService = {
             created_timestamp: new Date(),
             updated_timestamp: new Date(),
             source_table: 'Raw_Academic_Papers',
-            source_record_id: paper.id
+            source_record_id: paper.id,
+            // **新增：证据链**
+            evidence_chain: [{
+                id: paper.id,
+                title: paper.title,
+                source_type: 'academic_papers',
+                source_url: paper.source_url,
+                publication_date: paper.publication_date // 添加相关字段以供显示
+            }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
@@ -992,7 +1002,136 @@ const WorkflowsService = {
     }
   },
 
-  runWf7_2_PatentSignal: function() { return { success: false, message: "WF7-2 功能尚未实现。", log: "WF7-2 功能尚未实现。" }; },
+  runWf7_2_PatentSignal: function() {
+    const wfName = 'WF7-2: 专利数据信号识别';
+    const startTime = new Date();
+    const executionId = `exec_wf7_2_${startTime.getTime()}`;
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let processedCount = 0;
+    let newSignalsCount = 0;
+    let errorCount = 0;
+
+    try {
+      const allPatents = DataService.getDataAsObjects('RAW_PATENT_DATA');
+      const pendingPatents = allPatents.filter(patent => patent.processing_status && String(patent.processing_status).trim().toLowerCase() === 'pending');
+
+      logMessages.push(`发现 ${pendingPatents.length} 条待处理的专利记录。`);
+      if (pendingPatents.length === 0) {
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, "没有待处理记录。");
+        return { success: true, message: "没有待处理记录。", log: logMessages.join('\n') };
+      }
+
+      for (const patent of pendingPatents) {
+        processedCount++;
+        logMessages.push(`正在处理专利: ${patent.title.substring(0, 50)}...`);
+
+        const prompt = `
+          请作为一名资深的技术与商业分析师，深入分析以下专利，并严格以JSON格式返回。
+          
+          专利标题: ${patent.title}
+          专利摘要: ${patent.abstract}
+          专利号: ${patent.patent_number}
+          申请日期: ${patent.application_date}
+          发明人: ${patent.inventors}
+          AI摘要: ${patent.ai_summary || ''}
+          AI关键词: ${patent.ai_keywords || ''}
+
+          你需要完成以下任务:
+          1. 评估专利的技术创新性 (innovation_score) 和市场前景 (market_potential_score)，并给出1-10分的评分。
+          2. 评估专利的法律壁垒强度 (legal_strength_score) 和商业化可行性 (commercialization_feasibility_score)，并给出1-10分的评分。
+          3. 总结该专利的核心价值主张 (value_proposition)。
+          4. 列出1-3个关键受保护点 (key_claims)，以数组形式表示。
+          5. 预测其可能的目标应用领域 (target_applications)，以数组形式表示。
+
+          返回的 JSON 格式必须是:
+          {
+            "innovation_score": <技术创新性评分>,
+            "market_potential_score": <市场前景评分>,
+            "legal_strength_score": <法律壁垒强度评分>,
+            "commercialization_feasibility_score": <商业化可行性评分>,
+            "value_proposition": "<对该专利核心商业价值的精炼总结>",
+            "key_claims": ["受保护点1", "受保护点2"],
+            "target_applications": ["应用领域1", "应用领域2"]
+          }
+        `;
+        
+        const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
+
+        if (!aiAssessment || typeof aiAssessment.innovation_score === 'undefined') {
+            logMessages.push(`  -> AI评估失败，跳过此专利。`);
+            errorCount++;
+            DataService.updateObject('RAW_PATENT_DATA', patent.id, { processing_status: 'failed', error_details: 'AI评估失败' });
+            continue;
+        }
+
+        const innovationScore = parseFloat(aiAssessment.innovation_score) || 0;
+        const marketPotentialScore = parseFloat(aiAssessment.market_potential_score) || 0;
+        const legalStrengthScore = parseFloat(aiAssessment.legal_strength_score) || 0;
+        const commercializationFeasibilityScore = parseFloat(aiAssessment.commercialization_feasibility_score) || 0;
+        
+        // 信号强度计算公式，可以根据实际业务需求调整权重
+        const signalStrength = (innovationScore * 0.3) + (marketPotentialScore * 0.3) + (legalStrengthScore * 0.2) + (commercializationFeasibilityScore * 0.2);
+        
+        logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
+
+        if (signalStrength >= 7.0) { // 阈值可以根据实际情况调整
+          newSignalsCount++;
+          const intelligenceId = `TI${Utilities.formatDate(new Date(), 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
+          
+          const intelligenceObject = {
+            id: intelligenceId,
+            intelligence_id: intelligenceId,
+            tech_id: patent.tech_id || '', // 如果专利数据没有 tech_id，可以留空或尝试从关键词匹配
+            tech_keywords: patent.ai_keywords || patent.tech_keywords,
+            title: patent.title,
+            content_summary: patent.ai_summary || patent.abstract.substring(0, 500),
+            trigger_source: 'patent_data',
+            source_url: patent.source_url,
+            trigger_workflow: wfName,
+            signal_strength: parseFloat(signalStrength.toFixed(2)),
+            breakthrough_score: parseFloat(innovationScore.toFixed(2)), // 专利的突破性
+            commercial_value_score: parseFloat(marketPotentialScore.toFixed(2)), // 专利的商业价值
+            confidence_level: 'medium',
+            priority: 'high',
+            processing_status: 'signal_identified',
+            breakthrough_reason: aiAssessment.value_proposition || "N/A", // 用价值主张作为理由
+            value_proposition: aiAssessment.value_proposition || "N/A",
+            key_innovations: (aiAssessment.key_claims || []).join(', '), // 专利的关键受保护点
+            target_industries: (aiAssessment.target_applications || []).join(', '), // 目标应用领域
+            version: 1,
+            is_deleted: 0,
+            created_timestamp: new Date(),
+            updated_timestamp: new Date(),
+            source_table: 'Raw_Patent_Data',
+            source_record_id: patent.id,
+            // **新增：证据链**
+            evidence_chain: [{
+                id: patent.id,
+                title: patent.title,
+                source_type: 'patent_data',
+                source_url: patent.source_url,
+                publication_date: patent.application_date // 使用申请日期作为发布日期
+            }]
+          };
+          DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
+          DataService.updateObject('RAW_PATENT_DATA', patent.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId });
+        } else {
+            logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
+            DataService.updateObject('RAW_PATENT_DATA', patent.id, { processing_status: 'processed', linked_intelligence_id: '' });
+        }
+      }
+
+      const finalMessage = `处理了 ${processedCount} 篇专利，生成了 ${newSignalsCount} 条新线索。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, errorCount, finalMessage);
+      return { success: true, message: finalMessage, log: logMessages.join('\n') };
+
+    } catch (e) {
+      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, errorCount + 1, errorMessage);
+      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+    }
+  },
 
   runWf7_3_OpenSourceSignal: function() {
     const wfName = 'WF7-3: 开源项目信号识别';
@@ -1089,7 +1228,15 @@ const WorkflowsService = {
             created_timestamp: nowTimestamp, 
             updated_timestamp: nowTimestamp, 
             source_table: 'Raw_OpenSource_Data', 
-            source_record_id: project.id
+            source_record_id: project.id,
+            // **新增：证据链**
+            evidence_chain: [{
+                id: project.id,
+                title: project.project_name,
+                source_type: 'opensource_data',
+                source_url: project.source_url,
+                last_update_timestamp: project.last_update_timestamp
+            }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
@@ -1209,7 +1356,15 @@ const WorkflowsService = {
             created_timestamp: nowTimestamp,
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Tech_News',
-            source_record_id: news.id
+            source_record_id: news.id,
+            // **新增：证据链**
+            evidence_chain: [{
+                id: news.id,
+                title: news.news_title,
+                source_type: 'tech_news',
+                source_url: news.source_url,
+                publication_date: news.publication_date
+            }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
@@ -1329,7 +1484,15 @@ const WorkflowsService = {
             created_timestamp: nowTimestamp,
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Industry_Dynamics',
-            source_record_id: dynamic.id
+            source_record_id: dynamic.id,
+            // **新增：证据链**
+            evidence_chain: [{
+                id: dynamic.id,
+                title: dynamic.event_title,
+                source_type: 'industry_dynamics',
+                source_url: dynamic.source_url,
+                publication_date: dynamic.publication_date
+            }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
@@ -1447,7 +1610,15 @@ const WorkflowsService = {
             created_timestamp: nowTimestamp,
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Competitor_Intelligence',
-            source_record_id: intel.id
+            source_record_id: intel.id,
+            // **新增：证据链**
+            evidence_chain: [{
+                id: intel.id,
+                title: intel.intelligence_title,
+                source_type: 'competitor_intelligence',
+                source_url: intel.source_url,
+                publication_date: intel.publication_date
+            }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
@@ -1469,9 +1640,9 @@ const WorkflowsService = {
     }
   },
 
-  // =========================================================================
+  // ====================================================================================================================
   //  第三层：统一证据验证 (WF8)
-  // =========================================================================
+  // ====================================================================================================================
   runWf8_EvidenceValidation: function() {
     const wfName = 'WF8: 统一证据验证';
     const startTime = new Date();
@@ -1587,22 +1758,22 @@ const WorkflowsService = {
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
-  // =========================================================================
+  // ====================================================================================================================
   //  第四层：深度分析工作流 (WF9 - WF11)
-  // =========================================================================
+  // ====================================================================================================================
   runWf9_CommercialValueAnalysis: function() { return { success: false, message: "WF9 功能尚未实现。", log: "WF9 功能尚未实现。" }; },
   runWf10_CompetitiveIntelAnalysis: function() { return { success: false, message: "WF10 功能尚未实现。", log: "WF10 功能尚未实现。" }; },
   runWf11_TechnicalDeepAnalysis: function() { return { success: false, message: "WF11 功能尚未实现。", log: "WF11 功能尚未实现。" }; },
 
-  // =========================================================================
+  // ====================================================================================================================
   //  第五层：决策支撑工作流 (WF12 - WF13)
-  // =========================================================================
+  // ====================================================================================================================
   runWf12_IntelligenceIntegration: function() { return { success: false, message: "WF12 功能尚未实现。", log: "WF12 功能尚未实现。" }; },
   runWf13_ReportGeneration: function() { return { success: false, message: "WF13 功能尚未实现。", log: "WF13 功能尚未实现。" }; },
 
-  // =========================================================================
+  // ====================================================================================================================
   //  第六层：监控维护工作流 (WF14 - WF15)
-  // =========================================================================
+  // ====================================================================================================================
   runWf14_DataQualityMonitor: function() { return { success: false, message: "WF14 功能尚未实现。", log: "WF14 功能尚未实现。" }; },
   runWf15_SystemHealthCheck: function() { return { success: false, message: "WF15 功能尚未实现。", log: "WF15 功能尚未实现。" }; },
 };

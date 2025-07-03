@@ -298,7 +298,8 @@
                 resolve(parsedRes);
             }
           })
-          .withFailureHandler(reject)
+          // ✅ 修复：显式包装 reject 函数，避免潜在的解析问题
+          .withFailureHandler(err => reject(err))
           .callApi(svc, mtd, args);
       });
 },
@@ -314,15 +315,85 @@
         const totalItems = App.allModalData.length;
         const totalPages = Math.ceil(totalItems / App.itemsPerPage);
         const pageData = App.allModalData.slice((App.currentPage - 1) * App.itemsPerPage, App.currentPage * App.itemsPerPage);
+
+        let theadHTML = '';
+        let tbodyHTML = '';
+
+        // **新增：为 'historyDetail' 类型（用于洞察详情）的自定义渲染**
+        if (App.currentDetailType === 'historyDetail' && pageData.length > 0 && pageData[0].key === 'Intelligence Id') { // 检查是否存在特定键，表明这是洞察详情
+            const insightDetail = pageData; // pageData 已包含洞察的键值对
+            let evidenceChainHtml = '';
+            const evidenceChainEntry = insightDetail.find(item => item.key === 'Evidence Chain');
+
+            if (evidenceChainEntry && Array.isArray(evidenceChainEntry.value) && evidenceChainEntry.value.length > 0) {
+                evidenceChainHtml = `
+                    <div class="mt-6 border-t pt-4">
+                        <h4 class="font-semibold text-lg mb-3 text-gray-800">证据链 (Evidence Chain)</h4>
+                        <div class="space-y-3">
+                            ${evidenceChainEntry.value.map(evidence => `
+                                <div class="bg-gray-100 p-3 rounded-md border border-gray-200">
+                                    <p class="text-sm font-medium text-gray-700">来源类型: <span class="font-normal">${evidence.source_type || 'N/A'}</span></p>
+                                    <p class="text-sm font-medium text-gray-700">标题: <a href="${evidence.source_url || '#'}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${evidence.title || 'N/A'}</a></p>
+                                    <p class="text-xs text-gray-500">原始ID: ${evidence.id || 'N/A'}</p>
+                                    ${evidence.publication_date ? `<p class="text-xs text-gray-500">发布日期: ${new Date(evidence.publication_date).toISOString().split('T')[0]}</p>` : ''}
+                                    ${evidence.last_update_timestamp ? `<p class="text-xs text-gray-500">更新日期: ${new Date(evidence.last_update_timestamp).toISOString().split('T')[0]}</p>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 将主要洞察详情渲染为键值对
+            theadHTML = `<thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">属性</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">值</th></tr></thead>`;
+            tbodyHTML = `
+                <tbody class="bg-white divide-y divide-gray-200">
+                    ${insightDetail.map(item => {
+                        // 将 evidence_chain 从主表中排除，因为它将单独渲染
+                        if (item.key === 'Evidence Chain') return '';
+                        let displayValue = item.value;
+                        // 格式化日期对象或 ISO 字符串以获得更好的显示效果
+                        if (typeof item.value === 'string' && (item.value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/) || item.value.match(/^\d{4}-\d{2}-\d{2}$/))) {
+                            try {
+                                const d = new Date(item.value);
+                                if (!isNaN(d.getTime())) {
+                                    displayValue = d.toLocaleString(); // 使用本地化日期/时间
+                                }
+                            } catch (e) { /* 忽略 */ }
+                        } else if (typeof item.value === 'object' && item.value instanceof Date) {
+                            displayValue = item.value.toLocaleString();
+                        } else if (Array.isArray(item.value)) {
+                            displayValue = item.value.join(', '); // 连接数组值以供显示
+                        } else if (typeof item.value === 'object' && item.value !== null) {
+                            displayValue = JSON.stringify(item.value, null, 2); // 字符串化其他对象
+                        }
+
+                        return `
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" data-label="${item.key}">${item.key}</td>
+                                <td class="px-6 py-4 text-sm text-gray-800 break-all" data-label="值">${displayValue}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            `;
+            // 对于洞察详情，表格内容将后跟证据链 HTML
+            table.innerHTML = theadHTML + tbodyHTML;
+            document.querySelector('#detailModal .p-6.overflow-y-auto').insertAdjacentHTML('beforeend', evidenceChainHtml); // 在表格后插入证据链
+            footer.style.display = 'none'; // 单个洞察详情无需分页
+            return;
+        }
+          // **自定义渲染结束**
+
         const displayFields = FIELD_CONFIG[App.currentDetailType] || FIELD_CONFIG._default || [];
-        const theadHTML = `<thead class="bg-gray-50"><tr>${
+        theadHTML = `<thead class="bg-gray-50"><tr>${
             displayFields.map(f => {
                 const style = f.width ? `style="width: ${f.width};"` : '';
                 return `<th ${style} class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">${f.label}</th>`;
             }).join('')
         }</tr></thead>`;
         
-        const tbodyHTML = `<tbody class="bg-white divide-y divide-gray-200">${
+        tbodyHTML = `<tbody class="bg-white divide-y divide-gray-200">${
             pageData.map(item => `<tr>${
                 displayFields.map(f => {
                     const rawValue = item[f.key];
@@ -424,10 +495,13 @@
       const trendChartDom = document.getElementById('trend-chart-container');
       const keywordChartDom = document.getElementById('keyword-cloud-container');
       const hypeCycleDom = document.getElementById('hype-cycle-chart-container');
+      // **新增：知识图谱容器**
+      const knowledgeGraphChartDom = document.getElementById('knowledge-graph-container'); 
 
       console.log('trendChartDom:', trendChartDom);
       console.log('keywordChartDom:', keywordChartDom);
-      console.log('hypeCycleDom:', hypeCycleDom); // ‼️ 我们要看这一行的输出
+      console.log('hypeCycleDom:', hypeCycleDom);
+      console.log('knowledgeGraphChartDom:', knowledgeGraphChartDom); // 打印新图表容器
 
       const modal = document.getElementById('detailModal');
       modal.querySelector('.close-button').addEventListener('click', this.ui.hideDetailModal);
@@ -1178,6 +1252,7 @@
         trendChart: null,
         keywordChart: null,
         hypeCycleChart: null, // 为新图表增加实例存储
+        knowledgeGraphChart: null, // **新增：知识图谱实例存储**
         
         // init 函数现在变得非常简洁，只负责绑定一次性的事件监听器
         init: function() {
@@ -1189,6 +1264,7 @@
               if (this.trendChart && !this.trendChart.isDisposed()) this.trendChart.resize();
               if (this.keywordChart && !this.keywordChart.isDisposed()) this.keywordChart.resize();
               if (this.hypeCycleChart && !this.hypeCycleChart.isDisposed()) this.hypeCycleChart.resize();
+              if (this.knowledgeGraphChart && !this.knowledgeGraphChart.isDisposed()) this.knowledgeGraphChart.resize(); // **新增**
             });
             this.isInitialized = true;
           }
@@ -1203,6 +1279,7 @@
           const trendChartDom = document.getElementById('trend-chart-container');
           const keywordChartDom = document.getElementById('keyword-cloud-container');
           const hypeCycleDom = document.getElementById('hype-cycle-chart-container');
+          const knowledgeGraphChartDom = document.getElementById('knowledge-graph-container'); // **新增**
 
           if (trendChartDom && !this.trendChart) {
               this.trendChart = echarts.init(trendChartDom);
@@ -1213,16 +1290,22 @@
           if (hypeCycleDom && !this.hypeCycleChart) {
               this.hypeCycleChart = echarts.init(hypeCycleDom);
           }
+          if (knowledgeGraphChartDom && !this.knowledgeGraphChart) { // **新增**
+              this.knowledgeGraphChart = echarts.init(knowledgeGraphChartDom);
+          }
 
           // 步骤 2: 显示加载动画
           if (this.trendChart) this.trendChart.showLoading({ text: '正在加载数据...', color: '#007bff' });
           if (this.keywordChart) this.keywordChart.showLoading({ text: '正在加载数据...', color: '#007bff' });
           document.querySelector('#page-insights table tbody').innerHTML = `<tr><td colspan="5" class="text-center py-8">正在加载最新线索...</td></tr>`;
           if (this.hypeCycleChart) this.hypeCycleChart.showLoading({ text: '正在加载数据...', color: '#007bff' });
+          if (this.knowledgeGraphChart) this.knowledgeGraphChart.showLoading({ text: '正在加载数据...', color: '#007bff' }); // **新增**
 
           try {
             // 步骤 3: 核心：一次性调用聚合接口，获取所有数据
             const pageData = await App.callApi('InsightsService', 'getInsightsPageData');
+            const knowledgeGraphData = await App.callApi('InsightsService', 'getKnowledgeGraphData'); // **新增 API 调用**
+
             // 渲染趋势图
             if (this.trendChart) {
               this.trendChart.hideLoading();
@@ -1302,6 +1385,8 @@
                                     key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // 格式化 key，例如 'intelligence_id' -> 'Intelligence Id'
                                     value: value != null ? value : 'N/A' // 处理 null 或 undefined 值
                                 }));
+                                // 清除之前模态框内容，以确保只显示当前洞察的详情
+                                document.querySelector('#detailModal .p-6.overflow-y-auto').innerHTML = '';
                                 App.ui.showDetailListModal(`洞察详情: ${insight.title}`, 'all'); // 调用统一的模态框显示函数
                             } else {
                                 alert('未找到该洞察的详细信息。');
@@ -1394,12 +1479,74 @@
               }
             }
 
+            // **新增：渲染知识图谱**
+            if (this.knowledgeGraphChart) {
+              this.knowledgeGraphChart.hideLoading();
+              if (!knowledgeGraphData || !knowledgeGraphData.nodes || knowledgeGraphData.nodes.length === 0) {
+                const chartContainer = document.getElementById('knowledge-graph-container');
+                this.knowledgeGraphChart.clear();
+                chartContainer.innerHTML = `<div class="flex items-center justify-center h-full text-gray-500">暂无知识图谱数据。</div>`;
+              } else {
+                const option = {
+                  tooltip: {
+                    formatter: function (params) {
+                      if (params.dataType === 'node') {
+                        return `<b>${params.name}</b><br/>类型: ${params.data.category}<br/>关联度: ${params.data.value}`;
+                      } else if (params.dataType === 'edge') {
+                        return `<b>${params.data.source}</b> <-> <b>${params.data.target}</b><br/>共同提及: ${params.data.value} 次`;
+                      }
+                      return '';
+                    }
+                  },
+                  series: [
+                    {
+                      type: 'graph',
+                      layout: 'force', // 力导向布局
+                      force: {
+                        repulsion: 100, // 节点间斥力
+                        edgeLength: 10, // 边的长度
+                        gravity: 0.05, // 向中心引力
+                        friction: 0.8 // 动画摩擦系数
+                      },
+                      roam: true, // 启用缩放和平移
+                      draggable: true, // 启用节点拖拽
+                      categories: [ // 为节点定义类别
+                        { name: '技术领域', itemStyle: { color: '#007bff' } },
+                        { name: '竞争对手', itemStyle: { color: '#dc3545' } },
+                        { name: '关键词', itemStyle: { color: '#ffc107' } },
+                        // 根据需要添加更多类别
+                      ],
+                      label: {
+                        show: true,
+                        position: 'right',
+                        formatter: '{b}' // 显示节点名称
+                      },
+                      lineStyle: {
+                        color: 'source',
+                        curveness: 0.3
+                      },
+                      emphasis: {
+                        focus: 'adjacency', // 突出显示连接的节点/边
+                        lineStyle: {
+                          width: 5
+                        }
+                      },
+                      data: knowledgeGraphData.nodes,
+                      links: knowledgeGraphData.edges
+                    }
+                  ]
+                };
+                this.knowledgeGraphChart.setOption(option, true);
+              }
+            }
+
           } catch(error) { // 捕获聚合函数本身的错误
             handleFailure(error);
             // 如果出错，隐藏加载动画
             if (this.trendChart) this.trendChart.hideLoading();
             if (this.keywordChart) this.keywordChart.hideLoading();
             if (this.hypeCycleChart) this.hypeCycleChart.hideLoading();
+            if (this.knowledgeGraphChart) this.knowledgeGraphChart.hideLoading();
           }
         }
       },
@@ -1510,7 +1657,7 @@
               htmlContent += `
                 <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                   <div class="flex justify-between items-center mb-2">
-                    <div class="font-medium text-gray-900">${task.report_title_template} (${task.report_type})</div>
+                    <div class="font-medium text-gray-900">${task.report_title_template} (${task.report_type})\u003c/div>
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
                       ${task.last_run_status || '未知'}
                     </span>
