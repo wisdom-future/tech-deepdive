@@ -129,6 +129,87 @@ const InsightsService = {
       return { error: `获取智能分析页面数据时发生严重错误: ${e.message}` };
     }
   },
+
+  getLatestInsightsPaged: function(page = 1, limit = 10) {
+    try {
+        Logger.log(`DEBUG: InsightsService.getLatestInsightsPaged - 获取第 ${page} 页，每页 ${limit} 条记录。`);
+
+        // 从 Firestore 获取所有洞察（这里仍然是全量，如果数据量巨大，需要更精细的后端分页）
+        // 更好的做法是让 DataService.getDataAsObjects 支持分页查询，
+        // 但为了简化，我们先在 Apps Script 内存中进行分页
+        const allInsights = DataService.getDataAsObjects('TECH_INSIGHTS_MASTER') || [];
+
+        // 排序：按创建时间倒序
+        allInsights.sort((a, b) => {
+            const dateA = a.created_timestamp ? new Date(a.created_timestamp) : 0;
+            const dateB = b.created_timestamp ? new Date(b.created_timestamp) : 0;
+            return dateB - dateA;
+        });
+
+        const totalRecords = allInsights.length;
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+
+        const recordsOnPage = allInsights.slice(startIndex, endIndex).map(item => {
+            const statusMap = {
+                'decision_completed': { text: '已完成', classes: 'bg-green-100 text-green-800' },
+                'analyzing': { text: '分析中', classes: 'bg-blue-100 text-blue-800' },
+                'signal_identified': { text: '待处理', classes: 'bg-yellow-100 text-yellow-800' },
+                'published': { text: '已发布', classes: 'bg-purple-100 text-purple-800' },
+                'default': { text: '未知', classes: 'bg-gray-100 text-gray-800' }
+            };
+            const statusKey = (item.processing_status || 'default').toLowerCase();
+            const statusInfo = statusMap[statusKey] || statusMap['default'];
+            const statusText = statusInfo.text === '未知' ? item.processing_status : statusInfo.text;
+
+            return {
+                id: item.intelligence_id,
+                title: item.title,
+                source: item.trigger_source || item.source_table || '未知来源',
+                date: _formatDateForInsights(item.created_timestamp),
+                status: statusText,
+                statusClasses: statusInfo.classes, // 返回 class 方便前端渲染
+                detail: item // 仍然传递整个对象用于详情模态框
+            };
+        });
+
+        Logger.log(`DEBUG: InsightsService.getLatestInsightsPaged - 返回 ${recordsOnPage.length} 条记录，总计 ${totalRecords} 条。`);
+        return { records: recordsOnPage, totalRecords: totalRecords };
+
+    } catch (e) {
+        Logger.log(`!!! ERROR in InsightsService.getLatestInsightsPaged: ${e.message}\n${e.stack}`);
+        throw new Error(`获取最新洞察线索失败: ${e.message}`);
+    }
+  },
+
+  /**
+   * 根据 intelligence_id 获取单个洞察的完整详细信息。
+   * @param {string} intelligenceId - 要获取的洞察的 ID。
+   * @returns {object|null} 洞察的详细数据对象，如果未找到则返回 null。
+   */
+  getInsightDetail: function(intelligenceId) {
+    try {
+      Logger.log(`DEBUG: InsightsService.getInsightDetail - 正在获取洞察ID: ${intelligenceId}`);
+      // 直接从 Firestore 的 TECH_INSIGHTS_MASTER 集合中获取文档
+      const insight = FirestoreService.getDocument(`tech_intelligence_master/${intelligenceId}`);
+
+      if (!insight) {
+        Logger.log(`INFO: 未找到洞察 ID: ${intelligenceId}`);
+        return null;
+      }
+
+      // 如果需要对日期或其他复杂类型进行预处理，可以在这里进行
+      // 例如：insight.created_timestamp = insight.created_timestamp instanceof Date ? insight.created_timestamp.toISOString() : insight.created_timestamp;
+      // 但由于 FirestoreService.gs 已经处理了 Date 对象的转换，这里通常不需要额外处理
+      Logger.log(`DEBUG: 成功获取洞察详情: ${JSON.stringify(insight.title || insight.id)}`);
+      return insight;
+
+    } catch (e) {
+      Logger.log(`!!! ERROR in InsightsService.getInsightDetail: ${e.message}\n${e.stack}`);
+      throw new Error(`获取洞察详情失败: ${e.message}`);
+    }
+  },
+
   /**
    * 获取知识图谱所需的数据 (节点和边)。
    * 节点可以是技术关键词、公司名等，边表示它们在洞察中共同出现的频率。

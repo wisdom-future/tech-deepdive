@@ -1,14 +1,20 @@
-// 文件名: backend/FirestoreService.gs (最终完整、无省略版)
+// 文件名: backend/FirestoreService.gs
 
 /**
  * @file Firestore 数据访问服务 (手动JWT认证模式)
- * @version 5.0 - 最终稳定版
+ * @version 5.2 - 优化调试日志版 (针对大数组和embedding字段)
  * 通过手动创建和签名JWT来获取OAuth令牌，绕过部署时的权限验证问题，
  * 并确保在服务器端执行时能忽略Firestore安全规则。
  * 包含了所有必需的 CRUD (创建、读取、更新、删除) 辅助函数。
  */
 const FirestoreService = {
   
+  // 添加一个唯一的初始化标志，方便调试
+  _initialized: (function() {
+    Logger.log("[DEBUG_FS_INIT] FirestoreService initialized.");
+    return true;
+  })(),
+
   authToken: null,
   tokenExpiration: 0,
   projectId: null,
@@ -20,6 +26,7 @@ const FirestoreService = {
   _getAuthToken: function() {
     const now = Math.floor(Date.now() / 1000);
     if (this.authToken && this.tokenExpiration > now + 60) {
+      Logger.log("使用缓存的Firestore访问令牌。");
       return this.authToken;
     }
 
@@ -79,7 +86,6 @@ const FirestoreService = {
   /**
    * 封装的底层 API 请求函数
    */
-  // ✅ 核心修正：让 _request 函数能够处理完整的 URL
   _request: function(url, method = 'GET', payload = null) {
     const options = {
       method: method.toLowerCase(),
@@ -101,7 +107,7 @@ const FirestoreService = {
   },
 
   /**
-   * ✅ 关键修正：确保 _wrapFields 的 this 指向正确
+   * 调试版本：_wrapFields
    */
   _wrapFields: function(obj) {
       const fields = {};
@@ -117,9 +123,8 @@ const FirestoreService = {
               else if (value instanceof Date) fields[key] = { timestampValue: value.toISOString() };
               else if (value === null || value === undefined) fields[key] = { nullValue: null };
               else if (Array.isArray(value)) {
-                  // ✅ 确保这里递归调用时，也使用正确的 this
                   fields[key] = { arrayValue: { values: value.map(v => {
-                      const wrappedValue = FirestoreService._wrapFields({ temp: v }); // 使用 FirestoreService 而不是 this
+                      const wrappedValue = FirestoreService._wrapFields({ temp: v });
                       return wrappedValue.fields.temp;
                   })} };
               }
@@ -130,49 +135,133 @@ const FirestoreService = {
   },
 
   /**
-   * ✅ 关键修正：确保 _unwrapFields 的 this 指向正确
+   * 调试版本：_unwrapFields (包含详细日志，并优化大数组日志输出)
    */
   _unwrapFields: function(firestoreDoc) {
-      if (!firestoreDoc) return null;
-      
-      const obj = {};
-      
-      if (firestoreDoc.fields) {
-        for (const key in firestoreDoc.fields) {
-            const valueWrapper = firestoreDoc.fields[key];
-            const valueType = Object.keys(valueWrapper)[0];
-            
-            if (valueType) {
-                if (valueType === 'timestampValue') {
-                  obj[key] = new Date(valueWrapper[valueType]);
-                } else if (valueType === 'nullValue') {
-                  obj[key] = null;
-                } else if (valueType === 'arrayValue') {
-                  // ✅ 确保这里递归调用时，也使用正确的 this
-                  obj[key] = valueWrapper.arrayValue.values ? valueWrapper.arrayValue.values.map(v => FirestoreService._unwrapFields({fields: {temp: v}}).temp) : [];
-                } else if (valueType === 'mapValue') {
-                  // ✅ 确保这里递归调用时，也使用正确的 this
-                  obj[key] = FirestoreService._unwrapFields(valueWrapper.mapValue);
-                } else {
-                  obj[key] = valueWrapper[valueType];
-                }
-            }
-        }
+      // Logger.log("--- DEBUG_UNWRAP_FIELDS_START ---");
+      // 注意: Input to _unwrapFields 的完整 JSON 可能会非常大，酌情注释掉
+      // Logger.log("Input to _unwrapFields (raw firestoreDoc): " + JSON.stringify(firestoreDoc, null, 2));
+
+      if (!firestoreDoc || !firestoreDoc.fields) {
+          Logger.log("WARNING: firestoreDoc or firestoreDoc.fields is null/undefined/empty. Returning empty object.");
+          Logger.log("--- DEBUG_UNWRAP_FIELDS_END ---");
+          return {};
       }
-      
+
+      const obj = {};
+      // Logger.log("Iterating through firestoreDoc.fields:");
+
+      for (const key in firestoreDoc.fields) {
+          const valueWrapper = firestoreDoc.fields[key];
+          // Logger.log(`  Processing key: '${key}'`);
+          
+          // --- 优化：针对 embedding 字段的日志输出 ---
+          if (key === 'embedding' && valueWrapper.arrayValue !== undefined) {
+              const arrayLength = valueWrapper.arrayValue.values ? valueWrapper.arrayValue.values.length : 0;
+              // Logger.log(`    Value wrapper for 'embedding': (array of ${arrayLength} doubleValues, full log suppressed)`);
+          } else {
+              // 其他字段正常打印 valueWrapper
+              // Logger.log(`    Value wrapper for '${key}': ${JSON.stringify(valueWrapper)}`);
+          }
+          // --- 优化结束 ---
+
+          const unwrappedValue = FirestoreService._unwrapSingleValue(valueWrapper);
+          obj[key] = unwrappedValue;
+      }
+
+      // 处理文档元数据
       if (firestoreDoc.name) {
-        obj.id = firestoreDoc.name.split('/').pop();
+          obj.id = firestoreDoc.name.split('/').pop();
+          // Logger.log(`  Metadata: Extracted id: '${obj.id}'`);
       }
       if (firestoreDoc.createTime) {
-        obj.createTime = new Date(firestoreDoc.createTime);
+          obj.createTime = new Date(firestoreDoc.createTime);
+          // Logger.log(`  Metadata: Extracted createTime: '${obj.createTime.toISOString()}'`);
       }
       if (firestoreDoc.updateTime) {
-        obj.updateTime = new Date(firestoreDoc.updateTime);
+          obj.updateTime = new Date(firestoreDoc.updateTime);
+          // Logger.log(`  Metadata: Extracted updateTime: '${obj.updateTime.toISOString()}'`);
       }
-      
+
+      // 注意: Final unwrapped object for document 的完整 JSON 可能会非常大，酌情注释掉
+      // Logger.log("Final unwrapped object for document:");
+      // Logger.log(JSON.stringify(obj, null, 2));
+      // Logger.log("--- DEBUG_UNWRAP_FIELDS_END ---");
       return obj;
   },
 
+  /**
+   * 调试版本 _unwrapSingleValue: (包含详细日志，并优化大数组日志输出)
+   */
+  _unwrapSingleValue: function(valueWrapper) {
+      // Logger.log("  --- DEBUG_UNWRAP_SINGLE_VALUE_START ---");
+      // 注意: Input to _unwrapSingleValue 的完整 JSON 可能会非常大，酌情注释掉
+      // Logger.log(`  Input to _unwrapSingleValue: ${JSON.stringify(valueWrapper)}`);
+
+      if (valueWrapper === undefined || valueWrapper === null) {
+          Logger.log("  Value wrapper is undefined or null. Returning null.");
+          Logger.log("  --- DEBUG_UNWRAP_SINGLE_VALUE_END ---");
+          return null;
+      }
+
+      let result;
+
+      if (valueWrapper.stringValue !== undefined) {
+          result = valueWrapper.stringValue;
+          // Logger.log(`  Detected type: stringValue. Value: '${result}'`);
+      } else if (valueWrapper.booleanValue !== undefined) {
+          result = valueWrapper.booleanValue;
+          // Logger.log(`  Detected type: booleanValue. Value: ${result}`);
+      } else if (valueWrapper.integerValue !== undefined) {
+          result = parseInt(valueWrapper.integerValue, 10);
+          // Logger.log(`  Detected type: integerValue. Value: ${result}`);
+      } else if (valueWrapper.doubleValue !== undefined) {
+          result = parseFloat(valueWrapper.doubleValue);
+          // Logger.log(`  Detected type: doubleValue. Value: ${result}`);
+      } else if (valueWrapper.timestampValue !== undefined) {
+          result = new Date(valueWrapper.timestampValue);
+          // Logger.log(`  Detected type: timestampValue. Value: '${result.toISOString()}'`);
+      } else if (valueWrapper.nullValue !== undefined) {
+          result = null;
+          // Logger.log(`  Detected type: nullValue. Value: null`);
+      } else if (valueWrapper.arrayValue !== undefined) {
+          // Logger.log("  Detected type: arrayValue. Recursively unwrapping array elements.");
+          result = valueWrapper.arrayValue.values ?
+              valueWrapper.arrayValue.values.map(v => FirestoreService._unwrapSingleValue(v)) : [];
+          
+          // --- 优化：截断大数组的日志输出 ---
+          const maxArrayLogLength = 10; // 只显示数组的前10个元素
+          const logResult = result.length > maxArrayLogLength 
+                            ? JSON.stringify(result.slice(0, maxArrayLogLength)) + `... (total ${result.length} elements)`
+                            : JSON.stringify(result);
+          // Logger.log(`  Unwrapped array result: ${logResult}`);
+          // --- 优化结束 ---
+
+      } else if (valueWrapper.mapValue !== undefined) {
+          // Logger.log("  Detected type: mapValue. Recursively unwrapping map.");
+          result = FirestoreService._unwrapFields(valueWrapper.mapValue);
+          // 注意: 嵌套的 mapValue 可能会再次产生大量日志，这里不进行额外截断，让 _unwrapFields 自己处理
+          // Logger.log(`  Unwrapped map result: ${JSON.stringify(result)}`);
+      } else if (valueWrapper.geoPointValue !== undefined) {
+          result = {
+              latitude: valueWrapper.geoPointValue.latitude,
+              longitude: valueWrapper.geoPointValue.longitude
+          };
+          // Logger.log(`  Detected type: geoPointValue. Value: ${JSON.stringify(result)}`);
+      } else if (valueWrapper.referenceValue !== undefined) {
+          result = valueWrapper.referenceValue;
+          // Logger.log(`  Detected type: referenceValue. Value: '${result}'`);
+      } else {
+          // Logger.log(`  WARNING: _unwrapSingleValue encountered unknown or unhandled Firestore value type. Raw wrapper: ${JSON.stringify(valueWrapper)}`);
+          result = undefined;
+      }
+
+      // 注意: Result from _unwrapSingleValue 的完整 JSON 可能会非常大，酌情注释掉
+      // Logger.log(`  Result from _unwrapSingleValue: ${JSON.stringify(result)}`);
+      // Logger.log("  --- DEBUG_UNWRAP_SINGLE_VALUE_END ---");
+      return result;
+  },
+  
   /**
    * 查询一个集合的所有文档
    */
@@ -181,7 +270,6 @@ const FirestoreService = {
     const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents/${collectionName}`;
     const response = this._request(url);
     if (response && Array.isArray(response.documents)) {
-      // ✅ 确保这里调用时，_unwrapFields 的 this 指向正确
       return response.documents.map(doc => FirestoreService._unwrapFields(doc)).filter(Boolean);
     }
     return [];
@@ -189,8 +277,6 @@ const FirestoreService = {
 
   /**
    * 获取单个文档
-   * @param {string} path - 文档的完整路径 (e.g., 'collectionName/documentId')
-   * @returns {object|null} 文档数据，如果不存在则返回 null
    */
   getDocument: function(path) {
     if (!this.projectId) { this._getAuthToken(); }
@@ -208,63 +294,100 @@ const FirestoreService = {
     }
   },
 
-  /**
-   * 更新一个文档
-   * @param {string} path - 文档的完整路径 (e.g., 'collectionName/documentId')
-   * @param {object} data - 要更新的字段和值
-   * @returns {object} 更新后的文档对象
-   */
-  updateDocument: function(path, data) {
+/**
+ * 更新一个文档
+ * @param {string} path - 文档的完整路径 (e.g., 'collectionName/documentId')
+ * @param {object} data - 要更新的字段和值 (只包含要修改的字段)
+ * @returns {object} 更新后的文档对象
+ */
+updateDocument: function(path, data) {
+  if (!this.projectId) { this._getAuthToken(); }
+  const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents/${path}`;
+  const payload = this._wrapFields(data); // data 包含了要更新的字段和值
+
+  // --- 关键修改：为 PATCH 请求添加 updateMask ---
+  const updateMask = Object.keys(data).map(key => ({ fieldPath: key }));
+  const requestUrl = `${url}?updateMask.fieldPaths=${updateMask.map(mask => encodeURIComponent(mask.fieldPath)).join('&updateMask.fieldPaths=')}`;
+  // ************************************************
+
+  const response = this._request(requestUrl, 'PATCH', payload); // 使用包含 updateMask 的 URL
+  return response ? FirestoreService._unwrapFields(response) : null;
+},
+
+
+  deleteDocument: function(path) {
     if (!this.projectId) { this._getAuthToken(); }
     const url = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents/${path}`;
-    const payload = this._wrapFields(data);
-    
-    // Firestore 的 PATCH 方法要求路径中不能有未编码的字符
-    // path 已经包含了 collectionName/documentId，这里不需要再拼接
-    const response = this._request(url, 'PATCH', payload);
-    return response ? FirestoreService._unwrapFields(response) : null;
+    try {
+      this._request(url, 'DELETE');
+      Logger.log(`成功删除文档: ${path}`);
+    } catch (e) {
+      Logger.log(`删除文档失败 ${path}: ${e.message}`);
+      throw e;
+    }
   },
 
   /**
-   * ✅ 新增方法：删除集合中的所有文档
-   * 警告：此操作会永久删除集合中的所有数据。
-   * Apps Script 的执行时间限制可能导致删除大型集合失败。
-   * @param {string} collectionName - 要删除的集合名称。
+   * 批量删除集合中的所有文档
    */
   deleteCollection: function(collectionName) {
-    Logger.log(`[FirestoreService] 开始清空集合: ${collectionName}`);
-    const firestore = this._getFirestoreInstance(); // 确保获取实例
-    const batchSize = 200; // Firestore 每次批量删除的文档数量限制
+    // 独有的日志标记，用于确认正在运行此版本
+    Logger.log(`[DELETE_COLLECTION_V2.0_START] Attempting to clear collection: ${collectionName}`);
 
+    // 减小批次大小以应对 "Transaction too big" 错误
+    const batchSize = 50; // 从 200 减小到 50，如果还不行可以尝试 20 或更小
     let deletedCount = 0;
-    while (true) {
-      // 获取一批文档的名称
-      const documents = firestore.query(collectionName).select(['__name__']).limit(batchSize).run();
 
-      if (documents.length === 0) {
-        break; // 集合已清空
+    if (!this.projectId) { this._getAuthToken(); }
+
+    while (true) {
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents:runQuery`;
+      const queryPayload = {
+        structuredQuery: {
+          from: [{ collectionId: collectionName }],
+          select: {
+            fields: [
+              { fieldPath: '__name__' }
+            ]
+          },
+          limit: batchSize
+        }
+      };
+      
+      let queryResponse;
+      try {
+        queryResponse = this._request(queryUrl, 'POST', queryPayload);
+      } catch (e) {
+        Logger.log(`ERROR querying documents for deletion in ${collectionName}: ${e.message}`);
+        throw e;
       }
 
-      const writes = documents.map(doc => {
-        // 构建删除操作
-        return {
-          delete: {
-            name: doc.name // doc.name 是完整的文档路径
-          }
-        };
-      });
+      const documentsToDelete = queryResponse
+        .filter(item => item.document)
+        .map(item => item.document.name);
 
-      // 执行批量删除
+      if (documentsToDelete.length === 0) {
+        break; 
+      }
+
+      const writes = documentsToDelete.map(docName => ({
+        delete: docName
+      }));
+
       const commitUrl = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents:commit`;
-      this._request(commitUrl, 'POST', { writes: writes });
+      try {
+        this._request(commitUrl, 'POST', { writes: writes });
+      } catch (e) {
+        Logger.log(`ERROR committing batch delete in ${collectionName}: ${e.message}`);
+        throw e;
+      }
       
-      deletedCount += documents.length;
+      deletedCount += documentsToDelete.length;
       Logger.log(`  -> 已删除 ${deletedCount} 个文档。`);
 
-      // Firestore API 有速率限制，避免删除过快
       Utilities.sleep(1000); 
     }
-    Logger.log(`[FirestoreService] 集合 '${collectionName}' 已清空。总共删除了 ${deletedCount} 个文档。`);
+    Logger.log(`[DELETE_COLLECTION_V2.0_END] Collection '${collectionName}' cleared. Total deleted: ${deletedCount} documents.`);
   },
 
   /**
@@ -293,7 +416,6 @@ const FirestoreService = {
         return {
             update: {
                 name: `projects/${this.projectId}/databases/(default)/documents/${path}`,
-                // ✅ 确保这里调用时，_wrapFields 的 this 指向正确
                 fields: FirestoreService._wrapFields(dataToWrite).fields 
             },
             updateMask: {
@@ -310,6 +432,8 @@ const FirestoreService = {
     return writes.length;
   }
 };
+
+
 
 
 
@@ -376,4 +500,41 @@ function test_ManualJwtFirestoreService() {
   } finally {
     Logger.log("========== [结束] 手动JWT认证 FirestoreService 单元测试 ==========");
   }
+}
+
+function clearAcademicPapersCollection() {
+  const collectionName = CONFIG.FIRESTORE_COLLECTIONS.RAW_ACADEMIC_PAPERS; // 获取 RAW_ACADEMIC_PAPERS 集合的实际名称
+  Logger.log(`准备清空集合: ${collectionName}`);
+  try {
+    FirestoreService.deleteCollection(collectionName);
+    Logger.log(`集合 ${collectionName} 清空完成。`);
+  } catch (e) {
+    Logger.log(`清空集合 ${collectionName} 失败: ${e.message}`);
+  }
+}
+
+/**
+ * 这是一个测试函数，用于清空所有原始数据集合。
+ * !! 警告 !!：运行此函数将永久删除数据。请谨慎操作。
+ */
+function clearAllRawDataCollections() {
+  const rawDataCollections = [
+    CONFIG.FIRESTORE_COLLECTIONS.RAW_ACADEMIC_PAPERS,
+    CONFIG.FIRESTORE_COLLECTIONS.RAW_PATENT_DATA,
+    CONFIG.FIRESTORE_COLLECTIONS.RAW_OPENSOURCE_DATA,
+    CONFIG.FIRESTORE_COLLECTIONS.RAW_TECH_NEWS,
+    CONFIG.FIRESTORE_COLLECTIONS.RAW_INDUSTRY_DYNAMICS,
+    CONFIG.FIRESTORE_COLLECTIONS.RAW_COMPETITOR_INTELLIGENCE
+  ];
+
+  for (const colName of rawDataCollections) {
+    Logger.log(`尝试清空集合: ${colName}`);
+    try {
+      FirestoreService.deleteCollection(colName);
+      Logger.log(`集合 ${colName} 清空完成。`);
+    } catch (e) {
+      Logger.log(`清空集合 ${colName} 失败: ${e.message}`);
+    }
+  }
+  Logger.log("所有原始数据集合清空尝试完成。");
 }

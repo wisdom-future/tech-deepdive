@@ -95,6 +95,36 @@ const CollectionStatsService = {
       try { pageData.overallStats = computeCollectionStats(); } catch (e) { Logger.log(`计算 overallStats 失败: ${e.message}`); }
       
       Logger.log("DEBUG: getCollectionPageData - 所有数据获取尝试完成，准备返回。");
+
+       // *** 改为以下更精简的日志，只查看 academicPapers 的前几条和后几条 ***
+      Logger.log("DEBUG: 检查 RAW_ACADEMIC_PAPERS 解包后的关键字段:");
+      const academicPapers = pageData.techData.academicPapers || [];
+      const numToLog = 5; // 只打印前5条和后5条
+
+      // 打印前几条
+      for (let i = 0; i < Math.min(academicPapers.length, numToLog); i++) {
+          const doc = academicPapers[i];
+          Logger.log(`  [学术论文-${i}] ID: ${doc.id}`);
+          Logger.log(`    Title: "${doc.title}"`);
+          Logger.log(`    Authors: "${doc.authors}"`);
+          Logger.log(`    Publication Date: "${doc.publication_date}"`);
+          Logger.log(`    AI Innovation Score: "${doc.innovation_score_ai}"`);
+      }
+
+      // 如果总数超过需要打印的数量的两倍，则打印中间省略号和后几条
+      if (academicPapers.length > numToLog * 2) {
+          Logger.log("  ..."); // 表示中间有省略
+          for (let i = academicPapers.length - numToLog; i < academicPapers.length; i++) {
+              const doc = academicPapers[i];
+              Logger.log(`  [学术论文-${i}] ID: ${doc.id}`);
+              Logger.log(`    Title: "${doc.title}"`);
+              Logger.log(`    Authors: "${doc.authors}"`);
+              Logger.log(`    Publication Date: "${doc.publication_date}"`);
+              Logger.log(`    AI Innovation Score: "${doc.innovation_score_ai}"`);
+          }
+      }
+      // *******************************************************************
+
       return pageData;
 
     } catch(e) {

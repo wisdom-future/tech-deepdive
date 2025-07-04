@@ -5,18 +5,18 @@
 
     const FIELD_CONFIG = {
     _default: [
-      { key: 'title', label: '标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
-      { key: 'date', label: '日期', width: '15%' }, 
+      { key: 'title', label: '标题', needTrunc: true, linkField: 'sourceUrl', width: '30%' },
+      { key: 'date', label: '日期', width: '10%' }, 
       { key: 'infoA', label: '信息 A', width: '20%' },
-      { key: 'infoB', label: '信息 B', width: '15%' }, 
-      { key: 'id', label: 'ID', width: '10%' },
+      { key: 'infoB', label: '信息 B', width: '10%' }, 
+      { key: 'id', label: 'ID', width: '20%' },
     ],
     academicPapers: [
-      { key: 'title', label: '技术主题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
-      { key: 'infoA', label: '论文作者', needTrunc: true, width: '25%' }, 
+      { key: 'title', label: '技术主题', needTrunc: true, linkField: 'sourceUrl', width: '35%' },
+      { key: 'infoA', label: '论文作者', needTrunc: true, width: '20%' }, 
       { key: 'date', label: '发表日期', width: '15%' },
       { key: 'infoB', label: '相关性分', width: '10%' }, 
-      { key: 'id', label: '原始ID', needTrunc: true, width: '10%' },
+      { key: 'id', label: '原始ID', needTrunc: true, width: '20%' },
     ],
     patentData: [
       { key: 'title', label: '专利标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
@@ -40,9 +40,9 @@
       { key: 'id', label: 'ID', needTrunc: true, width: '10%' },
     ],
     industryDynamics: [
-      { key: 'title', label: '事件标题', needTrunc: true, linkField: 'sourceUrl', width: '40%' },
+      { key: 'title', label: '事件标题', needTrunc: true, linkField: 'sourceUrl', width: '35%' },
       { key: 'date', label: '事件日期', width: '15%' },
-      { key: 'infoA', label: '影响级别', width: '15%' },
+      { key: 'infoA', label: '影响级别', width: '20%' },
       { key: 'infoB', label: '状态', width: '15%' },
       { key: 'id', label: 'ID', needTrunc: true, width: '15%' },
     ],
@@ -65,7 +65,7 @@
       { key: 'date', label: '时间', width: '15%' },
       { key: 'infoA', label: '状态', width: '15%' },
       { key: 'infoB', label: '', width: '15%' },
-      { key: 'id', label: 'ID', needTrunc: true, width: '15%' },
+      { key: 'id', label: 'ID', needTrunc: true, width: '10%' },
     ],
     techDomain: [
         { key: 'title', label: '技术名称', width: '30%' }, 
@@ -94,49 +94,110 @@
     ]
   };
 
+  function formatDateForDisplay(dateString) {
+    if (!dateString) return 'N/A';
+    try {
+      const dateObj = new Date(dateString);
+      if (isNaN(dateObj.getTime())) {
+        return 'Invalid Date'; // 如果无法解析，返回错误信息
+      }
+      // 获取年、月、日
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0'); // 月份从0开始，所以+1
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (e) {
+      console.error("Error formatting date:", dateString, e);
+      return 'Format Error'; // 捕获异常，返回错误信息
+    }
+  }
+
   const DataAdapters = {
-        academicPapers: item => ({ id: item.raw_id, title: item.title, date: item.publication_date, infoA: item.authors, infoB: item.initial_relevance_score, sourceUrl: item.source_url }),
-    patentData: item => ({ id: item.patent_number, title: item.title, date: item.application_date, infoA: item.patent_number, infoB: item.processing_status, sourceUrl: item.source_url }),
-    openSourceData: item => ({ id: item.project_name, title: item.project_name, date: item.last_update_timestamp, infoA: item.tech_keywords, infoB: item.description, sourceUrl: item.source_url }),
-    techNews: item => ({ id: item.raw_id, title: item.news_title, date: item.publication_date, infoA: item.source_platform, infoB: item.news_summary, sourceUrl: item.source_url }),
-    industryDynamics: item => ({ 
-        id: item.raw_id, 
-        title: item.event_title, 
-        date: item.event_date, // 修正点
-        infoA: item.industry_impact_score, 
-        infoB: item.processing_status, 
-        sourceUrl: item.source_url 
+    // academicPapers 适配器 (RAW_ACADEMIC_PAPERS)
+    academicPapers: item => ({
+        id: item.id, // 使用原始数据中的 'id' 字段作为表格的 ID
+        title: item.title,
+        date: formatDateForDisplay(item.publication_date),
+        infoA: item.authors,
+        // ✅ 使用 AI 生成的字段来显示“相关性分”
+        infoB: item.innovation_score !== undefined && item.innovation_score !== null ? item.innovation_score : 'N/A',
+        sourceUrl: item.source_url
     }),
-    
-    techInnovation: item => ({ 
-        id: item.raw_id, 
-        title: item.intelligence_title, 
-        date: item.last_update_timestamp, 
-        infoA: item.processing_status, 
-        infoB: item.threat_level_score || 'N/A',
-        sourceUrl: item.source_url 
+    // patentData 适配器 (RAW_PATENT_DATA)
+    patentData: item => ({
+        id: item.id,
+        title: item.title,
+        date: formatDateForDisplay(item.application_date),
+        infoA: item.patent_number,
+        // ✅ 使用 AI 生成的字段
+        infoB: item.processing_status + ' | ' + (item.innovation_score_ai !== undefined && item.innovation_score_ai !== null ? item.innovation_score_ai : 'N/A'), // 示例：状态和 AI 创新分
+        sourceUrl: item.source_url
     }),
-    productRelease: item => ({ 
-        id: item.raw_id, 
-        title: item.intelligence_title, 
-        date: item.last_update_timestamp, 
-        infoA: item.processing_status, 
-        infoB: 'N/A',
-        sourceUrl: item.source_url 
+    // openSourceData 适配器 (RAW_OPENSOURCE_DATA)
+    openSourceData: item => ({
+        id: item.id,
+        title: item.project_name,
+        date: formatDateForDisplay(item.last_commit_date),
+        infoA: item.main_language,
+        // ✅ 使用 AI 生成的字段
+        infoB: `Stars: ${item.github_stars || 0} | AI潜力: ${item.project_potential_score_ai !== undefined && item.project_potential_score_ai !== null ? item.project_potential_score_ai : 'N/A'}`,
+        sourceUrl: item.source_url
     }),
-    talentFlow: item => ({ 
-        id: item.raw_id, 
-        title: item.intelligence_title, 
-        date: item.last_update_timestamp, 
-        infoA: item.processing_status, 
-        infoB: 'N/A',
-        sourceUrl: item.source_url 
+    // techNews 适配器 (RAW_TECH_NEWS)
+    techNews: item => ({
+        id: item.id,
+        title: item.news_title,
+        date: formatDateForDisplay(item.publication_date),
+        infoA: item.source_platform,
+        // ✅ 使用 AI 生成的字段
+        infoB: `AI影响: ${item.market_impact_score_ai !== undefined && item.market_impact_score_ai !== null ? item.market_impact_score_ai : 'N/A'}`,
+        sourceUrl: item.source_url
+    }),
+    // industryDynamics 适配器 (RAW_INDUSTRY_DYNAMICS)
+    industryDynamics: item => ({
+        id: item.id,
+        title: item.event_title,
+        date: formatDateForDisplay(item.publication_date),
+        // ✅ 使用 AI 生成的字段
+        infoA: `商业价值: ${item.commercial_value_score_ai !== undefined && item.commercial_value_score_ai !== null ? item.commercial_value_score_ai : 'N/A'}`,
+        infoB: item.processing_status,
+        sourceUrl: item.source_url
     }),
 
-    techDomain: item => ({ id: item.tech_id, title: item.tech_name, date: item.created_date, infoA: item.tech_category, infoB: item.monitoring_status, sourceUrl: null }),
-    industryBenchmark: item => ({ id: item.competitor_id, title: item.company_name, date: item.last_updated, infoA: item.industry_category, infoB: item.threat_level, sourceUrl: item.website_url }),
-    conference: item => ({ id: item.conference_id, title: item.conference_name, date: item.next_event_date, infoA: item.industry_focus, infoB: item.monitoring_status, sourceUrl: item.official_website })
-  };
+    // techInnovation, productRelease, talentFlow 适配器 (RAW_COMPETITOR_INTELLIGENCE)
+    // 这些类型的数据在 RAW_COMPETITOR_INTELLIGENCE 集合中，通过 intelligence_type 区分
+    techInnovation: item => ({
+        id: item.id,
+        title: item.intelligence_title,
+        date: formatDateForDisplay(item.publication_date),
+        infoA: item.competitor_name,
+        // ✅ 使用 AI 生成的字段
+        infoB: `威胁: ${item.threat_level_score !== undefined && item.threat_level_score !== null ? item.threat_level_score : 'N/A'}`,
+        sourceUrl: item.source_url
+    }),
+    productRelease: item => ({
+        id: item.id,
+        title: item.intelligence_title,
+        date: formatDateForDisplay(item.publication_date),
+        infoA: item.competitor_name,
+        // ✅ 使用 AI 生成的字段
+        infoB: `影响: ${item.business_impact_score !== undefined && item.business_impact_score !== null ? item.business_impact_score : 'N/A'}`,
+        sourceUrl: item.source_url
+    }),
+    talentFlow: item => ({
+        id: item.id,
+        title: item.intelligence_title,
+        date: formatDateForDisplay(item.publication_date),
+        infoA: item.competitor_name,
+        infoB: item.processing_status, // 如果没有特定 AI 字段，可以继续显示 processing_status
+        sourceUrl: item.source_url
+    }),
+
+    // techDomain, industryBenchmark, conference 适配器 (来自 Config 数据，保持不变)
+    techDomain: item => ({ id: item.tech_id, title: item.tech_name, date: formatDateForDisplay(item.created_date), infoA: item.tech_category, infoB: item.monitoring_status, sourceUrl: null }),
+    industryBenchmark: item => ({ id: item.competitor_id, title: item.company_name, date: formatDateForDisplay(item.last_updated), infoA: item.industry_category, infoB: item.threat_level, sourceUrl: item.website_url }),
+    conference: item => ({ id: item.conference_id, title: item.conference_name, date: formatDateForDisplay(item.next_event_date), infoA: item.industry_focus, infoB: item.monitoring_status, sourceUrl: item.official_website })
+};
 
   // ==================================================================
   //  SECTION 2: UTILITY FUNCTIONS
@@ -145,6 +206,35 @@
   function truncate(str, len = 40) { if (str == null) return ''; str = String(str); return str.length > len ? str.slice(0, len) + '...' : str; }
   function handleFailure(error) { const message = error.message || '发生未知错误'; console.error('全局错误处理器捕获到错误:', message, error); alert(`错误: ${message}`); }
   
+  function isRelatedToCompany(item, companyFilterName) {
+    // ✅ 核心修正：确保 companyFilterName 始终是一个字符串，再进行 trim().toLowerCase()
+    const actualFilterName = String(companyFilterName || '').trim(); // 如果是 null/undefined，转为 ""
+    
+    if (actualFilterName === '' || actualFilterName.toLowerCase() === '所有企业') {
+        return true; // 如果筛选条件为空或为“所有企业”，则所有项都通过
+    }
+
+    const filterLower = actualFilterName.toLowerCase();
+
+    // 检查 item.competitor_name 字段（通常用于竞争情报）
+    if (item.competitor_name && String(item.competitor_name).toLowerCase().includes(filterLower)) {
+        return true;
+    }
+
+    // 检查 item.related_companies 数组字段（通常用于产业动态）
+    if (Array.isArray(item.related_companies)) {
+        for (const company of item.related_companies) {
+            // 确保 company 也是字符串，再进行 toLowerCase()
+            if (String(company || '').toLowerCase().includes(filterLower)) {
+                return true;
+            }
+        }
+    }
+
+    return false; // 没有匹配到任何公司
+  }
+
+
   /**
    * ✅ 核心修改：重写 showHistoryDetailModal，让它使用主渲染引擎
    */
@@ -276,15 +366,16 @@
     reportsHistoryItemsPerPage: 15,
     reportsHistoryTotalPages: 1,
     reportsHistoryTotalRecords: 0,
+    // ✅ 新增：洞察线索分页相关状态
+    insightsCurrentPage: 1,
+    insightsItemsPerPage: 10, // 与后端默认值保持一致
+    insightsTotalPages: 1,
+    insightsTotalRecords: 0,
 
     callApi: function(svc, mtd, args = []) {
       return new Promise((resolve, reject) => {
         google.script.run
           .withSuccessHandler(res => {
-            // ✅ 核心诊断：在所有操作之前，打印最原始的返回结果
-            console.log(`RAW RESPONSE from [${svc}.${mtd}]:`, res);
-            console.log(`Type of raw response: ${typeof res}`);
-
             let parsedRes;
             
             // 检查返回的是否是字符串，并且看起来像JSON
@@ -319,111 +410,177 @@
     ui: {
       // ✅ 修改：为表格单元格添加 data-label 属性以支持移动端
       renderPagedKpiDetails: function() {
+        // ✅ 防御性检查：确保所有必需的DOM元素都存在
         const table = document.getElementById('detailTable');
         const footer = document.querySelector('#detailModal .modal-footer');
         const noData = document.getElementById('noDataMessage');
-        if (!App.allModalData || App.allModalData.length === 0) { 
-            table.innerHTML = ''; 
-            noData.style.display = 'block'; 
-            // ✅ 修复：在访问 style 属性前检查 footer 是否存在
-            if (footer) {
-                footer.style.display = 'none'; 
-            }
-            return; 
-        }
-        noData.style.display = 'none';
+        const modalBodyContent = document.querySelector('#detailModal .p-6.overflow-y-auto'); // 模态框内容区域
 
+        if (!table || !noData || !modalBodyContent || !footer) { // 检查所有关键元素，包括footer
+            console.error("ERROR: 模态框内部关键DOM元素缺失 (detailTable, noDataMessage, modalBodyContent, 或 modal-footer)。");
+            return; // 无法继续渲染
+        }
+
+        // 清除之前可能存在的旧内容和状态
+        table.innerHTML = '';
+        noData.style.display = 'none';
+        footer.style.display = 'none'; // 默认隐藏，稍后根据需要显示
+        // 移除之前可能添加的证据链部分
+        const existingEvidenceChainSection = modalBodyContent.querySelector('.evidence-chain-section');
+        if (existingEvidenceChainSection) {
+            existingEvidenceChainSection.remove();
+        }
+
+        if (!App.allModalData || App.allModalData.length === 0) {
+            noData.style.display = 'block';
+            return;
+        }
+
+        // --- 特殊处理：洞察详情 (historyDetail) ---
+    if (App.currentDetailType === 'historyDetail') {
+        const insightDetailData = App.allModalData; // App.allModalData 此时就是单个洞察的键值对数组
+        let evidenceChainHtml = '';
+
+        // ✅ 核心修正：直接从原始数据中查找 'evidence_chain' 字段
+        // App.allModalData 已经是格式化后的键值对数组，所以我们需要从原始的 insightDetail 对象中寻找
+        // 假设 App.allModalData[0].originalObject 存储了原始对象
+        // 实际上，App.allModalData 是通过 Object.entries(insightDetail).map(...) 构造的，
+        // 所以 insightDetailData 就是那个经过 key 格式化后的数组。
+        // 我们需要回到源头，即 App.callApi 返回的 insightDetail 对象
+        // 解决办法是在 App.callApi 的回调里直接传递原始对象给 renderPagedKpiDetails
+
+        // 为了简化和即时修复，我们假设 insightDetailData 中会有一个 key 叫做 'evidence_chain' (小写带下划线)
+        // 或者我们可以在这里重新从原始的 insightDetail 对象中提取
+        // 考虑到 App.allModalData 已经是 Object.entries 转换后的数组，
+        // 我们需要找到原始的 'evidence_chain' 键所对应的条目
+        // ✅ 修改为：直接查找格式化后的键名 'Evidence Chain'
+        const rawEvidenceChainEntry = insightDetailData.find(item => item.key === 'Evidence Chain');
+
+        console.log("DEBUG_EVIDENCE_CHAIN: Found rawEvidenceChainEntry:", rawEvidenceChainEntry);
+
+
+        // 如果存在 evidence_chain 并且它是一个非空数组
+        if (rawEvidenceChainEntry && Array.isArray(rawEvidenceChainEntry.value) && rawEvidenceChainEntry.value.length > 0) {
+            evidenceChainHtml = `
+              <div class="mt-6 border-t pt-4 evidence-chain-section">
+                  <h4 class="font-semibold text-lg mb-3 text-gray-800">证据链 (Evidence Chain)</h4>
+                  <div class="space-y-3">
+                      ${rawEvidenceChainEntry.value.map(evidenceString => {
+                          let evidence = {};
+                          try {
+                              if (typeof evidenceString === 'string') {
+                                  evidence = JSON.parse(evidenceString);
+                              } else {
+                                  evidence = evidenceString;
+                              }
+                          } catch (e) {
+                              console.error("Failed to parse evidence chain item JSON:", e, evidenceString);
+                              return `<div class="bg-red-100 p-2 rounded-md text-red-700">错误: 证据链数据解析失败，原始数据: ${String(evidenceString).substring(0, 100)}...</div>`;
+                          }
+
+                          // ✅ 核心修改：直接使用 window.open 在 onclick 事件中
+                          // 移除了 google.script.run 调用，直接使用 JavaScript 的 window.open
+                          const urlToOpen = evidence.source_url || '#';
+                          const linkHtml = urlToOpen !== '#' ?
+                              `<span class="text-blue-600 hover:underline cursor-pointer" onclick="window.open('${urlToOpen}', '_blank');">${evidence.title || 'N/A'}</span>` :
+                              `<span class="text-gray-600">${evidence.title || 'N/A'}</span>`; // 如果没有URL，则不可点击
+
+                          return `
+                              <div class="bg-gray-100 p-3 rounded-md border border-gray-200">
+                                  <p class="text-sm font-medium text-gray-700">来源类型: <span class="font-normal">${evidence.source_type || 'N/A'}</span></p>
+                                  <p class="text-sm font-medium text-gray-700">标题: ${linkHtml}</p>
+                                  <p class="text-xs text-gray-500">原始ID: ${evidence.id || 'N/A'}</p>
+                                  ${evidence.publication_date ? `<p class="text-xs text-gray-500">发布日期: ${new Date(evidence.publication_date).toISOString().split('T')[0]}</p>` : ''}
+                                  ${evidence.last_update_timestamp ? `<p class="text-xs text-gray-500">更新日期: ${new Date(evidence.last_update_timestamp).toISOString().split('T')[0]}</p>` : ''}
+                                  ${evidence.competitor_name ? `<p class="text-xs text-gray-500">公司名称: ${evidence.competitor_name}</p>` : ''}
+                              </div>
+                          `;
+                      }).join('')}
+                  </div>
+              </div>
+          `;
+        }
+
+        // 渲染主要洞察详情表格
+        let theadHTML_insight = `<thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">属性</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">值</th></tr></thead>`;
+        let tbodyHTML_insight = `<tbody class="bg-white divide-y divide-gray-200">
+            ${insightDetailData.map(item => { // 使用 insightDetailData
+                // 将 evidence_chain 从主表中排除，因为它将单独渲染
+                if (item.key === 'Evidence Chain') return '';
+
+                let displayValue = item.value;
+                // 格式化日期对象或 ISO 字符串以获得更好的显示效果
+                if (typeof item.value === 'string' && (item.value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:?\d{2}:?\d{2}/) || item.value.match(/^\d{4}-\d{2}-\d{2}$/))) {
+                    try {
+                        const d = new Date(item.value);
+                        if (!isNaN(d.getTime())) {
+                            displayValue = d.toLocaleString(); // 使用本地化日期/时间
+                        }
+                    } catch (e) { /* 忽略 */ }
+                } else if (typeof item.value === 'object' && item.value instanceof Date) {
+                    displayValue = item.value.toLocaleString();
+                } else if (Array.isArray(item.value)) {
+                    displayValue = item.value.map(val => {
+                        if (typeof val === 'object' && val !== null) {
+                            return val.name || val.title || JSON.stringify(val);
+                        }
+                        return val;
+                    }).join(', ');
+                } else if (typeof item.value === 'object' && item.value !== null) {
+                    displayValue = JSON.stringify(item.value, null, 2);
+                }
+
+                // ✅ 确保长文本能够换行显示
+                // 这里不需要重复判断 typeof item.value === 'object'，因为上面已经处理过了
+                // 对于 Source Url 这样的链接，也需要确保 break-all
+                if (item.key === 'Source Url' && typeof item.value === 'string' && item.value.startsWith('http')) {
+                    displayValue = `<a href="${item.value}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline break-all">${item.value}</a>`;
+                }
+
+                return `
+                    <tr>
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900" data-label="${item.key}">${item.key}</td>
+                        <td class="px-6 py-4 text-sm text-gray-800" data-label="值">
+                            <pre style="white-space: pre-wrap; word-break: break-word;">${displayValue}</pre>
+                        </td>
+                    </tr>
+                `;
+            }).join('')}
+        </tbody>`;
+
+        table.innerHTML = theadHTML_insight + tbodyHTML_insight;
+
+        // 将证据链 HTML 附加到 modalBodyContent 的末尾
+        if (evidenceChainHtml) {
+            modalBodyContent.insertAdjacentHTML('beforeend', evidenceChainHtml);
+        }
+
+        // 洞察详情没有分页，所以隐藏分页控件
+        footer.style.display = 'none';
+        return;
+    }
+
+        // --- 通用 KPI 详情处理 (如果有分页) ---
         const totalItems = App.allModalData.length;
         const totalPages = Math.ceil(totalItems / App.itemsPerPage);
         const pageData = App.allModalData.slice((App.currentPage - 1) * App.itemsPerPage, App.currentPage * App.itemsPerPage);
 
-        let theadHTML = '';
-        let tbodyHTML = '';
-
-        // **此处是证据链追溯的核心逻辑**
-        if (App.currentDetailType === 'historyDetail' && pageData.length > 0 && pageData[0].key === 'Intelligence Id') { // 检查是否为洞察详情
-            const insightDetail = pageData; 
-            let evidenceChainHtml = '';
-            // 找到 evidence_chain 对应的条目
-            const evidenceChainEntry = insightDetail.find(item => item.key === 'Evidence Chain');
-
-            // 如果存在 evidence_chain 并且它是一个非空数组
-            if (evidenceChainEntry && Array.isArray(evidenceChainEntry.value) && evidenceChainEntry.value.length > 0) {
-                evidenceChainHtml = `
-                    <div class="mt-6 border-t pt-4">
-                        <h4 class="font-semibold text-lg mb-3 text-gray-800">证据链 (Evidence Chain)</h4>
-                        <div class="space-y-3">
-                            ${evidenceChainEntry.value.map(evidence => `
-                                <div class="bg-gray-100 p-3 rounded-md border border-gray-200">
-                                    <p class="text-sm font-medium text-gray-700">来源类型: <span class="font-normal">${evidence.source_type || 'N/A'}</span></p>
-                                    <p class="text-sm font-medium text-gray-700">标题: <a href="${evidence.source_url || '#'}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${evidence.title || 'N/A'}</a></p>
-                                    <p class="text-xs text-gray-500">原始ID: ${evidence.id || 'N/A'}</p>
-                                    ${evidence.publication_date ? `<p class="text-xs text-gray-500">发布日期: ${new Date(evidence.publication_date).toISOString().split('T')[0]}</p>` : ''}
-                                    ${evidence.last_update_timestamp ? `<p class="text-xs text-gray-500">更新日期: ${new Date(evidence.last_update_timestamp).toISOString().split('T')[0]}</p>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-
-            // 将主要洞察详情渲染为键值对
-            theadHTML = `<thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">属性</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">值</th></tr></thead>`;
-            tbodyHTML = `
-                <tbody class="bg-white divide-y divide-gray-200">
-                    ${insightDetail.map(item => {
-                        // 将 evidence_chain 从主表中排除，因为它将单独渲染
-                        if (item.key === 'Evidence Chain') return '';
-                        let displayValue = item.value;
-                        // 格式化日期对象或 ISO 字符串以获得更好的显示效果
-                        if (typeof item.value === 'string' && (item.value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/) || item.value.match(/^\d{4}-\d{2}-\d{2}$/))) {
-                            try {
-                                const d = new Date(item.value);
-                                if (!isNaN(d.getTime())) {
-                                    displayValue = d.toLocaleString(); // 使用本地化日期/时间
-                                }
-                            } catch (e) { /* 忽略 */ }
-                        } else if (typeof item.value === 'object' && item.value instanceof Date) {
-                            displayValue = item.value.toLocaleString();
-                        } else if (Array.isArray(item.value)) {
-                            displayValue = item.value.join(', '); // 连接数组值以供显示
-                        } else if (typeof item.value === 'object' && item.value !== null) {
-                            displayValue = JSON.stringify(item.value, null, 2); // 字符串化其他对象
-                        }
-
-                        return `
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" data-label="${item.key}">${item.key}</td>
-                                <td class="px-6 py-4 text-sm text-gray-800 break-all" data-label="值"><pre>${displayValue}</pre></td>
-                            </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            `;
-            // 对于洞察详情，表格内容将后跟证据链 HTML
-            table.innerHTML = theadHTML + tbodyHTML;
-            document.querySelector('#detailModal .p-6.overflow-y-auto').insertAdjacentHTML('beforeend', evidenceChainHtml); 
-            // ✅ 修复：在访问 style 属性前检查 footer 是否存在
-            if (footer) {
-                footer.style.display = 'none'; 
-            }
-            return;
-        }
-        // **自定义渲染结束**
-
         const displayFields = FIELD_CONFIG[App.currentDetailType] || FIELD_CONFIG._default || [];
-        theadHTML = `<thead class="bg-gray-50"><tr>${
+        let theadHTML = `<thead class="bg-gray-50"><tr>${
             displayFields.map(f => {
                 const style = f.width ? `style="width: ${f.width};"` : '';
                 return `<th ${style} class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">${f.label}</th>`;
             }).join('')
         }</tr></thead>`;
         
-        tbodyHTML = `<tbody class="bg-white divide-y divide-gray-200">${
+        let tbodyHTML = `<tbody class="bg-white divide-y divide-gray-200">${
             pageData.map(item => `<tr>${
                 displayFields.map(f => {
                     const rawValue = item[f.key];
-                    let displayValue = rawValue != null ? String(rawValue) : 'N/A';
+                    let displayValue = rawValue !== null ? String(rawValue) : 'N/A';
+                    // *** 在这里添加以下日志行 ***
+                    //console.log(`DEBUG_RENDER: 字段: ${f.key}, 原始值 (rawValue):`, rawValue, `显示值 (displayValue):`, displayValue);
+
                     if (f.linkField && item[f.linkField]) {
                         const truncatedText = f.needTrunc ? truncate(displayValue) : displayValue;
                         displayValue = `<a href="${item[f.linkField]}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline">${truncatedText}</a>`;
@@ -444,15 +601,34 @@
         document.getElementById('paginationInfo').textContent = `第 ${App.currentPage} / ${totalPages} 页 (共 ${totalItems} 条)`;
         document.getElementById('prevPageBtn').disabled = App.currentPage === 1;
         document.getElementById('nextPageBtn').disabled = App.currentPage === totalPages;
-        // ✅ 修复：在访问 style 属性前检查 footer 是否存在
-        if (footer) {
-            footer.style.display = 'flex';
-        }
+
+        // 显示分页控件
+        footer.style.display = 'flex';
       },
+
+      prevInsightsPage: function() {
+          if (App.insightsCurrentPage > 1) {
+              App.insightsCurrentPage--;
+              App.pageInitializers.insights.loadLatestInsightsTable();
+          }
+      },
+      nextInsightsPage: function() {
+          if (App.insightsCurrentPage < App.insightsTotalPages) {
+              App.insightsCurrentPage++;
+              App.pageInitializers.insights.loadLatestInsightsTable();
+          }
+      },
+
       showDetailListModal: function(title, detailKind) {
         document.getElementById('modalTitle').textContent = `${title} - ${detailKind === 'today' ? '近7日明细' : '全部明细'}`;
-        // ✅ 修复：先将模态框设置为可见，再渲染内容
-        document.getElementById('detailModal').style.display = 'flex'; 
+        const detailModal = document.getElementById('detailModal');
+        if (detailModal) { // 确保 detailModal 存在才操作
+            detailModal.style.display = 'flex'; 
+        } else {
+            console.error("ERROR: 无法找到 detailModal 元素。");
+            return; // 无法显示模态框，直接返回
+        }
+        
         // ✅ 修复：将渲染内容推迟到下一个事件循环，确保DOM稳定
         setTimeout(() => {
             this.renderPagedKpiDetails();
@@ -630,14 +806,14 @@
                 // --- 后续的渲染逻辑现在是正确的 ---
                 if (rawData) {
                     document.getElementById('rawDataTotal').textContent = (rawData.total || 0).toLocaleString();
-                    document.getElementById('rawDataTodayUpdate').textContent = `近7日采集: ${(rawData.sevenDayIngestion || 0).toLocaleString()}`; 
+                    document.getElementById('rawDataTodayUpdate').textContent = `近7日: ${(rawData.sevenDayIngestion || 0).toLocaleString()}`; 
                     const RAWDATA_CATEGORY_ORDER = [ { key: 'academicPapers', label: '论文' }, { key: 'techNews', label: '新闻' }, { key: 'industryDynamics', label: '会议' }, { key: 'patentData', label: '专利' }, { key: 'openSourceData', label: '开源' }, { key: 'competitorIntelligence', label: '竞情' } ];
                     document.getElementById('rawDataCategories').innerHTML = rawData.categories ? RAWDATA_CATEGORY_ORDER.map(cat => `<div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm"><span class="kpi-category-value font-semibold">${(rawData.categories[cat.key] || 0).toLocaleString()}</span> ${cat.label}</div>`).join('') : '';
                 }
 
                 if (insightLeads) {
                     document.getElementById('insightLeadTotal').textContent = (insightLeads.total || 0).toLocaleString();
-                    document.getElementById('insightLeadTodayUpdate').textContent = `近7日新增: ${(insightLeads.sevenDayNew || 0).toLocaleString()}`; 
+                    document.getElementById('insightLeadTodayUpdate').textContent = `近7日: ${(insightLeads.sevenDayNew || 0).toLocaleString()}`; 
                     const INSIGHT_CATEGORY_LABELS = { pending: '待处理', processing: '处理中', completed: '已完成', published: '已发布' };
                     document.getElementById('insightLeadCategories').innerHTML = insightLeads.status ? Object.entries(insightLeads.status).map(([k,v]) => `<div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm"><span class="kpi-category-value font-semibold">${v || 0}</span> ${INSIGHT_CATEGORY_LABELS[k] || k}</div>`).join('') : '';
                 }
@@ -677,47 +853,23 @@
         activeTab: 'overview', // 默认激活的标签页
         scrollObserver: null,
         pageData: null, // 用于缓存从后端获取的数据
-        competitorName: null,
+        competitorName: '',
         elements: {}, // 缓存DOM元素
 
-        // 总初始化函数，只在第一次进入页面时执行一次性绑定
-        init: function() {
-          console.log('正在初始化数据采集与工作流页面...');
-          if (!this.isInitialized) {
-            this.elements = {
-              tabsContainer: document.getElementById('collection-tabs'),
-              pageContainer: document.getElementById('page-collection'),
-              overviewContainer: document.getElementById('tab-content-overview'),
-              workflowsContainer: document.getElementById('tab-content-workflows'),
-              // ✅ 核心修正: 确保筛选器元素被正确缓存
-              companySelect: document.getElementById('company-select'),
-              filterBtn: document.getElementById('filter-btn'),
-              clearBtn: document.getElementById('clear-filter-btn'),
-              filterStatusText: document.getElementById('filter-status-text')
-            };
-            
-            this.elements.tabsContainer.addEventListener('click', this.handleTabClick.bind(this));
-            this.elements.pageContainer.addEventListener('click', this.handlePageClick.bind(this));
-            
-            // ✅ 核心修正: 为筛选器按钮绑定事件
-            if (this.elements.companySelect) {
-                this.elements.companySelect.addEventListener('change', (event) => {
-                    this.processAndRenderOverviewCards(this.pageData, event.target.value);
-                });
-            }
-            
-            if (this.elements.clearBtn) { // Assuming clearBtn exists
-                 this.elements.clearBtn.addEventListener('click', () => {
-                    this.elements.companySelect.value = '';
-                    this.processAndRenderOverviewCards(this.pageData, '');
-                });
-            }
-
-            this.isInitialized = true;
-          }
-          this.updateTabStyles();
-          this.loadActiveTabContent();
-        },
+      init: function() {
+        console.log('正在初始化数据采集与工作流页面...');
+        if (!this.isInitialized) {
+          // Event listeners for tabs and pageContainer are bound once
+          this.elements.tabsContainer = document.getElementById('collection-tabs');
+          this.elements.pageContainer = document.getElementById('page-collection');
+          this.elements.tabsContainer.addEventListener('click', this.handleTabClick.bind(this));
+          this.elements.pageContainer.addEventListener('click', this.handlePageClick.bind(this));
+          
+          this.isInitialized = true;
+        }
+        this.updateTabStyles();
+        this.loadActiveTabContent();
+      },
 
         // 处理标签页导航的点击事件
         handleTabClick: function(event) {
@@ -877,37 +1029,54 @@
           `;
           container.innerHTML = fullHTML;
 
-          try {
-            if (!this.pageData) {
-                this.pageData = await App.callApi('CollectionStatsService', 'getCollectionPageData');
-            }
-            
-            const companySelect = document.getElementById('company-select');
-            if (companySelect && this.pageData && this.pageData.competitors) {
-                companySelect.innerHTML = '<option value="">所有企业</option>' + 
-                                          this.pageData.competitors.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
-                
-                // ✅ 核心修正 2: 为下拉框绑定 'change' 事件，实现自动筛选
-                if (!companySelect.dataset.listenerAttached) {
-                    companySelect.addEventListener('change', (event) => {
-                        const selectedCompany = event.target.value;
-                        const statusTextEl = document.getElementById('filter-status-text');
-                        if (statusTextEl) {
-                           statusTextEl.textContent = selectedCompany ? `当前显示 "${selectedCompany}" 的数据` : '显示所有企业的数据';
-                        }
-                        this.processAndRenderOverviewCards(this.pageData, selectedCompany);
-                    });
-                
-                    companySelect.dataset.listenerAttached = 'true';
-                }
-            }
+        // Re-cache elements AFTER innerHTML is updated
+        this.elements.companySelect = document.getElementById('company-select');
+        this.elements.filterStatusText = document.getElementById('filter-status-text');
 
-            // ✅ 将 this.pageData 作为参数传递
-            this.processAndRenderOverviewCards(this.pageData, null); 
-          } catch(e) {
-            handleFailure(e);
+        // Re-bind the event listener for the newly created select element
+        if (this.elements.companySelect) {
+            // Ensure no duplicate listeners if renderOverview is called multiple times without full page reload
+            this.elements.companySelect.removeEventListener('change', this.handleCompanySelectChangeBound); 
+            this.handleCompanySelectChangeBound = this.handleCompanySelectChange.bind(this); // Bind and store reference
+            this.elements.companySelect.addEventListener('change', this.handleCompanySelectChangeBound);
+        }
+
+        try {
+          if (!this.pageData) {
+              this.pageData = await App.callApi('CollectionStatsService', 'getCollectionPageData');
           }
-        },
+          
+          if (this.elements.companySelect && this.pageData && this.pageData.competitors) {
+              this.elements.companySelect.innerHTML = '<option value="">所有企业</option>' + 
+                                        this.pageData.competitors.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+              
+              // Set the selected value and status text on initial load based on current state
+              if (this.competitorName) { 
+                  this.elements.companySelect.value = this.competitorName;
+                  this.elements.filterStatusText.textContent = `当前显示 "${this.competitorName}" 的数据`;
+              } else {
+                  this.elements.companySelect.value = ''; // Default to "所有企业"
+                  this.elements.filterStatusText.textContent = '显示所有企业的数据';
+              }
+          }
+
+          // Call render function with current cached data and filter
+          this.processAndRenderOverviewCards(this.pageData, this.competitorName); 
+        } catch(e) {
+          handleFailure(e);
+        }
+      },
+
+      // New method to handle company select change, separated for clarity and binding
+      handleCompanySelectChange: function(event) {
+          const selectedCompany = event.target.value;
+          this.competitorName = selectedCompany ? selectedCompany.trim().toLowerCase() : '';
+          const statusTextEl = this.elements.filterStatusText; // Use cached element reference
+          if (statusTextEl) {
+             statusTextEl.textContent = selectedCompany ? `当前显示 "${selectedCompany}" 的数据` : '显示所有企业的数据';
+          }
+          this.processAndRenderOverviewCards(this.pageData, this.competitorName);
+      },
 
          processAndRenderOverviewCards: function(pageData, competitorNameToFilter) {
             const currentCompetitorFilter = competitorNameToFilter ? competitorNameToFilter.trim().toLowerCase() : null;
@@ -972,7 +1141,7 @@
                                 <span class="text-xs font-medium px-2 py-0.5 rounded-md ${statusColors[card.status]}">${card.status}</span>
                             </div>
                             <div class="flex text-center my-2">
-                                <div class="w-1/2 pr-4 clickable-detail" data-detail="today" style="cursor:pointer;"><p class="text-3xl font-semibold text-primary">${card.todayCount.toLocaleString()}</p><p class="text-xs text-gray-500 mt-1">近7日采集</p></div>
+                                <div class="w-1/2 pr-4 clickable-detail" data-detail="today" style="cursor:pointer;"><p class="text-3xl font-semibold text-primary">${card.todayCount.toLocaleString()}</p><p class="text-xs text-gray-500 mt-1">近7日</p></div>
                                 <div class="w-1/2 pl-4 border-l border-gray-200 clickable-detail" data-detail="all" style="cursor:pointer;"><p class="text-3xl font-semibold text-gray-800">${card.totalCount.toLocaleString()}</p><p class="text-xs text-gray-500 mt-1">合计</p></div>
                             </div>
                         </div>
@@ -1047,16 +1216,17 @@
             const allIndustryDynamics = benchmarkData.industryDynamics || [];
             const allCompetitorIntel = benchmarkData.competitorIntelligence || [];
 
-            const industryDynamicsData = allIndustryDynamics.filter(competitorFilter);
-            const techInnovationData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Tech Innovation');
-            const productReleaseData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Product Release');
-            const talentFlowData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Talent Flow');
+            // ✅ 核心修正：筛选所有标杆数据，而不仅仅是 industryDynamics
+            const filteredIndustryDynamics = (pageData.benchmarkData.industryDynamics || []).filter(item => isRelatedToCompany(item, currentCompetitorFilter));
+            const filteredTechInnovation = (pageData.benchmarkData.competitorIntelligence || []).filter(item => isRelatedToCompany(item, currentCompetitorFilter) && item.intelligence_type === 'Tech Innovation');
+            const filteredProductRelease = (pageData.benchmarkData.competitorIntelligence || []).filter(item => isRelatedToCompany(item, currentCompetitorFilter) && item.intelligence_type === 'Product Release');
+            const filteredTalentFlow = (pageData.benchmarkData.competitorIntelligence || []).filter(item => isRelatedToCompany(item, currentCompetitorFilter) && item.intelligence_type === 'Talent Flow');
             
             const benchmarkCards = [
-                calculateCardData('industryDynamics', '产业动态', industryDynamicsData),
-                calculateCardData('techInnovation', '技术创新', techInnovationData),
-                calculateCardData('productRelease', '产品发布', productReleaseData),
-                calculateCardData('talentFlow', '人才流动', talentFlowData)
+                calculateCardData('industryDynamics', '产业动态', filteredIndustryDynamics), // 使用过滤后的数据
+                calculateCardData('techInnovation', '技术创新', filteredTechInnovation),     // 使用过滤后的数据
+                calculateCardData('productRelease', '产品发布', filteredProductRelease),     // 使用过滤后的数据
+                calculateCardData('talentFlow', '人才流动', filteredTalentFlow)             // 使用过滤后的数据
             ];
 
             renderCards(techGrid, techCards);
@@ -1082,6 +1252,8 @@
           let rawData = [];
           const competitorFilter = (item) => !this.competitorName || (item.competitor_name && String(item.competitor_name).toLowerCase().includes(this.competitorName));
 
+          const currentFilterCompany = this.competitorName; 
+
           // ✅ 直接从传入的 pageData 读取
           if (pageData.techData && pageData.techData[type]) {
             rawData = pageData.techData[type];
@@ -1091,16 +1263,23 @@
             
             switch (type) {
                 case 'industryDynamics':
-                    rawData = allIndustryDynamics.filter(competitorFilter);
+                    rawData = allIndustryDynamics.filter(item => isRelatedToCompany(item, currentFilterCompany));
+                    // 这里有一个合并 generalnews 的逻辑，需要确保它也使用 isRelatedToCompany
+                    const ciNews = (allCompetitorIntel || []).filter(item => isRelatedToCompany(item, currentFilterCompany) && (item.intelligence_type || '').toLowerCase().replace(/[\s_]/g, '') === 'generalnews')
+                        .map(item => ({ event_title: item.intelligence_title, event_date: item.last_update_timestamp, impact_level: item.threat_level, processing_status: item.processing_status, source_url: item.source_url }));
+                    rawData = [...rawData, ...ciNews]; // 合并 filteredIndustryDynamics 和 ciNews
                     break;
                 case 'techInnovation':
-                    rawData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Tech Innovation');
+                    rawData = allCompetitorIntel.filter(item => isRelatedToCompany(item, currentFilterCompany) && item.intelligence_type === 'Tech Innovation');
                     break;
                 case 'productRelease':
-                    rawData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Product Release');
+                    rawData = allCompetitorIntel.filter(item => isRelatedToCompany(item, currentFilterCompany) && item.intelligence_type === 'Product Release');
                     break;
                 case 'talentFlow':
-                    rawData = allCompetitorIntel.filter(item => competitorFilter(item) && item.intelligence_type === 'Talent Flow');
+                    rawData = allCompetitorIntel.filter(item => isRelatedToCompany(item, currentFilterCompany) && item.intelligence_type === 'Talent Flow');
+                    break;
+                default:
+                    rawData = []; // 默认情况，如果没有匹配到类型，则为空
                     break;
             }
           } 
@@ -1110,7 +1289,7 @@
               const dateFieldMap = {
                   academicPapers: 'publication_date',
                   patentData: 'application_date',
-                  openSourceData: 'last_commit_date',
+                  openSourceData: 'last_update_timestamp',
                   techNews: 'publication_date',
                   industryDynamics: 'event_date', // 修正为 'event_date'
                   techInnovation: 'last_update_timestamp',
@@ -1133,7 +1312,7 @@
               const dateA = new Date(a.date);
               const dateB = new Date(b.date);
               const timeA = isNaN(dateA.getTime()) ? 0 : dateA.getTime();
-              const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime(); // 修正：b.date 可能是字符串，需要 new Date()
+              const timeB = isNaN(dateB.getTime()) ? 0 : dateB.getTime(); 
               return timeB - timeA;
           });
           
@@ -1299,11 +1478,18 @@
               if (this.hypeCycleChart && !this.hypeCycleChart.isDisposed()) this.hypeCycleChart.resize();
               if (this.knowledgeGraphChart && !this.knowledgeGraphChart.isDisposed()) this.knowledgeGraphChart.resize(); // **新增**
             });
+            // ✅ 新增：为洞察线索分页按钮绑定事件
+            document.getElementById('insightsPrevPageBtn').addEventListener('click', App.ui.prevInsightsPage);
+            document.getElementById('insightsNextPageBtn').addEventListener('click', App.ui.nextInsightsPage);
+
             this.isInitialized = true;
           }
 
           // 步骤 2: 每次进入页面时，都调用加载函数来刷新数据和图表
           App.pageInitializers.insights.loadAllInsightsDataAndRender();
+          // ✅ 新增：每次进入页面时，重置洞察线索分页并加载表格
+          App.insightsCurrentPage = 1;
+          this.loadLatestInsightsTable();
         },
         // 聚合加载所有数据并渲染
         loadAllInsightsDataAndRender: async function() {
@@ -1428,7 +1614,7 @@
                                     value: value != null ? value : 'N/A' // 处理 null 或 undefined 值
                                 }));
                                 // 清除之前模态框内容，以确保只显示当前洞察的详情
-                                document.querySelector('#detailModal .p-6.overflow-y-auto').innerHTML = '';
+                                //document.querySelector('#detailModal .p-6.overflow-y-auto').innerHTML = '';
                                 App.ui.showDetailListModal(`洞察详情: ${insight.title}`, 'all'); // 调用统一的模态框显示函数
                             } else {
                                 console.error(`ERROR: 无法找到洞察的详细信息。洞察对象:`, insight); // 更具体的错误日志
@@ -1591,6 +1777,103 @@
             if (this.hypeCycleChart) this.hypeCycleChart.hideLoading();
             if (this.knowledgeGraphChart) this.knowledgeGraphChart.hideLoading();
           }
+        },
+
+        // ✅ 新增：加载并渲染最新洞察线索表格的函数
+        loadLatestInsightsTable: async function() {
+            const tableBody = document.querySelector('#page-insights table tbody');
+            const paginationInfoSpan = document.getElementById('insightsPaginationInfo');
+            const prevPageBtn = document.getElementById('insightsPrevPageBtn');
+            const nextPageBtn = document.getElementById('insightsNextPageBtn');
+            
+            if (!tableBody || !paginationInfoSpan || !prevPageBtn || !nextPageBtn) {
+                console.error("ERROR: 洞察线索表格或分页元素缺失。");
+                return;
+            }
+
+            tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8">正在加载最新线索...</td></tr>`;
+            prevPageBtn.disabled = true;
+            nextPageBtn.disabled = true;
+            paginationInfoSpan.textContent = '';
+
+            try {
+                const { records, totalRecords } = await App.callApi(
+                    'InsightsService',
+                    'getLatestInsightsPaged',
+                    [App.insightsCurrentPage, App.insightsItemsPerPage]
+                );
+
+                App.insightsTotalRecords = totalRecords;
+                App.insightsTotalPages = Math.ceil(totalRecords / App.insightsItemsPerPage);
+
+                if (!records || records.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">暂无最新洞察线索。</td></tr>`;
+                } else {
+                    tableBody.innerHTML = records.map(item => {
+                        return `
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 overflow-hidden text-ellipsis"><div class="font-medium text-gray-900">${item.title || 'N/A'}</div></td>
+                                <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${item.source || 'N/A'}</div></td>
+                                <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${item.date || 'N/A'}</div></td>
+                                <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.statusClasses}">${item.status}</span></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm"><button class="text-primary hover:text-primary-dark" data-insight-id="${item.id}">查看详情</button></td>
+                            </tr>`;
+                    }).join('');
+
+                    // 重新绑定“查看详情”按钮的事件监听器
+                    const detailButtons = tableBody.querySelectorAll('button[data-insight-id]');
+                    detailButtons.forEach(button => {
+                      button.onclick = async (e) => { // ✅ 将事件处理函数标记为 async，因为内部会使用 await
+                          const insightId = e.target.dataset.insightId;
+                          console.log(`DEBUG_DETAIL_CLICK: Clicked insightId: ${insightId}`);
+
+                          // 显示加载状态
+                          App.ui.showDetailListModal(`洞察详情: 正在加载...`, 'all'); // 预先显示模态框和加载状态
+                          document.getElementById('detailTable').innerHTML = '<tbody><tr><td colspan="2" class="text-center p-4">正在加载详情...</td></tr></tbody>';
+                          document.getElementById('noDataMessage').style.display = 'none';
+
+                          try {
+                              // ✅ 核心修改：直接从后端获取指定 ID 的洞察详情
+                              const insightDetail = await App.callApi('InsightsService', 'getInsightDetail', [insightId]);
+
+                              console.log(`DEBUG_DETAIL_CLICK: Fetched insight detail from backend:`, insightDetail);
+
+                              if (insightDetail && !insightDetail.error) {
+                                  // 将后端返回的原始洞察对象转换为前端模态框所需的键值对格式
+                                  App.currentDetailType = 'historyDetail'; // 使用 historyDetail 的渲染逻辑
+                                  App.allModalData = Object.entries(insightDetail).map(([key, value]) => ({
+                                      key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // 格式化键名
+                                      value: value // 原始值，由 renderPagedKpiDetails 进一步格式化
+                                  }));
+                                  
+                                  // 重新渲染模态框内容
+                                  App.ui.showDetailListModal(`洞察详情: ${insightDetail.title || insightId}`, 'all');
+                              } else {
+                                  console.error(`DEBUG_DETAIL_CLICK: Backend returned an error or empty detail. InsightDetail:`, insightDetail);
+                                  alert(`未找到该洞察的详细信息或获取失败: ${insightDetail.error || '未知错误'}`);
+                                  App.ui.hideDetailModal(); // 关闭模态框
+                              }
+                          } catch (error) {
+                              console.error(`DEBUG_DETAIL_CLICK: Error fetching insight detail:`, error);
+                              alert(`获取洞察详情时发生错误: ${error.message}`);
+                              App.ui.hideDetailModal(); // 关闭模态框
+                          }
+                      };
+                  });
+                }
+                
+                paginationInfoSpan.textContent = `第 ${App.insightsCurrentPage} / ${App.insightsTotalPages} 页 (共 ${App.insightsTotalRecords} 条)`;
+                prevPageBtn.disabled = App.insightsCurrentPage === 1;
+                nextPageBtn.disabled = App.insightsCurrentPage === App.insightsTotalPages;
+
+            } catch (e) {
+                console.error(`ERROR: 加载洞察线索表格失败: ${e.message}`, e);
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-red-500">加载失败: ${e.message}</td></tr>`;
+                prevPageBtn.disabled = true;
+                nextPageBtn.disabled = true;
+                paginationInfoSpan.textContent = '加载失败';
+                handleFailure(e);
+            }
         }
       },
       actions: { init: function() { console.log('Initializing Actions Page...'); } },
@@ -2061,7 +2344,538 @@
       },
       // ✅ 新增：系统工作台页面的初始化器
       system: {
-        init: function() {}
+        isInitialized: false,
+        activeSubTab: 'settings', // 默认激活系统配置
+        activeRegistry: 'TECH_REGISTRY', // 默认激活技术领域注册表
+        // 用于缓存当前激活注册表的原始数据，方便编辑和删除
+        currentRegistryData: [], 
+
+        init: function() {
+          console.log('正在初始化系统管理页面...');
+          if (!this.isInitialized) {
+              // 绑定二级导航事件 (系统配置, 数据注册与管理, 用户与权限...)
+              document.getElementById('system-sub-tabs').addEventListener('click', this.handleSubTabClick.bind(this));
+              // 绑定注册表子导航事件 (技术领域, 竞争对手...)
+              document.getElementById('registry-tabs').addEventListener('click', this.handleRegistryTabClick.bind(this));
+              
+              // 使用事件委托绑定注册表内容区域的点击事件 (包括添加、编辑、删除按钮)
+              // 注意：这个监听器应该绑定在 #current-registry-content 上
+              document.getElementById('current-registry-content').addEventListener('click', this.handleRegistryActionClick.bind(this));
+              
+              // 绑定模态框关闭事件
+              document.getElementById('registryEntryModal').querySelector('.close-button').addEventListener('click', this.hideRegistryEntryModal.bind(this));
+              // 绑定模态框保存按钮
+              document.getElementById('saveRegistryEntryBtn').addEventListener('click', this.saveRegistryEntry.bind(this));
+
+              this.isInitialized = true;
+          }
+          this.updateSubTabStyles();
+          this.loadActiveSubTabContent();
+        },
+
+        handleSubTabClick: function(event) {
+            const link = event.target.closest('a.system-sub-tab');
+            if (!link) return;
+            event.preventDefault();
+            const subTabName = link.dataset.subTab;
+            if (subTabName === this.activeSubTab) return;
+            this.activeSubTab = subTabName;
+            this.updateSubTabStyles();
+            this.loadActiveSubTabContent();
+        },
+
+        updateSubTabStyles: function() {
+            document.querySelectorAll('.system-sub-tab').forEach(tab => {
+                const isSelected = tab.dataset.subTab === this.activeSubTab;
+                tab.classList.toggle('border-primary', isSelected);
+                tab.classList.toggle('text-primary', isSelected);
+                tab.classList.toggle('border-transparent', !isSelected);
+                tab.classList.toggle('text-gray-500', !isSelected);
+            });
+            document.querySelectorAll('.system-sub-tab-content').forEach(content => {
+                content.classList.toggle('hidden', content.id !== `system-tab-content-${this.activeSubTab}`);
+            });
+        },
+
+        loadActiveSubTabContent: async function() {
+            // 根据 activeSubTab 决定加载哪个子页面内容
+            switch (this.activeSubTab) {
+                case 'settings':
+                    // 加载/渲染系统配置表单 (如果需要从后端获取配置)
+                    console.log("加载系统配置...");
+                    // 示例：可以从ConfigDataService获取一些配置数据
+                    // const configData = await App.callApi('ConfigDataService', 'getSystemConfig');
+                    // this.renderSystemSettings(configData);
+                    break;
+                case 'registries':
+                    // 确保注册表子标签页样式正确
+                    this.updateRegistryTabStyles();
+                    // 加载当前激活的注册表数据
+                    await this.loadActiveRegistryData();
+                    break;
+                case 'users':
+                    console.log("加载用户与权限...");
+                    // 加载用户列表，渲染用户管理界面
+                    // const users = await App.callApi('SystemAdminService', 'getUsers');
+                    // this.renderUsers(users);
+                    break;
+                case 'monitoring':
+                    console.log("加载高级监控...");
+                    // 加载监控数据，渲染图表和日志
+                    // const monitorData = await App.callApi('SystemAdminService', 'getMonitorData');
+                    // this.renderMonitoring(monitorData);
+                    break;
+                case 'data-ops':
+                    console.log("加载数据操作...");
+                    // 渲染数据导出/清理界面
+                    break;
+            }
+        },
+
+        // --- 数据注册与管理相关函数 ---
+        handleRegistryTabClick: function(event) {
+          const link = event.target.closest('a.registry-tab');
+          if (!link) return;
+          event.preventDefault();
+          const registryName = link.dataset.registry;
+          if (registryName === this.activeRegistry) return;
+          this.activeRegistry = registryName;
+          this.updateRegistryTabStyles();
+          this.loadActiveRegistryData();
+        },
+
+        updateRegistryTabStyles: function() {
+          document.querySelectorAll('.registry-tab').forEach(tab => {
+              const isSelected = tab.dataset.registry === this.activeRegistry;
+              tab.classList.toggle('border-primary', isSelected);
+              tab.classList.toggle('text-primary', isSelected);
+              tab.classList.toggle('border-transparent', !isSelected);
+              tab.classList.toggle('text-gray-500', !isSelected);
+          });
+          // 动态显示或隐藏具体的注册表内容容器
+          document.querySelectorAll('.registry-content').forEach(content => {
+              content.classList.toggle('hidden', content.id !== `registry-${this.activeRegistry}`);
+          });
+        },
+
+        loadActiveRegistryData: async function() {
+          const registryId = this.activeRegistry;
+          const currentRegistryContentDiv = document.getElementById('current-registry-content');
+          
+          // 动态插入当前注册表的 HTML 骨架（如果尚未插入）
+          // 这样做是为了避免在每次切换标签时都重新渲染整个表格结构，只更新 tbody
+          if (!document.getElementById(`registry-${registryId}`)) {
+              currentRegistryContentDiv.innerHTML = this.getRegistryHtmlSkeleton(registryId);
+          } else {
+              // 隐藏所有注册表内容，只显示当前选中的
+              document.querySelectorAll('.registry-content').forEach(content => {
+                  content.classList.add('hidden');
+              });
+              document.getElementById(`registry-${registryId}`).classList.remove('hidden');
+          }
+
+          const tbody = document.getElementById(`${registryId.toLowerCase().replace('_registry', '')}-tbody`);
+          if (!tbody) {
+              console.error(`无法找到注册表 ${registryId} 的 tbody 元素。`);
+              return;
+          }
+          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-gray-500">正在加载 ${this.getRegistryLabel(registryId)} 数据...</td></tr>`;
+
+          try {
+              const data = await App.callApi('SystemAdminService', 'getRegistry', [registryId]);
+              this.currentRegistryData = data; // 缓存原始数据
+              this.renderRegistryTable(registryId, data);
+          } catch (e) {
+              handleFailure(e);
+              tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-red-500">加载 ${this.getRegistryLabel(registryId)} 数据失败: ${e.message}</td></tr>`;
+          }
+        },
+
+        renderRegistryTable: function(registryId, data) {
+          const tbody = document.getElementById(`${registryId.toLowerCase().replace('_registry', '')}-tbody`);
+          if (!tbody) return;
+
+          if (!data || data.length === 0) {
+              tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-gray-500">暂无数据。</td></tr>`;
+              return;
+          }
+
+          // 定义每个注册表的列配置和数据映射（这是关键）
+          const registryConfigs = {
+              TECH_REGISTRY: {
+                  idField: 'tech_id', // 标识字段
+                  fields: [
+                      { key: 'tech_id', label: 'ID', width: '10%' },
+                      { key: 'tech_name', label: '技术名称', width: '20%' },
+                      { key: 'tech_category', label: '类别', width: '15%' },
+                      { key: 'monitoring_status', label: '状态', width: '10%' },
+                      { key: 'academic_search_terms', label: '学术搜索词', width: '20%', truncate: true },
+                      { key: 'data_source_academic', label: '学术源', width: '10%', type: 'boolean' }
+                  ],
+                  // 适配器函数，将原始数据转换为表格友好的格式
+                  adapter: item => ({
+                      tech_id: item.tech_id,
+                      tech_name: item.tech_name,
+                      tech_category: item.tech_category,
+                      monitoring_status: item.monitoring_status,
+                      academic_search_terms: item.academic_search_terms,
+                      data_source_academic: item.data_source_academic // 布尔值直接传入
+                  })
+              },
+              COMPETITOR_REGISTRY: {
+                  idField: 'competitor_id',
+                  fields: [
+                      { key: 'competitor_id', label: 'ID', width: '10%' },
+                      { key: 'company_name', label: '公司名称', width: '20%' },
+                      { key: 'industry_category', label: '行业类别', width: '15%' },
+                      { key: 'monitoring_status', label: '状态', width: '10%' },
+                      { key: 'threat_level', label: '威胁等级', width: '15%' },
+                      { key: 'news_monitoring', label: '新闻监控', width: '10%', type: 'boolean' }
+                  ],
+                  adapter: item => ({
+                      competitor_id: item.competitor_id,
+                      company_name: item.company_name,
+                      industry_category: item.industry_category,
+                      monitoring_status: item.monitoring_status,
+                      threat_level: item.threat_level,
+                      news_monitoring: item.news_monitoring
+                  })
+              },
+              CONFERENCE_REGISTRY: {
+                  idField: 'conference_id',
+                  fields: [
+                      { key: 'conference_id', label: 'ID', width: '10%' },
+                      { key: 'conference_name', label: '会议名称', width: '25%' },
+                      { key: 'industry_focus', label: '行业焦点', width: '20%' },
+                      { key: 'next_event_date', label: '下次会议日期', width: '15%', type: 'date' },
+                      { key: 'monitoring_status', label: '状态', width: '10%' }
+                  ],
+                  adapter: item => ({
+                      conference_id: item.conference_id,
+                      conference_name: item.conference_name,
+                      industry_focus: item.industry_focus,
+                      next_event_date: App.pageInitializers.reports._formatDate(item.next_event_date), // 使用日期格式化函数
+                      monitoring_status: item.monitoring_status
+                  })
+              },
+              REPORT_RECIPIENTS: {
+                  idField: 'recipient_id',
+                  fields: [
+                      { key: 'recipient_id', label: 'ID', width: '15%' },
+                      { key: 'recipient_email', label: '邮箱', width: '30%' },
+                      { key: 'report_type', label: '报告类型', width: '20%' },
+                      { key: 'is_active', label: '是否启用', width: '15%', type: 'boolean' }
+                  ],
+                  adapter: item => ({
+                      recipient_id: item.recipient_id,
+                      recipient_email: item.recipient_email,
+                      report_type: item.report_type,
+                      is_active: item.is_active
+                  })
+              },
+              SCHEDULED_REPORTS_CONFIG: {
+                  idField: 'job_id',
+                  fields: [
+                      { key: 'job_id', label: '任务ID', width: '10%' },
+                      { key: 'report_title_template', label: '标题模板', width: '20%', truncate: true },
+                      { key: 'schedule_frequency', label: '频率', width: '10%' },
+                      { key: 'is_active', label: '启用', width: '5%', type: 'boolean' },
+                      { key: 'last_run_status', label: '上次状态', width: '10%' },
+                      { key: 'last_run_timestamp', label: '上次运行', width: '15%', type: 'date' }
+                  ],
+                  adapter: item => ({
+                      job_id: item.job_id,
+                      report_title_template: item.report_title_template,
+                      schedule_frequency: item.schedule_frequency,
+                      is_active: item.is_active,
+                      last_run_status: item.last_run_status,
+                      last_run_timestamp: App.pageInitializers.reports._formatDate(item.last_run_timestamp, true)
+                  })
+              }
+          };
+
+          const config = registryConfigs[registryId];
+          if (!config) {
+              tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-red-500">未找到 ${this.getRegistryLabel(registryId)} 的配置。</td></tr>`;
+              return;
+          }
+
+          // 渲染表头
+          const headers = config.fields.map(f => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="width: ${f.width}">${f.label}</th>`).join('');
+          const actionsHeader = `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="width: 10%">操作</th>`;
+          document.querySelector(`#registry-${registryId} thead`).innerHTML = `<tr>${headers}${actionsHeader}</tr>`;
+
+          // 渲染表格行
+          const rows = data.map(item => {
+              const adaptedItem = config.adapter(item);
+              const cells = config.fields.map(f => {
+                  let displayValue = adaptedItem[f.key] !== null && adaptedItem[f.key] !== undefined ? String(adaptedItem[f.key]) : 'N/A';
+                  if (f.truncate) {
+                      displayValue = truncate(displayValue, 50); // 截断长文本
+                  }
+                  if (f.type === 'boolean') {
+                      displayValue = adaptedItem[f.key] ? '是' : '否';
+                  }
+                  return `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800" style="width: ${f.width}">${displayValue}</td>`;
+              }).join('');
+
+              const itemId = item[config.idField]; // 使用配置中定义的 idField
+              const actions = `
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="width: 10%">
+                      <button class="text-indigo-600 hover:text-indigo-900 mr-3" data-action="edit" data-id="${itemId}">编辑</button>
+                      <button class="text-red-600 hover:text-red-900" data-action="delete" data-id="${itemId}">删除</button>
+                  </td>
+              `;
+              return `<tr class="hover:bg-gray-50">${cells}${actions}</tr>`;
+          }).join('');
+          tbody.innerHTML = rows;
+        },
+
+        handleRegistryActionClick: function(event) {
+          const button = event.target.closest('button[data-action]'); // 确保点击的是带有 data-action 的按钮
+          if (!button) return;
+
+          const action = button.dataset.action;
+          const itemId = button.dataset.id; // 对于编辑和删除操作
+          const registryId = this.activeRegistry;
+
+          if (action === 'add-entry') { // 通用的添加按钮
+              this.showRegistryEntryModal(registryId, 'add');
+          } else if (action === 'edit') {
+              const itemToEdit = this.currentRegistryData.find(item => item[registryConfigs[registryId].idField] === itemId);
+              if (itemToEdit) {
+                  this.showRegistryEntryModal(registryId, 'edit', itemToEdit);
+              } else {
+                  alert('未找到要编辑的条目！');
+              }
+          } else if (action === 'delete') {
+              if (confirm(`确定要删除此条目吗 (ID: ${itemId})？`)) {
+                  this.deleteRegistryEntry(registryId, itemId);
+              }
+          }
+        },
+
+        showRegistryEntryModal: function(registryId, mode, data = {}) {
+          const modal = document.getElementById('registryEntryModal');
+          const titleEl = document.getElementById('registryModalTitle');
+          const form = document.getElementById('registryEntryForm');
+          form.innerHTML = ''; // 清空现有表单内容
+
+          titleEl.textContent = mode === 'add' ? `添加新${this.getRegistryLabel(registryId)}` : `编辑${this.getRegistryLabel(registryId)}`;
+          modal.dataset.mode = mode; // 存储模式
+          modal.dataset.registryId = registryId; // 存储当前注册表ID
+          
+          // 存储编辑模式下的原始数据ID，用于更新操作
+          modal.dataset.editId = mode === 'edit' ? data[registryConfigs[registryId].idField] : '';
+
+          // 根据 registryId 动态生成表单字段
+          const formFieldsConfig = {
+              TECH_REGISTRY: [
+                  { id: 'tech_id', label: '技术ID', type: 'text', required: true, readonly: mode === 'edit' },
+                  { id: 'tech_name', label: '技术名称', type: 'text', required: true },
+                  { id: 'tech_category', label: '技术类别', type: 'text' },
+                  { id: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
+                  { id: 'website_url', label: '官网', type: 'url' },
+                  { id: 'academic_search_terms', label: '学术搜索词 (逗号分隔)', type: 'textarea' },
+                  { id: 'patent_search_terms', label: '专利搜索词 (逗号分隔)', type: 'textarea' },
+                  { id: 'data_source_academic', label: '启用学术数据源', type: 'checkbox' },
+                  { id: 'data_source_patent', label: '启用专利数据源', type: 'checkbox' },
+                  { id: 'data_source_opensource', label: '启用开源数据源', type: 'checkbox' },
+                  { id: 'data_source_news', label: '启用新闻数据源', type: 'checkbox' },
+              ],
+              COMPETITOR_REGISTRY: [
+                  { id: 'competitor_id', label: '对手ID', type: 'text', required: true, readonly: mode === 'edit' },
+                  { id: 'company_name', label: '公司名称', type: 'text', required: true },
+                  { id: 'industry_category', label: '行业类别', type: 'text' },
+                  { id: 'threat_level', label: '威胁等级', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
+                  { id: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
+                  { id: 'website_url', label: '官网', type: 'url' },
+                  { id: 'news_monitoring', label: '启用新闻监控', type: 'checkbox' }
+              ],
+              CONFERENCE_REGISTRY: [
+                  { id: 'conference_id', label: '会议ID', type: 'text', required: true, readonly: mode === 'edit' },
+                  { id: 'conference_name', label: '会议名称', type: 'text', required: true },
+                  { id: 'industry_focus', label: '行业焦点', type: 'text' },
+                  { id: 'next_event_date', label: '下次会议日期', type: 'date' },
+                  { id: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
+                  { id: 'official_website', label: '官网', type: 'url' }
+              ],
+              REPORT_RECIPIENTS: [
+                  { id: 'recipient_id', label: '接收者ID', type: 'text', required: true, readonly: mode === 'edit' },
+                  { id: 'recipient_email', label: '接收者邮箱', type: 'email', required: true },
+                  { id: 'report_type', label: '报告类型', type: 'select', options: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual', 'Custom', 'Default'] },
+                  { id: 'is_active', label: '是否启用', type: 'checkbox' }
+              ],
+              SCHEDULED_REPORTS_CONFIG: [
+                  { id: 'job_id', label: '任务ID', type: 'text', required: true, readonly: mode === 'edit' },
+                  { id: 'report_title_template', label: '报告标题模板', type: 'text', required: true },
+                  { id: 'schedule_frequency', label: '调度频率', type: 'select', options: ['DAILY', 'WEEKLY_MONDAY', 'MONTHLY_1ST', 'QUARTERLY_1ST_MONTH', 'ANNUAL_JAN_1ST'] },
+                  { id: 'default_tech_areas', label: '默认技术领域 (逗号分隔)', type: 'textarea' },
+                  { id: 'recipient_emails', label: '接收者邮箱 (逗号分隔)', type: 'textarea' },
+                  { id: 'ai_summary_enabled', label: '启用AI摘要', type: 'checkbox' },
+                  { id: 'ai_key_findings_enabled', label: '启用AI关键发现', type: 'checkbox' },
+                  { id: 'ai_recommendations_enabled', label: '启用AI建议', type: 'checkbox' },
+                  { id: 'is_active', label: '是否启用', type: 'checkbox' },
+                  { id: 'description', label: '任务描述', type: 'textarea' }
+              ]
+          };
+
+          const fields = formFieldsConfig[registryId];
+          let formHtml = '';
+          fields.forEach(field => {
+              // 获取当前值，如果 data[field.id] 是 Date 对象，先格式化
+              let currentValue = data[field.id];
+              if (currentValue instanceof Date) {
+                  currentValue = currentValue.toISOString().split('T')[0]; // 适用于日期输入
+              } else if (currentValue === undefined || currentValue === null) {
+                  currentValue = ''; // 确保 undefined/null 显示为空字符串
+              }
+
+              formHtml += `
+                  <div class="mb-4">
+                      <label for="${field.id}" class="block text-sm font-medium text-gray-700 mb-1">${field.label}</label>
+              `;
+              if (field.type === 'select') {
+                  formHtml += `<select id="${field.id}" name="${field.id}" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" ${field.required ? 'required' : ''} ${field.readonly ? 'disabled' : ''}>`;
+                  field.options.forEach(option => {
+                      formHtml += `<option value="${option}" ${String(currentValue) === String(option) ? 'selected' : ''}>${option}</option>`;
+                  });
+                  formHtml += `</select>`;
+              } else if (field.type === 'textarea') {
+                  formHtml += `<textarea id="${field.id}" name="${field.id}" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" ${field.required ? 'required' : ''} ${field.readonly ? 'readonly' : ''}>${currentValue}</textarea>`;
+              } else if (field.type === 'checkbox') {
+                  formHtml += `
+                      <input type="checkbox" id="${field.id}" name="${field.id}" class="h-4 w-4 text-primary focus:ring-primary border-gray-300" ${currentValue ? 'checked' : ''} ${field.readonly ? 'disabled' : ''}>
+                  `;
+              } else {
+                  formHtml += `<input type="${field.type}" id="${field.id}" name="${field.id}" value="${currentValue}" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" ${field.required ? 'required' : ''} ${field.readonly ? 'readonly' : ''}>`;
+              }
+              formHtml += `</div>`;
+          });
+          form.innerHTML = formHtml;
+          modal.style.display = 'flex';
+        },
+
+
+        hideRegistryEntryModal: function() {
+            document.getElementById('registryEntryModal').style.display = 'none';
+        },
+
+        saveRegistryEntry: async function() {
+          const modal = document.getElementById('registryEntryModal');
+          const mode = modal.dataset.mode;
+          const registryId = modal.dataset.registryId;
+          const form = document.getElementById('registryEntryForm');
+          const formData = {};
+
+          // 获取当前注册表的 ID 字段名称
+          const idFieldMap = {
+              TECH_REGISTRY: 'tech_id',
+              COMPETITOR_REGISTRY: 'competitor_id',
+              CONFERENCE_REGISTRY: 'conference_id',
+              REPORT_RECIPIENTS: 'recipient_id',
+              SCHEDULED_REPORTS_CONFIG: 'job_id'
+          };
+          const currentIdField = idFieldMap[registryId] || 'id'; // 确保获取正确的 ID 字段
+
+          // 收集表单数据
+          const inputs = form.querySelectorAll('input, select, textarea');
+          inputs.forEach(input => {
+              if (input.type === 'checkbox') {
+                  formData[input.name] = input.checked;
+              } else if (input.type === 'number') { // 如果有数字类型，可能需要转换
+                  formData[input.name] = parseFloat(input.value);
+              } else {
+                  formData[input.name] = input.value;
+              }
+          });
+
+          // 客户端验证 (可以更详细，这里仅做非空检查)
+          const requiredFields = {
+              TECH_REGISTRY: ['tech_name'], // tech_id 在编辑时可能是只读，添加时如果为空后端会生成
+              COMPETITOR_REGISTRY: ['company_name'],
+              CONFERENCE_REGISTRY: ['conference_name'],
+              REPORT_RECIPIENTS: ['recipient_email'],
+              SCHEDULED_REPORTS_CONFIG: ['report_title_template', 'schedule_frequency']
+          };
+
+          let isValid = true;
+          (requiredFields[registryId] || []).forEach(field => {
+              if (!formData[field]) {
+                  alert(`${this.getRegistryLabel(registryId)} 的 ${field} 是必填项！`);
+                  isValid = false;
+                  return;
+              }
+          });
+          if (!isValid) return;
+
+          try {
+              if (mode === 'add') {
+                  // 对于添加操作，如果 ID 字段是空，后端会生成
+                  if (!formData[currentIdField]) {
+                      // 可以在前端生成 UUID，但为了后端统一管理，此处可以不传，让后端生成
+                      // 或者强制前端输入，取决于业务逻辑
+                  }
+                  await App.callApi('SystemAdminService', 'addRegistryEntry', [registryId, formData]);
+                  alert('添加成功！');
+              } else if (mode === 'edit') {
+                  const itemId = modal.dataset.editId; // 从 data-edit-id 获取原始 ID
+                  if (!itemId) {
+                      throw new Error("编辑模式下未找到要更新的条目ID。");
+                  }
+                  await App.callApi('SystemAdminService', 'updateRegistryEntry', [registryId, itemId, formData]);
+                  alert('更新成功！');
+              }
+              this.hideRegistryEntryModal();
+              this.loadActiveRegistryData(); // 刷新表格数据
+          } catch (e) {
+              handleFailure(e);
+          }
+        },
+
+        deleteRegistryEntry: async function(registryId, itemId) {
+          try {
+                await App.callApi('SystemAdminService', 'deleteRegistryEntry', [registryId, itemId]);
+                alert('删除成功！');
+                this.loadActiveRegistryData(); // 刷新表格数据
+            } catch (e) {
+                handleFailure(e);
+            }
+        },
+
+        // 辅助函数：获取注册表 HTML 骨架
+        getRegistryHtmlSkeleton: function(registryId) {
+            const label = this.getRegistryLabel(registryId);
+            // 这里只是一个简化示例，实际应包含完整的表格thead结构
+            return `
+                <div id="registry-${registryId}" class="registry-content">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="text-lg font-semibold">${label}列表</h4>
+                        <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700" data-action="add-entry">添加新${label}</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead></thead>
+                            <tbody id="${registryId.toLowerCase().replace('_registry', '')}-tbody">
+                                <!-- 数据将由 JS 填充 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        },
+
+        getRegistryLabel: function(registryId) {
+            const labels = {
+                TECH_REGISTRY: '技术领域',
+                COMPETITOR_REGISTRY: '竞争对手',
+                CONFERENCE_REGISTRY: '学术顶会',
+                REPORT_RECIPIENTS: '报告接收者',
+                SCHEDULED_REPORTS_CONFIG: '计划报告'
+            };
+            return labels[registryId] || '条目';
+        }
+        // ... (其他system模块函数) ...
       }
     }
   };

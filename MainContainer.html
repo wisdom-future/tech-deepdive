@@ -345,10 +345,10 @@
         <!-- 标签页导航 -->
         <div class="border-b border-gray-200">
           <nav id="collection-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
-            <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="overview">
+            <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="overview">
               数据源概览
             </a>
-            <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" data-tab="workflows">
+            <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="workflows">
               工作流中心
             </a>
           </nav>
@@ -568,6 +568,13 @@
               </tbody>
             </table>
           </div>
+          <!-- ✅ 新增：洞察线索分页控件 -->
+            <div class="flex justify-between items-center mt-4">
+              <button id="insightsPrevPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">上一页</button>
+              <span id="insightsPaginationInfo" class="text-sm text-gray-600"></span>
+              <button id="insightsNextPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">下一页</button>
+            </div>
+            <!-- ✅ 新增：洞察线索分页控件 结束 -->
         </div>
         
       </div>
@@ -946,11 +953,104 @@
      <!-- ✅ 新增：系统管理页面容器 -->
     <div id="page-system" class="page-container hidden">
       <div class="p-6 bg-white rounded-xl shadow-lg">
-        <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-4 flex items-center"><i class="fa fa-gears text-primary mr-3"></i>系统管理</h2>
-        <div class="text-center py-16">
-          <i class="fa fa-gears text-6xl text-gray-300 mb-4"></i>
-          <h3 class="text-xl font-semibold text-gray-600">系统管理模块</h3>
-          <p class="text-gray-500 mt-2">此页面用于未来的系统配置、用户管理和高级监控功能。</p>
+        <!-- 二级导航栏 -->
+        <div class="border-b border-gray-200 mb-6">
+          <nav id="system-sub-tabs" class="-mb-px flex space-x-8" aria-label="System Sub-Tabs">
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="settings">系统配置</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="registries">数据注册与管理</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="users">用户与权限</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="monitoring">高级监控</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="data-ops">数据操作</a>
+          </nav>
+        </div>
+
+        <!-- 标签页内容容器 -->
+        <div id="system-tab-content-settings" class="system-sub-tab-content">
+          <h3 class="text-xl font-semibold mb-4">系统配置</h3>
+          <!-- 现有系统配置表单和内容 -->
+        </div>
+
+        <div id="system-tab-content-registries" class="system-sub-tab-content hidden">
+          <!-- 注册表子导航 -->
+          <div class="border-b border-gray-200 mb-4">
+            <nav id="registry-tabs" class="-mb-px flex space-x-4" aria-label="Registry Tabs">
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="TECH_REGISTRY">技术领域</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="COMPETITOR_REGISTRY">竞争对手</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="CONFERENCE_REGISTRY">学术顶会</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="REPORT_RECIPIENTS">报告接收者</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="SCHEDULED_REPORTS_CONFIG">计划报告</a>
+            </nav>
+          </div>
+
+          <!-- 具体注册表内容将在此处动态加载 -->
+          <div id="current-registry-content" class="mt-4">
+            <!-- 这个 div 会被 JavaScript 动态替换和填充，例如： -->
+            <!--
+            <div id="registry-TECH_REGISTRY" class="registry-content">
+              <div class="flex justify-between items-center mb-4">
+                <h4 class="text-lg font-semibold">技术领域列表</h4>
+                <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700" data-action="add-tech-registry">添加新领域</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>技术名称</th>
+                      <th>类别</th>
+                      <th>监控状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tech-registry-tbody">
+                    <tr><td colspan="5" class="text-center py-4 text-gray-500">正在加载数据...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            -->
+          </div>
+        </div>
+
+        <div id="system-tab-content-users" class="system-sub-tab-content hidden">
+          <h3 class="text-xl font-semibold mb-4">用户与权限</h3>
+          <!-- 用户列表、角色管理等 -->
+        </div>
+
+        <div id="system-tab-content-monitoring" class="system-sub-tab-content hidden">
+          <h3 class="text-xl font-semibold mb-4">高级监控与诊断</h3>
+          <!-- 工作流监控、数据质量等 -->
+        </div>
+
+        <div id="system-tab-content-data-ops" class="system-sub-tab-content hidden">
+          <h3 class="text-xl font-semibold mb-4">数据操作</h3>
+          <!-- 数据导出、清理等 -->
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 模态框用于添加/编辑注册表条目 -->
+    <!-- 通用模态框用于添加/编辑注册表条目 -->
+    <div id="registryEntryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center p-4 border-b">
+          <h3 id="registryModalTitle" class="text-xl font-semibold text-gray-800">添加/编辑条目</h3>
+          <button class="close-button text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div class="p-6 overflow-y-auto">
+          <form id="registryEntryForm">
+            <!-- 表单字段将根据注册表类型动态生成 -->
+            <!-- 例如：
+            <div class="mb-4">
+                <label for="tech_name" class="block text-sm font-medium text-gray-700">技术名称</label>
+                <input type="text" id="tech_name" name="tech_name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm">
+            </div>
+            -->
+          </form>
+        </div>
+        <div class="flex justify-end p-4 border-t">
+          <button id="saveRegistryEntryBtn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700">保存</button>
         </div>
       </div>
     </div>

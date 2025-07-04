@@ -63,5 +63,17 @@ const DataService = {
       Logger.log(`DataService.updateObject 失败 [${collectionKey}/${documentId}]: ${e.message} \n ${e.stack}`);
       throw new Error(`更新文档 '${documentId}' 失败: ${e.message}`);
     }
+  },
+
+  // 在 backend/svc.Data.gs 中添加此方法
+  deleteObject(collectionKey, documentId) {
+    try {
+      const collectionName = this._getCollectionName(collectionKey);
+      const path = `${collectionName}/${documentId}`;
+      FirestoreService.deleteDocument(path); // 调用 FirestoreService 的删除方法
+    } catch (e) {
+      Logger.log(`DataService.deleteObject 失败 [${collectionKey}/${documentId}]: ${e.message} \\n ${e.stack}`);
+      throw new Error(`删除文档 '${documentId}' 失败: ${e.message}`);
+    }
   }
 };
