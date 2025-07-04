@@ -65,6 +65,36 @@
       .page-transition {
         transition: opacity 0.3s ease-in-out;
       }
+
+      /* ✅ 新增：用于状态和标签的样式 */
+      .badge {
+        @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium leading-4;
+      }
+      .badge-success {
+        @apply bg-green-100 text-green-800;
+      }
+      .badge-inactive {
+        @apply bg-gray-200 text-gray-800;
+      }
+      .badge-danger {
+        @apply bg-red-100 text-red-800;
+      }
+      .keyword-tag {
+        @apply inline-block bg-blue-100 text-blue-800 text-xs font-medium mr-2 mb-2 px-2.5 py-0.5 rounded-lg;
+      }
+      .action-icon-button {
+        @apply text-gray-500 hover:text-primary transition-colors duration-200 text-base;
+      }
+
+      .sortable-header {
+        @apply cursor-pointer select-none transition-colors duration-200 hover:bg-gray-200;
+      }
+      .sort-icon {
+        @apply ml-2 text-gray-400;
+      }
+      .sort-icon.active {
+        @apply text-primary;
+      }
     }
   </style>
   
@@ -988,11 +1018,9 @@
         <!-- 二级导航栏 -->
         <div class="border-b border-gray-200 mb-6">
           <nav id="system-sub-tabs" class="-mb-px flex space-x-8" aria-label="System Sub-Tabs">
-            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="settings">系统配置</a>
-            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="registries">数据注册与管理</a>
-            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="users">用户与权限</a>
-            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="monitoring">高级监控</a>
-            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="data-ops">数据操作</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="registries">数据源管理</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="users-mgmt">用户管理</a>
+            <a href="#" class="system-sub-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-sub-tab="reports-mgmt">报告管理</a>
           </nav>
         </div>
 
@@ -1009,8 +1037,6 @@
               <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="TECH_REGISTRY">技术领域</a>
               <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="COMPETITOR_REGISTRY">业界标杆</a>
               <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="CONFERENCE_REGISTRY">学术顶会</a>
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="REPORT_RECIPIENTS">报告接收者</a>
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="SCHEDULED_REPORTS_CONFIG">计划报告</a>
             </nav>
           </div>
 
@@ -1044,21 +1070,15 @@
           </div>
         </div>
 
-        <div id="system-tab-content-users" class="system-sub-tab-content hidden">
-          <h3 class="text-xl font-semibold mb-4">用户与权限</h3>
+        <div id="system-tab-content-users-mgmt" class="system-sub-tab-content hidden">
+          <h3 class="text-xl font-semibold mb-4">用户管理</h3>
           <!-- 用户列表、角色管理等 -->
         </div>
 
-        <div id="system-tab-content-monitoring" class="system-sub-tab-content hidden">
-          <h3 class="text-xl font-semibold mb-4">高级监控与诊断</h3>
+        <div id="system-tab-content-reports-mgmt" class="system-sub-tab-content hidden">
+          <h3 class="text-xl font-semibold mb-4">报告管理</h3>
           <!-- 工作流监控、数据质量等 -->
         </div>
-
-        <div id="system-tab-content-data-ops" class="system-sub-tab-content hidden">
-          <h3 class="text-xl font-semibold mb-4">数据操作</h3>
-          <!-- 数据导出、清理等 -->
-        </div>
-
       </div>
     </div>
 

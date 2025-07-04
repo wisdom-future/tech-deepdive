@@ -2480,538 +2480,624 @@
       },
       // ✅ 新增：系统工作台页面的初始化器
       system: {
+        // --- 核心属性 ---
         isInitialized: false,
-        activeSubTab: 'settings', // 默认激活系统配置
-        activeRegistry: 'TECH_REGISTRY', // 默认激活技术领域注册表
-        // 用于缓存当前激活注册表的原始数据，方便编辑和删除
-        currentRegistryData: [], 
+        activeRegistryKey: null, // 存储当前查看的注册表键名，例如 'TECH_REGISTRY'
+        registryConfigs: [],     // 保存所有注册表的配置信息
+        currentEditDocId: null,  // 存储正在编辑的文档ID，在'添加'模式下为null
+        // ✅ 新增：用于排序和筛选的状态管理
+        fullDataset: [], // 存储从后端获取的完整、未经修改的数据
+        currentSort: { key: null, order: 'none' }, // e.g., { key: 'tech_name', order: 'asc' }
+        currentFilter: '', // 存储当前的搜索关键词
+
+        // --- 初始化与事件处理 ---
 
         init: function() {
-          console.log('正在初始化系统管理页面...');
-          if (!this.isInitialized) {
-              // 绑定二级导航事件 (系统配置, 数据注册与管理, 用户与权限...)
-              document.getElementById('system-sub-tabs').addEventListener('click', this.handleSubTabClick.bind(this));
-              // 绑定注册表子导航事件 (技术领域, 竞争对手...)
-              document.getElementById('registry-tabs').addEventListener('click', this.handleRegistryTabClick.bind(this));
-              
-              // 使用事件委托绑定注册表内容区域的点击事件 (包括添加、编辑、删除按钮)
-              // 注意：这个监听器应该绑定在 #current-registry-content 上
-              document.getElementById('current-registry-content').addEventListener('click', this.handleRegistryActionClick.bind(this));
-              
-              // 绑定模态框关闭事件
-              document.getElementById('registryEntryModal').querySelector('.close-button').addEventListener('click', this.hideRegistryEntryModal.bind(this));
-              // 绑定模态框保存按钮
-              document.getElementById('saveRegistryEntryBtn').addEventListener('click', this.saveRegistryEntry.bind(this));
-
-              this.isInitialized = true;
+          if (this.isInitialized) {
+            // 如果已经初始化，只需确保显示正确的数据
+            if (this.activeRegistryKey) this.loadRegistryData(this.activeRegistryKey);
+            return;
           }
-          this.updateSubTabStyles();
-          this.loadActiveSubTabContent();
+          
+          console.log("正在初始化系统管理页面...");
+          this.setupAllConfigs(); // ✅ 确保调用的是这个新函数名
+          this.bindEventListeners();
+
+          // 默认加载第一个注册表
+          // const firstRegistryKey = this.registryConfigs[0]?.key;
+          // if (firstRegistryKey) {
+          //   this.switchRegistryTab(firstRegistryKey);
+          // }
+
+          this.switchSubTab('registries'); 
+          this.isInitialized = true;
         },
 
-        handleSubTabClick: function(event) {
-            const link = event.target.closest('a.system-sub-tab');
-            if (!link) return;
-            event.preventDefault();
-            const subTabName = link.dataset.subTab;
-            if (subTabName === this.activeSubTab) return;
-            this.activeSubTab = subTabName;
-            this.updateSubTabStyles();
-            this.loadActiveSubTabContent();
-        },
+          bindEventListeners: function() {
+            const pageSystem = document.getElementById('page-system');
+            if (!pageSystem) return;
 
-        updateSubTabStyles: function() {
-            document.querySelectorAll('.system-sub-tab').forEach(tab => {
-                const isSelected = tab.dataset.subTab === this.activeSubTab;
-                tab.classList.toggle('border-primary', isSelected);
-                tab.classList.toggle('text-primary', isSelected);
-                tab.classList.toggle('border-transparent', !isSelected);
-                tab.classList.toggle('text-gray-500', !isSelected);
+            pageSystem.addEventListener('click', (e) => {
+              const subTabLink = e.target.closest('a.system-sub-tab');
+              if (subTabLink) {
+                e.preventDefault();
+                this.switchSubTab(subTabLink.dataset.subTab);
+                return;
+              }
+              
+              const registryTabLink = e.target.closest('a.registry-tab');
+              if (registryTabLink) {
+                e.preventDefault();
+                this.switchRegistryTab(registryTabLink.dataset.registry);
+                return;
+              }
+
+              const actionButton = e.target.closest('button[data-action]');
+              if (actionButton) {
+                const action = actionButton.dataset.action;
+                const docId = actionButton.dataset.docId;
+                this.handleRegistryActionClick(action, docId);
+                return;
+              }
+
+              const header = e.target.closest('.sortable-header');
+              if (header) {
+                const sortKey = header.dataset.sortKey;
+                if (!sortKey) return;
+                if (this.currentSort.key === sortKey) {
+                  this.currentSort.order = this.currentSort.order === 'asc' ? 'desc' : 'asc';
+                } else {
+                  this.currentSort.key = sortKey;
+                  this.currentSort.order = 'asc';
+                }
+                this.applyFiltersAndSort();
+              }
             });
-            document.querySelectorAll('.system-sub-tab-content').forEach(content => {
-                content.classList.toggle('hidden', content.id !== `system-tab-content-${this.activeSubTab}`);
+            
+            // 模态框事件
+            document.getElementById('saveRegistryEntryBtn').addEventListener('click', this.handleSaveRegistryEntry.bind(this));
+            const modal = document.getElementById('registryEntryModal');
+            modal.querySelector('.close-button').addEventListener('click', () => this.hideRegistryFormModal());
+            modal.addEventListener('click', (e) => {
+                if (e.target.id === 'registryEntryModal') this.hideRegistryFormModal();
             });
-        },
+          },
 
-        loadActiveSubTabContent: async function() {
-            // 根据 activeSubTab 决定加载哪个子页面内容
-            switch (this.activeSubTab) {
-                case 'settings':
-                    // 加载/渲染系统配置表单 (如果需要从后端获取配置)
-                    console.log("加载系统配置...");
-                    // 示例：可以从ConfigDataService获取一些配置数据
-                    // const configData = await App.callApi('ConfigDataService', 'getSystemConfig');
-                    // this.renderSystemSettings(configData);
-                    break;
-                case 'registries':
-                    // 确保注册表子标签页样式正确
-                    this.updateRegistryTabStyles();
-                    // 加载当前激活的注册表数据
-                    await this.loadActiveRegistryData();
-                    break;
-                case 'users':
-                    console.log("加载用户与权限...");
-                    // 加载用户列表，渲染用户管理界面
-                    // const users = await App.callApi('SystemAdminService', 'getUsers');
-                    // this.renderUsers(users);
-                    break;
-                case 'monitoring':
-                    console.log("加载高级监控...");
-                    // 加载监控数据，渲染图表和日志
-                    // const monitorData = await App.callApi('SystemAdminService', 'getMonitorData');
-                    // this.renderMonitoring(monitorData);
-                    break;
-                case 'data-ops':
-                    console.log("加载数据操作...");
-                    // 渲染数据导出/清理界面
-                    break;
+        // --- UI渲染与模态框逻辑 ---
+
+        // 动态构建并显示用于添加或编辑条目的表单模态框
+        showRegistryFormModal: async function(action, docId = null) {
+            this.currentEditDocId = docId;
+            const config = this.getRegistryConfig(this.activeRegistryKey);
+            if (!config) return;
+
+            const modalTitle = document.getElementById('registryModalTitle');
+            const form = document.getElementById('registryEntryForm');
+            form.innerHTML = ''; // 清空旧表单
+
+            modalTitle.textContent = `${action === 'add' ? '添加新' : '编辑'}${config.title}`;
+
+            let currentData = {};
+            if (action === 'edit' && docId) {
+                try {
+                    const allData = await App.callApi('SystemAdminService', 'getRegistry', [this.activeRegistryKey]);
+                    currentData = allData.find(item => (item[config.idField] || item.id) === docId);
+                    if (!currentData) {
+                        alert('错误：找不到要编辑的记录。');
+                        return;
+                    }
+                } catch(e) {
+                    handleFailure(e);
+                    return;
+                }
             }
+
+            // ✅ 核心优化：将字段分为常规字段和复选框字段
+            const regularFields = config.fields.filter(f => f.type !== 'checkbox');
+            const checkboxFields = config.fields.filter(f => f.type === 'checkbox');
+
+            // 1. 渲染常规字段
+            regularFields.forEach(field => {
+              const value = currentData[field.name] || '';
+              let fieldHtml = '';
+              const inputId = `form-field-${field.name}`;
+              const isRequired = field.required ? '<span class="text-red-500">*</span>' : '';
+
+              switch (field.type) {
+                case 'textarea':
+                  fieldHtml = `<textarea id="${inputId}" name="${field.name}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-sm" rows="3">${value}</textarea>`;
+                  break;
+                case 'select':
+                  const optionsHtml = field.options.map(opt => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('');
+                  fieldHtml = `<select id="${inputId}" name="${field.name}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-sm">${optionsHtml}</select>`;
+                  break;
+                default:
+                  fieldHtml = `<input type="${field.type}" id="${inputId}" name="${field.name}" value="${value}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-sm" placeholder="${field.placeholder || ''}">`;
+                  break;
+              }
+              // ✅ 优化：减小了 mb-4 到 mb-3
+              form.innerHTML += `
+                <div class="mb-3">
+                  <label for="${inputId}" class="block text-sm font-medium text-gray-700">${field.label} ${isRequired}</label>
+                  ${fieldHtml}
+                </div>`;
+            });
+
+            // 2. 如果存在复选框字段，则渲染为一个分组
+            if (checkboxFields.length > 0) {
+                const checkboxesHtml = checkboxFields.map(field => {
+                    const value = currentData[field.name] || false;
+                    const inputId = `form-field-${field.name}`;
+                    return `
+                        <div class="flex items-center">
+                            <input type="checkbox" id="${inputId}" name="${field.name}" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" ${value ? 'checked' : ''}>
+                            <label for="${inputId}" class="ml-2 block text-sm text-gray-800">${field.label}</label>
+                        </div>
+                    `;
+                }).join('');
+
+                // ✅ 优化：使用网格布局来展示复选框
+                form.innerHTML += `
+                    <div class="mt-4 pt-3 border-t border-gray-200">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">数据源监控选项</label>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                            ${checkboxesHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('registryEntryModal').style.display = 'flex';
         },
 
-        // --- 数据注册与管理相关函数 ---
-        handleRegistryTabClick: function(event) {
-          const link = event.target.closest('a.registry-tab');
-          if (!link) return;
-          event.preventDefault();
-          const registryName = link.dataset.registry;
-          if (registryName === this.activeRegistry) return;
-          this.activeRegistry = registryName;
-          this.updateRegistryTabStyles();
-          this.loadActiveRegistryData();
+        // 隐藏表单模态框
+        hideRegistryFormModal: function() {
+          document.getElementById('registryEntryModal').style.display = 'none';
+          this.currentEditDocId = null;
         },
 
-        updateRegistryTabStyles: function() {
-          document.querySelectorAll('.registry-tab').forEach(tab => {
-              const isSelected = tab.dataset.registry === this.activeRegistry;
+        // 渲染当前激活的注册表的数据表格
+        renderRegistryTable: function(dataToRender) {
+          const config = this.getRegistryConfig(this.activeRegistryKey);
+          if (!config) return;
+
+          // ✅ 核心修改：动态地找到正确的表格包装器ID
+          const tableWrapperId = `registry-table-wrapper-${this.activeRegistryKey}`;
+          const tableWrapper = document.getElementById(tableWrapperId);
+
+          if (!tableWrapper) {
+              console.error(`渲染错误: 找不到表格包装器 #${tableWrapperId}`);
+              return;
+          }
+
+          // --- 动态表头生成 (此部分逻辑不变) ---
+          const getTableHeaders = () => {
+            // 辅助函数，用于生成单个可排序的表头
+            const renderHeader = (label, sortKey, alignment = 'center') => {
+                // ✅ 核心修改：调整基础样式
+                const headerBaseClasses = `px-4 py-2 text-${alignment} text-base font-semibold text-gray-800 uppercase tracking-wider`;
+                if (!sortKey) {
+                    return `<th class="${headerBaseClasses}">${label}</th>`;
+                }
+                const isSorted = this.currentSort.key === sortKey;
+                let iconClass = 'fa-sort';
+                if (isSorted) {
+                    iconClass = this.currentSort.order === 'asc' ? 'fa-sort-asc' : 'fa-sort-desc';
+                }
+                return `
+                    <th class="${headerBaseClasses} sortable-header" data-sort-key="${sortKey}">
+                        <div class="flex items-center justify-${alignment}">
+                            <span>${label}</span>
+                            <i class="fa ${iconClass} sort-icon ${isSorted ? 'active' : ''}"></i>
+                        </div>
+                    </th>`;
+            };
+            
+            // 为特定注册表定义定制化、更精细的表头
+            // ✅ 核心修改：明确指定每一列的对齐方式
+            const customHeaders = {
+                'TECH_REGISTRY': 
+                    renderHeader('技术领域', 'tech_name', 'center') + // 左对齐
+                    renderHeader('技术关键词', 'tech_keywords', 'center') + // 左对齐
+                    renderHeader('状态', 'monitoring_status', 'center') + // 居中
+                    renderHeader('数据源', null, 'center') + // 居中 (不可排序)
+                    renderHeader('操作', null, 'center'), // 右对齐 (不可排序)
+                'COMPETITOR_REGISTRY': 
+                    renderHeader('公司名称', 'company_name', 'center') + // 左对齐
+                    renderHeader('行业类别', 'industry_category', 'center') + // 居中
+                    renderHeader('优先级', 'monitoring_priority', 'center') + // 居中
+                    renderHeader('官方网站', null, 'center') + // 左对齐 (不可排序)
+                    renderHeader('操作', null, 'center'), // 右对齐 (不可排序)
+                'CONFERENCE_REGISTRY': 
+                    renderHeader('会议名称', 'conference_name', 'center') + // 左对齐
+                    renderHeader('行业焦点', 'industry_focus', 'center') + // 左对齐
+                    renderHeader('状态', 'monitoring_status', 'center') + // 居中
+                    renderHeader('官方网站', null, 'center') + // 左对齐 (不可排序)
+                    renderHeader('操作', null, 'center') // 右对齐 (不可排序)
+            };
+            
+            if (customHeaders[config.key]) {
+                return customHeaders[config.key];
+            }
+            
+            // 默认表头逻辑（现在也支持对齐）
+            return config.fields.map(f => renderHeader(f.label, f.name, 'left')).join('') + 
+                  renderHeader('操作', null, 'right');
+        };
+
+          // --- 动态表格行生成 (此部分逻辑不变) ---
+          const getTableRows = (data) => {
+            // ... 此处粘贴你上一版回复中 `renderRegistryTable` 函数内部的 `getTableRows` 完整函数体 ...
+            // 为了确保完整性，我再次粘贴一遍
+            const renderActionButtons = (docId) => `
+                <button data-action="edit" data-doc-id="${docId}" class="action-icon-button" title="编辑"><i class="fa fa-pencil-square-o text-lg"></i></button>
+                <button data-action="delete" data-doc-id="${docId}" class="action-icon-button ml-4 hover:text-red-500" title="删除"><i class="fa fa-trash-o text-lg"></i></button>`;
+
+            const renderStatusBadge = (status) => `<span class="badge ${status === 'active' ? 'badge-success' : 'badge-inactive'}">${status}</span>`;
+            
+            const renderClickableLink = (url) => {
+                if (!url || typeof url !== 'string' || !url.startsWith('http')) return '<span class="text-sm text-gray-400">未提供</span>';
+                const cleanUrl = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-200 text-base">${cleanUrl}</a>`;
+            };
+
+            switch (config.key) {
+                case 'TECH_REGISTRY':
+                    return data.map(item => {
+                      const docId = item.id;
+                      const keywordsHtml = (item.tech_keywords || '').split(',').map(kw => kw.trim()).filter(kw => kw).map(kw => `<span class="inline-block bg-blue-100 text-blue-800 text-sm font-medium mr-1.5 mb-1.5 px-3 py-1 rounded-md">${kw}</span>`).join('');
+                      const sourcesHtml = ['data_source_academic', 'data_source_patent', 'data_source_opensource', 'data_source_news'].map(s => item[s] ? `<i class="fa fa-check-circle text-green-500 text-xl mx-1.5"></i>` : `<i class="fa fa-circle-o text-gray-300 text-xl mx-1.5"></i>`).join('');
+                      
+                      return `<tr class="hover:bg-gray-50/70 transition-colors duration-200">
+                                  <td class="px-6 py-3 w-2/5">
+                                      <div class="text-base font-semibold text-gray-900">${item.tech_name}</div>
+                                      <div class="text-sm text-gray-500">${item.tech_category}</div>
+                                  </td>
+                                  <td class="px-6 py-3 w-2/5">
+                                      <div class="flex flex-wrap">${keywordsHtml || '<span class="text-sm text-gray-400">未设置</span>'}</div>
+                                  </td>
+                                  <td class="px-6 py-3 w-1/12 text-center">${renderStatusBadge(item.monitoring_status)}</td>
+                                  <td class="px-6 py-3 w-1/6 text-center">
+                                      <div class="flex justify-center items-center">${sourcesHtml}</div>
+                                  </td>
+                                  <td class="px-6 py-3 w-auto text-right">${renderActionButtons(docId)}</td>
+                              </tr>`;
+                  }).join('');
+                case 'COMPETITOR_REGISTRY':
+                    return data.map(item => {
+                        const docId = item.id;
+                        const priority = item.monitoring_priority || 'low';
+                        let priorityBadge = '';
+                        if (priority === 'high' || priority === '10') priorityBadge = `<span class="badge badge-danger">High</span>`;
+                        else if (priority === 'medium' || (priority >= 7 && priority < 10)) priorityBadge = `<span class="badge" style="background-color:#FFFBEB; color:#D97706;">Medium</span>`;
+                        else priorityBadge = `<span class="badge badge-inactive">Low</span>`;
+                        return `<tr class="hover:bg-gray-50/70 transition-colors duration-200">
+                                    <td class="px-6 py-3"><div class="text-base font-semibold text-gray-900">${item.company_name}</div></td>
+                                    <td class="px-6 py-3 text-base text-gray-600">${item.industry_category}</td>
+                                    <td class="px-6 py-3 text-center">${priorityBadge}</td>
+                                    <td class="px-6 py-3">${renderClickableLink(item.website_url)}</td>
+                                    <td class="px-6 py-3 text-right">${renderActionButtons(docId)}</td>
+                                </tr>`;
+                    }).join('');
+                case 'CONFERENCE_REGISTRY':
+                    return data.map(item => {
+                        const docId = item.id;
+                        return `<tr class="hover:bg-gray-50/70 transition-colors duration-200">
+                                    <td class="px-6 py-3"><div class="text-base font-semibold text-gray-900">${item.conference_name}</div></td>
+                                    <td class="px-6 py-3 text-base text-gray-600">${item.industry_focus}</td>
+                                    <td class="px-6 py-3 text-center">${renderStatusBadge(item.monitoring_status)}</td>
+                                    <td class="px-6 py-3">${renderClickableLink(item.official_website)}</td>
+                                    <td class="px-6 py-3 text-right">${renderActionButtons(docId)}</td>
+                                </tr>`;
+                    }).join('');
+                default:
+                    return data.map(item => {
+                        const docId = item.id;
+                        const cells = config.fields.map(f => `<td class="px-6 py-3 text-base text-gray-800">${item[f.name] || 'N/A'}</td>`).join('');
+                        return `<tr class="hover:bg-gray-50/70">${cells}<td class="px-6 py-3 text-right">${renderActionButtons(docId)}</td></tr>`;
+                    }).join('');
+            }
+          };
+
+          // --- 最终HTML结构 ---
+          tableWrapper.innerHTML = `
+            <div class="w-full">
+              <table id="registry-dynamic-table" class="min-w-full border border-navDark rounded-lg overflow-hidden">
+                <thead class="bg-gray-800/5"> 
+                  <tr>${getTableHeaders()}</tr>
+                </thead>
+                <tbody class="divide-y divide-navDark/30"> 
+                  ${dataToRender.length > 0 ? getTableRows(dataToRender) : `<tr><td colspan="100%" class="text-center py-16 text-gray-500 text-lg">没有匹配的数据</td></tr>`}
+                </tbody>
+              </table>
+            </div>`;
+        },
+        
+        // --- 数据与API交互 ---
+        // ✅ 新增：核心处理函数
+        applyFiltersAndSort: function() {
+          let processedData = [...this.fullDataset]; // 从完整数据开始
+
+          // 1. 应用筛选
+          if (this.currentFilter) {
+            processedData = processedData.filter(item => {
+              // 将整个对象的值拼接成一个字符串进行搜索，简单高效
+              return Object.values(item).join(' ').toLowerCase().includes(this.currentFilter);
+            });
+          }
+
+          // 2. 应用排序
+          const sortInfo = this.currentSort;
+          if (sortInfo.key && sortInfo.order !== 'none') {
+            processedData.sort((a, b) => {
+              let valA = a[sortInfo.key] || '';
+              let valB = b[sortInfo.key] || '';
+              
+              // 尝试将值转为数字进行比较，失败则按字符串比较
+              const numA = parseFloat(valA);
+              const numB = parseFloat(valB);
+
+              let comparison = 0;
+              if (!isNaN(numA) && !isNaN(numB)) {
+                comparison = numA - numB;
+              } else {
+                comparison = String(valA).localeCompare(String(valB), 'zh-Hans-CN');
+              }
+              
+              return sortInfo.order === 'asc' ? comparison : -comparison;
+            });
+          }
+
+          // 3. 调用渲染函数，传入处理后的数据
+          this.renderRegistryTable(processedData);
+        },
+
+
+        // 获取所选注册表的数据并触发渲染
+        loadRegistryData: async function(registryKey) {
+          // 决定在哪个主容器里进行操作
+          const containerId = this.reportConfigs.some(c => c.key === registryKey)
+              ? 'current-report-registry-content' 
+              : 'current-registry-content';
+          const contentContainer = document.getElementById(containerId);
+          
+          const config = this.getRegistryConfig(registryKey);
+          if (!contentContainer || !config) return;
+
+          // 渲染包含操作区和表格包装器的完整骨架屏
+          // ✅ 核心修改：为表格包装器使用唯一的ID
+          const tableWrapperId = `registry-table-wrapper-${registryKey}`;
+          contentContainer.innerHTML = `
+            <div class="flex justify-between items-center">
+              <div class="relative w-1/3 max-w-xs">
+                <input type="text" id="registry-search-input" placeholder="搜索 ${config.title}..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+              </div>
+              <div>
+                <button data-action="add" class="px-5 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-blue-700 shadow-sm flex items-center">
+                  <i class="fa fa-plus mr-2"></i> 添加新${config.title}
+                </button>
+              </div>
+            </div>
+            <div id="${tableWrapperId}" class="mt-3 text-center p-8">正在加载数据...</div>`;
+
+          // 为新生成的搜索框绑定事件
+          contentContainer.querySelector(`#registry-search-input`).addEventListener('input', (e) => {
+            this.currentFilter = e.target.value.trim().toLowerCase();
+            this.applyFiltersAndSort();
+          });
+
+          try {
+            const data = await App.callApi('SystemAdminService', 'getRegistry', [registryKey]);
+            this.fullDataset = data || [];
+            this.currentSort = { key: null, order: 'none' };
+            this.currentFilter = '';
+            this.applyFiltersAndSort(); // 首次渲染
+          } catch (e) {
+            document.getElementById(tableWrapperId).innerHTML = `<div class="p-8 text-red-500">加载 ${config.title} 数据失败: ${e.message}</div>`;
+            handleFailure(e);
+          }
+        },
+
+        // 处理表格中的“添加”、“编辑”、“删除”按钮点击事件
+        handleRegistryActionClick: function(action, docId) {
+          const config = this.getRegistryConfig(this.activeRegistryKey);
+          if (!config) return;
+
+          if (action === 'delete') {
+            if (confirm(`确定要删除这个${config.title}吗？\nID: ${docId}`)) {
+              const deleteButton = document.querySelector(`button[data-action="delete"][data-doc-id="${docId}"]`);
+              if(deleteButton) {
+                  deleteButton.textContent = '删除中...';
+                  deleteButton.disabled = true;
+              }
+              
+              App.callApi('SystemAdminService', 'deleteRegistryEntry', [this.activeRegistryKey, docId])
+                .then(() => {
+                  alert('删除成功！');
+                  this.loadRegistryData(this.activeRegistryKey); // 刷新表格
+                })
+                .catch(handleFailure);
+            }
+          } else if (action === 'add' || action === 'edit') {
+            this.showRegistryFormModal(action, docId);
+          }
+        },
+
+        // 处理模态框中的“保存”按钮点击事件
+        handleSaveRegistryEntry: function() {
+          const config = this.getRegistryConfig(this.activeRegistryKey);
+          if (!config) return;
+
+          const form = document.getElementById('registryEntryForm');
+          const formData = new FormData(form);
+          const entryData = {};
+
+          // 从表单字段中收集数据
+          config.fields.forEach(field => {
+            if (field.type === 'checkbox') {
+              entryData[field.name] = form.querySelector(`[name="${field.name}"]`).checked;
+            } else {
+              entryData[field.name] = formData.get(field.name);
+            }
+          });
+
+          const saveBtn = document.getElementById('saveRegistryEntryBtn');
+          saveBtn.textContent = '保存中...';
+          saveBtn.disabled = true;
+
+          const action = this.currentEditDocId ? 'update' : 'add';
+          const apiMethod = action === 'add' ? 'addRegistryEntry' : 'updateRegistryEntry';
+          const apiArgs = action === 'add' 
+            ? [this.activeRegistryKey, entryData]
+            : [this.activeRegistryKey, this.currentEditDocId, entryData];
+
+          App.callApi('SystemAdminService', apiMethod, apiArgs)
+            .then(() => {
+              alert('保存成功！');
+              this.hideRegistryFormModal();
+              this.loadRegistryData(this.activeRegistryKey); // 刷新表格
+            })
+            .catch(handleFailure)
+            .finally(() => {
+              saveBtn.textContent = '保存';
+              saveBtn.disabled = false;
+            });
+        },
+
+        loadReportConfigContent: function() {
+            const container = document.getElementById('system-tab-content-reports-mgmt');
+            if (!container || container.querySelector('.registry-tabs')) return;
+
+            const reportTabsHtml = this.reportConfigs.map(conf => 
+                `<a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base text-gray-500 border-transparent" data-registry="${conf.key}">${conf.title}</a>`
+            ).join('');
+
+            container.innerHTML = `
+              <div class="border-b border-gray-200">
+                  <nav class="registry-tabs -mb-px flex space-x-4" aria-label="Report Registry Tabs">
+                      ${reportTabsHtml}
+                  </nav>
+              </div>
+              <div id="current-report-registry-content" class="mt-4"></div>
+            `;
+        },
+
+        // ✅ 将配置设置分为两部分
+        setupAllConfigs: function() {
+          this.registryConfigs = [
+            {
+              key: 'TECH_REGISTRY', title: '技术领域', idField: 'tech_id',
+              fields: [
+                { name: 'tech_name', label: '技术名称', type: 'text', required: true },
+                { name: 'tech_category', label: '技术类别', type: 'text', required: true },
+                { name: 'tech_keywords', label: '技术关键词 (逗号分隔)', type: 'textarea' },
+                { name: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'], required: true },
+                { name: 'data_source_academic', label: '监控学术论文', type: 'checkbox' },
+                { name: 'data_source_patent', label: '监控专利', type: 'checkbox' },
+                { name: 'data_source_opensource', label: '监控开源项目', type: 'checkbox' },
+                { name: 'data_source_news', label: '监控技术新闻', type: 'checkbox' },
+              ]
+            },
+            {
+              key: 'COMPETITOR_REGISTRY', title: '业界标杆', idField: 'competitor_id',
+              fields: [
+                { name: 'company_name', label: '公司名称', type: 'text', required: true },
+                { name: 'industry_category', label: '行业类别', type: 'text' },
+                { name: 'monitoring_priority', label: '监控优先级', type: 'select', options: ['high', 'medium', 'low'] },
+                { name: 'news_monitoring', label: '监控新闻', type: 'checkbox' },
+                { name: 'website_url', label: '官方网站', type: 'url' },
+              ]
+            },
+            {
+              key: 'CONFERENCE_REGISTRY', title: '学术顶会', idField: 'conference_id',
+              fields: [
+                { name: 'conference_name', label: '会议名称', type: 'text', required: true },
+                { name: 'industry_focus', label: '行业焦点', type: 'text' },
+                { name: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
+                { name: 'official_website', label: '官方网站', type: 'url' },
+              ]
+            }
+          ];
+          
+          this.reportConfigs = [
+            {
+              key: 'REPORT_RECIPIENTS', title: '报告接收者', idField: 'recipient_id',
+              fields: [
+                  { name: 'recipient_name', label: '姓名', type: 'text', required: true },
+                  { name: 'recipient_email', label: '邮箱', type: 'email', required: true },
+                  { name: 'report_type', label: '接收报告类型', type: 'text', placeholder: '例如: Daily, Weekly' },
+                  { name: 'is_active', label: '是否激活', type: 'checkbox' },
+              ]
+            },
+            {
+              key: 'SCHEDULED_REPORTS_CONFIG', title: '计划报告', idField: 'job_id',
+              fields: [
+                  { name: 'report_title_template', label: '报告标题模板', type: 'text', required: true },
+                  { name: 'report_type', label: '报告类型', type: 'text', required: true },
+                  { name: 'schedule_frequency', label: '调度频率', type: 'text', required: true },
+                  { name: 'is_active', label: '是否激活', type: 'checkbox' },
+              ]
+            }
+          ];
+        },
+
+        // 切换主二级Tab (e.g., 系统配置, 数据注册与管理)
+        switchSubTab: function(subTabId) {
+          if (this.activeSubTab === subTabId && this.isInitialized) return; // 避免不必要的重绘
+
+          this.activeSubTab = subTabId;
+          this.activeRegistryKey = null;
+
+          document.querySelectorAll('.system-sub-tab').forEach(tab => {
+              const isSelected = tab.dataset.subTab === subTabId;
               tab.classList.toggle('border-primary', isSelected);
               tab.classList.toggle('text-primary', isSelected);
               tab.classList.toggle('border-transparent', !isSelected);
               tab.classList.toggle('text-gray-500', !isSelected);
           });
-          // 动态显示或隐藏具体的注册表内容容器
-          document.querySelectorAll('.registry-content').forEach(content => {
-              content.classList.toggle('hidden', content.id !== `registry-${this.activeRegistry}`);
-          });
-        },
 
-        loadActiveRegistryData: async function() {
-          const registryId = this.activeRegistry;
-          const currentRegistryContentDiv = document.getElementById('current-registry-content');
+          document.querySelectorAll('.system-sub-tab-content').forEach(content => {
+              content.classList.toggle('hidden', content.id !== `system-tab-content-${subTabId}`);
+          });
           
-          // 动态插入当前注册表的 HTML 骨架（如果尚未插入）
-          // 这样做是为了避免在每次切换标签时都重新渲染整个表格结构，只更新 tbody
-          if (!document.getElementById(`registry-${registryId}`)) {
-              currentRegistryContentDiv.innerHTML = this.getRegistryHtmlSkeleton(registryId);
+          // ✅ 核心修改：确保在切换子Tab之前，父容器已经渲染
+          if (subTabId === 'registries') {
+              const firstRegistryKey = this.registryConfigs[0]?.key;
+              if(firstRegistryKey) this.switchRegistryTab(firstRegistryKey);
+          } else if (subTabId === 'reports-mgmt') {
+              this.loadReportConfigContent();
+              const firstReportKey = this.reportConfigs[0]?.key;
+              if(firstReportKey) this.switchRegistryTab(firstReportKey);
           } else {
-              // 隐藏所有注册表内容，只显示当前选中的
-              document.querySelectorAll('.registry-content').forEach(content => {
-                  content.classList.add('hidden');
-              });
-              document.getElementById(`registry-${registryId}`).classList.remove('hidden');
-          }
-
-          const tbody = document.getElementById(`${registryId.toLowerCase().replace('_registry', '')}-tbody`);
-          if (!tbody) {
-              console.error(`无法找到注册表 ${registryId} 的 tbody 元素。`);
-              return;
-          }
-          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-gray-500">正在加载 ${this.getRegistryLabel(registryId)} 数据...</td></tr>`;
-
-          try {
-              const data = await App.callApi('SystemAdminService', 'getRegistry', [registryId]);
-              this.currentRegistryData = data; // 缓存原始数据
-              this.renderRegistryTable(registryId, data);
-          } catch (e) {
-              handleFailure(e);
-              tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-red-500">加载 ${this.getRegistryLabel(registryId)} 数据失败: ${e.message}</td></tr>`;
-          }
-        },
-
-        renderRegistryTable: function(registryId, data) {
-          const tbody = document.getElementById(`${registryId.toLowerCase().replace('_registry', '')}-tbody`);
-          if (!tbody) return;
-
-          if (!data || data.length === 0) {
-              tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-gray-500">暂无数据。</td></tr>`;
-              return;
-          }
-
-          // 定义每个注册表的列配置和数据映射（这是关键）
-          const registryConfigs = {
-              TECH_REGISTRY: {
-                  idField: 'tech_id', // 标识字段
-                  fields: [
-                      { key: 'tech_id', label: 'ID', width: '10%' },
-                      { key: 'tech_name', label: '技术名称', width: '20%' },
-                      { key: 'tech_category', label: '类别', width: '15%' },
-                      { key: 'monitoring_status', label: '状态', width: '10%' },
-                      { key: 'academic_search_terms', label: '学术搜索词', width: '20%', truncate: true },
-                      { key: 'data_source_academic', label: '学术源', width: '10%', type: 'boolean' }
-                  ],
-                  // 适配器函数，将原始数据转换为表格友好的格式
-                  adapter: item => ({
-                      tech_id: item.tech_id,
-                      tech_name: item.tech_name,
-                      tech_category: item.tech_category,
-                      monitoring_status: item.monitoring_status,
-                      academic_search_terms: item.academic_search_terms,
-                      data_source_academic: item.data_source_academic // 布尔值直接传入
-                  })
-              },
-              COMPETITOR_REGISTRY: {
-                  idField: 'competitor_id',
-                  fields: [
-                      { key: 'competitor_id', label: 'ID', width: '10%' },
-                      { key: 'company_name', label: '公司名称', width: '20%' },
-                      { key: 'industry_category', label: '行业类别', width: '15%' },
-                      { key: 'monitoring_status', label: '状态', width: '10%' },
-                      { key: 'threat_level', label: '威胁等级', width: '15%' },
-                      { key: 'news_monitoring', label: '新闻监控', width: '10%', type: 'boolean' }
-                  ],
-                  adapter: item => ({
-                      competitor_id: item.competitor_id,
-                      company_name: item.company_name,
-                      industry_category: item.industry_category,
-                      monitoring_status: item.monitoring_status,
-                      threat_level: item.threat_level,
-                      news_monitoring: item.news_monitoring
-                  })
-              },
-              CONFERENCE_REGISTRY: {
-                  idField: 'conference_id',
-                  fields: [
-                      { key: 'conference_id', label: 'ID', width: '10%' },
-                      { key: 'conference_name', label: '会议名称', width: '25%' },
-                      { key: 'industry_focus', label: '行业焦点', width: '20%' },
-                      { key: 'next_event_date', label: '下次会议日期', width: '15%', type: 'date' },
-                      { key: 'monitoring_status', label: '状态', width: '10%' }
-                  ],
-                  adapter: item => ({
-                      conference_id: item.conference_id,
-                      conference_name: item.conference_name,
-                      industry_focus: item.industry_focus,
-                      next_event_date: App.pageInitializers.reports._formatDate(item.next_event_date), // 使用日期格式化函数
-                      monitoring_status: item.monitoring_status
-                  })
-              },
-              REPORT_RECIPIENTS: {
-                  idField: 'recipient_id',
-                  fields: [
-                      { key: 'recipient_id', label: 'ID', width: '15%' },
-                      { key: 'recipient_email', label: '邮箱', width: '30%' },
-                      { key: 'report_type', label: '报告类型', width: '20%' },
-                      { key: 'is_active', label: '是否启用', width: '15%', type: 'boolean' }
-                  ],
-                  adapter: item => ({
-                      recipient_id: item.recipient_id,
-                      recipient_email: item.recipient_email,
-                      report_type: item.report_type,
-                      is_active: item.is_active
-                  })
-              },
-              SCHEDULED_REPORTS_CONFIG: {
-                  idField: 'job_id',
-                  fields: [
-                      { key: 'job_id', label: '任务ID', width: '10%' },
-                      { key: 'report_title_template', label: '标题模板', width: '20%', truncate: true },
-                      { key: 'schedule_frequency', label: '频率', width: '10%' },
-                      { key: 'is_active', label: '启用', width: '5%', type: 'boolean' },
-                      { key: 'last_run_status', label: '上次状态', width: '10%' },
-                      { key: 'last_run_timestamp', label: '上次运行', width: '15%', type: 'date' }
-                  ],
-                  adapter: item => ({
-                      job_id: item.job_id,
-                      report_title_template: item.report_title_template,
-                      schedule_frequency: item.schedule_frequency,
-                      is_active: item.is_active,
-                      last_run_status: item.last_run_status,
-                      last_run_timestamp: App.pageInitializers.reports._formatDate(item.last_run_timestamp, true)
-                  })
-              }
-          };
-
-          const config = registryConfigs[registryId];
-          if (!config) {
-              tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-red-500">未找到 ${this.getRegistryLabel(registryId)} 的配置。</td></tr>`;
-              return;
-          }
-
-          // 渲染表头
-          const headers = config.fields.map(f => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="width: ${f.width}">${f.label}</th>`).join('');
-          const actionsHeader = `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="width: 10%">操作</th>`;
-          document.querySelector(`#registry-${registryId} thead`).innerHTML = `<tr>${headers}${actionsHeader}</tr>`;
-
-          // 渲染表格行
-          const rows = data.map(item => {
-              const adaptedItem = config.adapter(item);
-              const cells = config.fields.map(f => {
-                  let displayValue = adaptedItem[f.key] !== null && adaptedItem[f.key] !== undefined ? String(adaptedItem[f.key]) : 'N/A';
-                  if (f.truncate) {
-                      displayValue = truncate(displayValue, 50); // 截断长文本
-                  }
-                  if (f.type === 'boolean') {
-                      displayValue = adaptedItem[f.key] ? '是' : '否';
-                  }
-                  return `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800" style="width: ${f.width}">${displayValue}</td>`;
-              }).join('');
-
-              const itemId = item[config.idField]; // 使用配置中定义的 idField
-              const actions = `
-                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="width: 10%">
-                      <button class="text-indigo-600 hover:text-indigo-900 mr-3" data-action="edit" data-id="${itemId}">编辑</button>
-                      <button class="text-red-600 hover:text-red-900" data-action="delete" data-id="${itemId}">删除</button>
-                  </td>
-              `;
-              return `<tr class="hover:bg-gray-50">${cells}${actions}</tr>`;
-          }).join('');
-          tbody.innerHTML = rows;
-        },
-
-        handleRegistryActionClick: function(event) {
-          const button = event.target.closest('button[data-action]'); // 确保点击的是带有 data-action 的按钮
-          if (!button) return;
-
-          const action = button.dataset.action;
-          const itemId = button.dataset.id; // 对于编辑和删除操作
-          const registryId = this.activeRegistry;
-
-          if (action === 'add-entry') { // 通用的添加按钮
-              this.showRegistryEntryModal(registryId, 'add');
-          } else if (action === 'edit') {
-              const itemToEdit = this.currentRegistryData.find(item => item[registryConfigs[registryId].idField] === itemId);
-              if (itemToEdit) {
-                  this.showRegistryEntryModal(registryId, 'edit', itemToEdit);
-              } else {
-                  alert('未找到要编辑的条目！');
-              }
-          } else if (action === 'delete') {
-              if (confirm(`确定要删除此条目吗 (ID: ${itemId})？`)) {
-                  this.deleteRegistryEntry(registryId, itemId);
+              const container = document.getElementById(`system-tab-content-${subTabId}`);
+              if(container) {
+                  const tabElement = document.querySelector(`.system-sub-tab[data-sub-tab="${subTabId}"]`);
+                  const tabTitle = tabElement ? tabElement.textContent.trim() : subTabId;
+                  container.innerHTML = `<div class="p-8 bg-gray-50 rounded-lg"><h3 class="text-2xl font-semibold">${tabTitle}</h3><p class="mt-2 text-gray-500">此功能模块正在开发中...</p></div>`;
               }
           }
         },
 
-        showRegistryEntryModal: function(registryId, mode, data = {}) {
-          const modal = document.getElementById('registryEntryModal');
-          const titleEl = document.getElementById('registryModalTitle');
-          const form = document.getElementById('registryEntryForm');
-          form.innerHTML = ''; // 清空现有表单内容
-
-          titleEl.textContent = mode === 'add' ? `添加新${this.getRegistryLabel(registryId)}` : `编辑${this.getRegistryLabel(registryId)}`;
-          modal.dataset.mode = mode; // 存储模式
-          modal.dataset.registryId = registryId; // 存储当前注册表ID
+        switchRegistryTab: function(registryKey) {
+          if (this.activeRegistryKey === registryKey) return; // 避免重复加载
+          this.activeRegistryKey = registryKey;
           
-          // 存储编辑模式下的原始数据ID，用于更新操作
-          modal.dataset.editId = mode === 'edit' ? data[registryConfigs[registryId].idField] : '';
-
-          // 根据 registryId 动态生成表单字段
-          const formFieldsConfig = {
-              TECH_REGISTRY: [
-                  { id: 'tech_id', label: '技术ID', type: 'text', required: true, readonly: mode === 'edit' },
-                  { id: 'tech_name', label: '技术名称', type: 'text', required: true },
-                  { id: 'tech_category', label: '技术类别', type: 'text' },
-                  { id: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
-                  { id: 'website_url', label: '官网', type: 'url' },
-                  { id: 'academic_search_terms', label: '学术搜索词 (逗号分隔)', type: 'textarea' },
-                  { id: 'patent_search_terms', label: '专利搜索词 (逗号分隔)', type: 'textarea' },
-                  { id: 'data_source_academic', label: '启用学术数据源', type: 'checkbox' },
-                  { id: 'data_source_patent', label: '启用专利数据源', type: 'checkbox' },
-                  { id: 'data_source_opensource', label: '启用开源数据源', type: 'checkbox' },
-                  { id: 'data_source_news', label: '启用新闻数据源', type: 'checkbox' },
-              ],
-              COMPETITOR_REGISTRY: [
-                  { id: 'competitor_id', label: '对手ID', type: 'text', required: true, readonly: mode === 'edit' },
-                  { id: 'company_name', label: '公司名称', type: 'text', required: true },
-                  { id: 'industry_category', label: '行业类别', type: 'text' },
-                  { id: 'threat_level', label: '威胁等级', type: 'select', options: ['low', 'medium', 'high', 'critical'] },
-                  { id: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
-                  { id: 'website_url', label: '官网', type: 'url' },
-                  { id: 'news_monitoring', label: '启用新闻监控', type: 'checkbox' }
-              ],
-              CONFERENCE_REGISTRY: [
-                  { id: 'conference_id', label: '会议ID', type: 'text', required: true, readonly: mode === 'edit' },
-                  { id: 'conference_name', label: '会议名称', type: 'text', required: true },
-                  { id: 'industry_focus', label: '行业焦点', type: 'text' },
-                  { id: 'next_event_date', label: '下次会议日期', type: 'date' },
-                  { id: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
-                  { id: 'official_website', label: '官网', type: 'url' }
-              ],
-              REPORT_RECIPIENTS: [
-                  { id: 'recipient_id', label: '接收者ID', type: 'text', required: true, readonly: mode === 'edit' },
-                  { id: 'recipient_email', label: '接收者邮箱', type: 'email', required: true },
-                  { id: 'report_type', label: '报告类型', type: 'select', options: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annual', 'Custom', 'Default'] },
-                  { id: 'is_active', label: '是否启用', type: 'checkbox' }
-              ],
-              SCHEDULED_REPORTS_CONFIG: [
-                  { id: 'job_id', label: '任务ID', type: 'text', required: true, readonly: mode === 'edit' },
-                  { id: 'report_title_template', label: '报告标题模板', type: 'text', required: true },
-                  { id: 'schedule_frequency', label: '调度频率', type: 'select', options: ['DAILY', 'WEEKLY_MONDAY', 'MONTHLY_1ST', 'QUARTERLY_1ST_MONTH', 'ANNUAL_JAN_1ST'] },
-                  { id: 'default_tech_areas', label: '默认技术领域 (逗号分隔)', type: 'textarea' },
-                  { id: 'recipient_emails', label: '接收者邮箱 (逗号分隔)', type: 'textarea' },
-                  { id: 'ai_summary_enabled', label: '启用AI摘要', type: 'checkbox' },
-                  { id: 'ai_key_findings_enabled', label: '启用AI关键发现', type: 'checkbox' },
-                  { id: 'ai_recommendations_enabled', label: '启用AI建议', type: 'checkbox' },
-                  { id: 'is_active', label: '是否启用', type: 'checkbox' },
-                  { id: 'description', label: '任务描述', type: 'textarea' }
-              ]
-          };
-
-          const fields = formFieldsConfig[registryId];
-          let formHtml = '';
-          fields.forEach(field => {
-              // 获取当前值，如果 data[field.id] 是 Date 对象，先格式化
-              let currentValue = data[field.id];
-              if (currentValue instanceof Date) {
-                  currentValue = currentValue.toISOString().split('T')[0]; // 适用于日期输入
-              } else if (currentValue === undefined || currentValue === null) {
-                  currentValue = ''; // 确保 undefined/null 显示为空字符串
-              }
-
-              formHtml += `
-                  <div class="mb-4">
-                      <label for="${field.id}" class="block text-sm font-medium text-gray-700 mb-1">${field.label}</label>
-              `;
-              if (field.type === 'select') {
-                  formHtml += `<select id="${field.id}" name="${field.id}" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" ${field.required ? 'required' : ''} ${field.readonly ? 'disabled' : ''}>`;
-                  field.options.forEach(option => {
-                      formHtml += `<option value="${option}" ${String(currentValue) === String(option) ? 'selected' : ''}>${option}</option>`;
-                  });
-                  formHtml += `</select>`;
-              } else if (field.type === 'textarea') {
-                  formHtml += `<textarea id="${field.id}" name="${field.id}" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" ${field.required ? 'required' : ''} ${field.readonly ? 'readonly' : ''}>${currentValue}</textarea>`;
-              } else if (field.type === 'checkbox') {
-                  formHtml += `
-                      <input type="checkbox" id="${field.id}" name="${field.id}" class="h-4 w-4 text-primary focus:ring-primary border-gray-300" ${currentValue ? 'checked' : ''} ${field.readonly ? 'disabled' : ''}>
-                  `;
-              } else {
-                  formHtml += `<input type="${field.type}" id="${field.id}" name="${field.id}" value="${currentValue}" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" ${field.required ? 'required' : ''} ${field.readonly ? 'readonly' : ''}>`;
-              }
-              formHtml += `</div>`;
+          document.querySelectorAll('.registry-tab').forEach(tab => {
+              const isSelected = tab.dataset.registry === registryKey;
+              tab.classList.toggle('border-primary', isSelected);
+              tab.classList.toggle('text-primary', isSelected);
+              tab.classList.toggle('border-transparent', !isSelected);
+              tab.classList.toggle('text-gray-500', !isSelected);
           });
-          form.innerHTML = formHtml;
-          modal.style.display = 'flex';
+          
+          this.loadRegistryData(registryKey);
         },
 
-
-        hideRegistryEntryModal: function() {
-            document.getElementById('registryEntryModal').style.display = 'none';
-        },
-
-        saveRegistryEntry: async function() {
-          const modal = document.getElementById('registryEntryModal');
-          const mode = modal.dataset.mode;
-          const registryId = modal.dataset.registryId;
-          const form = document.getElementById('registryEntryForm');
-          const formData = {};
-
-          // 获取当前注册表的 ID 字段名称
-          const idFieldMap = {
-              TECH_REGISTRY: 'tech_id',
-              COMPETITOR_REGISTRY: 'competitor_id',
-              CONFERENCE_REGISTRY: 'conference_id',
-              REPORT_RECIPIENTS: 'recipient_id',
-              SCHEDULED_REPORTS_CONFIG: 'job_id'
-          };
-          const currentIdField = idFieldMap[registryId] || 'id'; // 确保获取正确的 ID 字段
-
-          // 收集表单数据
-          const inputs = form.querySelectorAll('input, select, textarea');
-          inputs.forEach(input => {
-              if (input.type === 'checkbox') {
-                  formData[input.name] = input.checked;
-              } else if (input.type === 'number') { // 如果有数字类型，可能需要转换
-                  formData[input.name] = parseFloat(input.value);
-              } else {
-                  formData[input.name] = input.value;
-              }
-          });
-
-          // 客户端验证 (可以更详细，这里仅做非空检查)
-          const requiredFields = {
-              TECH_REGISTRY: ['tech_name'], // tech_id 在编辑时可能是只读，添加时如果为空后端会生成
-              COMPETITOR_REGISTRY: ['company_name'],
-              CONFERENCE_REGISTRY: ['conference_name'],
-              REPORT_RECIPIENTS: ['recipient_email'],
-              SCHEDULED_REPORTS_CONFIG: ['report_title_template', 'schedule_frequency']
-          };
-
-          let isValid = true;
-          (requiredFields[registryId] || []).forEach(field => {
-              if (!formData[field]) {
-                  alert(`${this.getRegistryLabel(registryId)} 的 ${field} 是必填项！`);
-                  isValid = false;
-                  return;
-              }
-          });
-          if (!isValid) return;
-
-          try {
-              if (mode === 'add') {
-                  // 对于添加操作，如果 ID 字段是空，后端会生成
-                  if (!formData[currentIdField]) {
-                      // 可以在前端生成 UUID，但为了后端统一管理，此处可以不传，让后端生成
-                      // 或者强制前端输入，取决于业务逻辑
-                  }
-                  await App.callApi('SystemAdminService', 'addRegistryEntry', [registryId, formData]);
-                  alert('添加成功！');
-              } else if (mode === 'edit') {
-                  const itemId = modal.dataset.editId; // 从 data-edit-id 获取原始 ID
-                  if (!itemId) {
-                      throw new Error("编辑模式下未找到要更新的条目ID。");
-                  }
-                  await App.callApi('SystemAdminService', 'updateRegistryEntry', [registryId, itemId, formData]);
-                  alert('更新成功！');
-              }
-              this.hideRegistryEntryModal();
-              this.loadActiveRegistryData(); // 刷新表格数据
-          } catch (e) {
-              handleFailure(e);
-          }
-        },
-
-        deleteRegistryEntry: async function(registryId, itemId) {
-          try {
-                await App.callApi('SystemAdminService', 'deleteRegistryEntry', [registryId, itemId]);
-                alert('删除成功！');
-                this.loadActiveRegistryData(); // 刷新表格数据
-            } catch (e) {
-                handleFailure(e);
-            }
-        },
-
-        // 辅助函数：获取注册表 HTML 骨架
-        getRegistryHtmlSkeleton: function(registryId) {
-            const label = this.getRegistryLabel(registryId);
-            // 这里只是一个简化示例，实际应包含完整的表格thead结构
-            return `
-                <div id="registry-${registryId}" class="registry-content">
-                    <div class="flex justify-between items-center mb-4">
-                        <h4 class="text-lg font-semibold">${label}列表</h4>
-                        <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700" data-action="add-entry">添加新${label}</button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead></thead>
-                            <tbody id="${registryId.toLowerCase().replace('_registry', '')}-tbody">
-                                <!-- 数据将由 JS 填充 -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-        },
-
-        getRegistryLabel: function(registryId) {
-            const labels = {
-                TECH_REGISTRY: '技术领域',
-                COMPETITOR_REGISTRY: '竞争对手',
-                CONFERENCE_REGISTRY: '学术顶会',
-                REPORT_RECIPIENTS: '报告接收者',
-                SCHEDULED_REPORTS_CONFIG: '计划报告'
-            };
-            return labels[registryId] || '条目';
+        // 通过键名查找注册表配置的辅助函数
+        getRegistryConfig: function(registryKey) {
+          return [...this.registryConfigs, ...this.reportConfigs].find(c => c.key === registryKey);
         }
-        // ... (其他system模块函数) ...
       }
     }
   };
