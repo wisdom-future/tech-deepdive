@@ -1,8 +1,9 @@
-// 文件名: backend/jobs.gs
+// 文件名: backend/jobs.gs (扩展版)
 
 /**
- * @file 自动化报告任务调度器。
+ * @file 自动化报告任务调度器和每日技术洞察情报管线主调度器。
  * 负责读取计划任务配置，计算报告周期，并触发报告生成。
+ * 同时，包含按顺序执行数据采集、信号识别和证据验证工作流的主管线。
  */
 
 /**
@@ -34,13 +35,13 @@ function scheduleAllReports() {
       try {
         // 1. 计算报告周期日期
         const { periodStartStr, periodEndStr } = calculatePeriodDates(String(config.schedule_frequency || 'DAILY').toUpperCase());
-        
+
         // 2. 动态生成报告标题
         const reportTitle = replaceTitlePlaceholders(config.report_title_template, periodStartStr, periodEndStr);
 
         // 3. 提取技术领域（如果配置为逗号分隔字符串）
         const techAreas = config.default_tech_areas ? String(config.default_tech_areas).split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
-        
+
         // 4. 提取接收者邮箱（如果配置为逗号分隔字符串）
         const recipientEmails = config.recipient_emails ? String(config.recipient_emails).split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
 
@@ -178,7 +179,7 @@ function calculatePeriodDates(frequency) {
 function replaceTitlePlaceholders(template, periodStartStr, periodEndStr) {
   const startDate = new Date(periodStartStr);
   const endDate = new Date(periodEndStr);
-  
+
   const year = startDate.getFullYear();
   const month = startDate.getMonth() + 1;
   const day = startDate.getDate();
@@ -187,14 +188,14 @@ function replaceTitlePlaceholders(template, periodStartStr, periodEndStr) {
     .replace(/{YEAR}/g, year)
     .replace(/{MONTH}/g, month)
     .replace(/{DAY}/g, day);
-  
+
   // 对于 {DATE}，根据报告周期长度选择合适的格式
   if (periodStartStr === periodEndStr) { // 日报
     title = title.replace(/{DATE}/g, `${year}年${month}月${day}日`);
   } else { // 周报、月报等
     title = title.replace(/{DATE}/g, `${periodStartStr}至${periodEndStr}`);
   }
-  
+
   return title;
 }
 
@@ -219,7 +220,7 @@ function updateScheduledReportStatus(jobId, status, errorMessage = '') {
       // 成功时，可以清空之前的错误信息
       dataToUpdate.last_run_error_message = '';
     }
-    
+
     // ✅ 使用新的 DataService.updateObject 方法直接更新文档
     // 第一个参数是 CONFIG.FIRESTORE_COLLECTIONS 中的键名
     // 第二个参数是文档 ID (jobId)
@@ -231,6 +232,153 @@ function updateScheduledReportStatus(jobId, status, errorMessage = '') {
   } catch (e) {
     // 错误日志记录保持不变
     Logger.log(`Error updating scheduled report status for '${jobId}': ${e.message}\n${e.stack}`);
+  }
+}
+
+
+/**
+ * @function runDailyIntelligencePipeline
+ * @description 每日技术洞察情报管线主调度函数。
+ * 负责按顺序执行数据采集、信号识别和证据验证工作流。
+ * 建议为此函数单独设置一个时间驱动触发器。
+ */
+function runDailyIntelligencePipeline() {
+  Logger.log("--- [PIPELINE START] Starting daily intelligence pipeline ---");
+  const overallStartTime = new Date();
+  let overallSuccess = true;
+  const overallExecutionId = `pipeline_${overallStartTime.getTime()}`; // 为本次管线运行生成唯一ID
+  let pipelineLogMessages = []; // 累积管线执行日志
+
+  try {
+    pipelineLogMessages.push(`Pipeline ID: ${overallExecutionId}`);
+    pipelineLogMessages.push(`Started at: ${overallStartTime.toISOString()}`);
+
+    // ====================================================================
+    // 第一层：数据采集工作流 (WF1 - WF6) - 这些工作流可以并行执行，但为了简化逻辑，我们按顺序调用
+    // 它们负责从外部源收集数据，并进行初步的AI预处理。
+    // ====================================================================
+
+    Logger.log("[PIPELINE] Executing Layer 1: Data Collection Workflows (WF1-WF6)");
+
+    // WF1: 学术论文监控
+    pipelineLogMessages.push("\n--- Executing WF1: Academic Papers ---");
+    const wf1Result = WorkflowsService.runWf1_AcademicPapers();
+    pipelineLogMessages.push(`WF1 Result: ${wf1Result.success ? "SUCCESS" : "FAILED"} - ${wf1Result.message}`);
+    if (!wf1Result.success) overallSuccess = false;
+
+    // WF2: 专利申请追踪
+    pipelineLogMessages.push("\n--- Executing WF2: Patent Data ---");
+    const wf2Result = WorkflowsService.runWf2_PatentData();
+    pipelineLogMessages.push(`WF2 Result: ${wf2Result.success ? "SUCCESS" : "FAILED"} - ${wf2Result.message}`);
+    if (!wf2Result.success) overallSuccess = false;
+
+    // WF3: 开源项目监测
+    pipelineLogMessages.push("\n--- Executing WF3: Open Source Projects ---");
+    const wf3Result = WorkflowsService.runWf3_OpenSource();
+    pipelineLogMessages.push(`WF3 Result: ${wf3Result.success ? "SUCCESS" : "FAILED"} - ${wf3Result.message}`);
+    if (!wf3Result.success) overallSuccess = false;
+
+    // WF4: 技术新闻获取
+    pipelineLogMessages.push("\n--- Executing WF4: Tech News ---");
+    const wf4Result = WorkflowsService.runWf4_TechNews();
+    pipelineLogMessages.push(`WF4 Result: ${wf4Result.success ? "SUCCESS" : "FAILED"} - ${wf4Result.message}`);
+    if (!wf4Result.success) overallSuccess = false;
+
+    // WF5: 产业动态捕获
+    pipelineLogMessages.push("\n--- Executing WF5: Industry Dynamics ---");
+    const wf5Result = WorkflowsService.runWf5_IndustryDynamics();
+    pipelineLogMessages.push(`WF5 Result: ${wf5Result.success ? "SUCCESS" : "FAILED"} - ${wf5Result.message}`);
+    if (!wf5Result.success) overallSuccess = false;
+
+    // WF6: 业界标杆收集
+    pipelineLogMessages.push("\n--- Executing WF6: Benchmark Intelligence ---");
+    const wf6Result = WorkflowsService.runWf6_Benchmark();
+    pipelineLogMessages.push(`WF6 Result: ${wf6Result.success ? "SUCCESS" : "FAILED"} - ${wf6Result.message}`);
+    if (!wf6Result.success) overallSuccess = false;
+
+    // ====================================================================
+    // 第二层：信号识别工作流 (WF7-1 to WF7-6) - 这些工作流处理第一层收集到的“pending”状态的原始数据
+    // 它们应该在对应的采集工作流之后运行，以确保处理最新的数据。
+    // ====================================================================
+
+    Logger.log("[PIPELINE] Executing Layer 2: Signal Identification Workflows (WF7-1 to WF7-6)");
+
+    // WF7-1: 学术论文信号识别
+    pipelineLogMessages.push("\n--- Executing WF7-1: Academic Signal Identification ---");
+    const wf7_1Result = WorkflowsService.runWf7_1_AcademicSignalIdentification();
+    pipelineLogMessages.push(`WF7-1 Result: ${wf7_1Result.success ? "SUCCESS" : "FAILED"} - ${wf7_1Result.message}`);
+    if (!wf7_1Result.success) overallSuccess = false;
+
+    // WF7-2: 专利数据信号识别
+    pipelineLogMessages.push("\n--- Executing WF7-2: Patent Signal Identification ---");
+    const wf7_2Result = WorkflowsService.runWf7_2_PatentSignal();
+    pipelineLogMessages.push(`WF7-2 Result: ${wf7_2Result.success ? "SUCCESS" : "FAILED"} - ${wf7_2Result.message}`);
+    if (!wf7_2Result.success) overallSuccess = false;
+
+    // WF7-3: 开源项目信号识别
+    pipelineLogMessages.push("\n--- Executing WF7-3: Open Source Signal Identification ---");
+    const wf7_3Result = WorkflowsService.runWf7_3_OpenSourceSignal();
+    pipelineLogMessages.push(`WF7-3 Result: ${wf7_3Result.success ? "SUCCESS" : "FAILED"} - ${wf7_3Result.message}`);
+    if (!wf7_3Result.success) overallSuccess = false;
+
+    // WF7-4: 技术新闻信号识别
+    pipelineLogMessages.push("\n--- Executing WF7-4: Tech News Signal Identification ---");
+    const wf7_4Result = WorkflowsService.runWf7_4TechNewsSignal();
+    pipelineLogMessages.push(`WF7-4 Result: ${wf7_4Result.success ? "SUCCESS" : "FAILED"} - ${wf7_4Result.message}`);
+    if (!wf7_4Result.success) overallSuccess = false;
+
+    // WF7-5: 产业动态信号识别
+    pipelineLogMessages.push("\n--- Executing WF7-5: Industry Dynamics Signal Identification ---");
+    const wf7_5Result = WorkflowsService.runWf7_5IndustryDynamics();
+    pipelineLogMessages.push(`WF7-5 Result: ${wf7_5Result.success ? "SUCCESS" : "FAILED"} - ${wf7_5Result.message}`);
+    if (!wf7_5Result.success) overallSuccess = false;
+
+    // WF7-6: 竞争对手信号识别
+    pipelineLogMessages.push("\n--- Executing WF7-6: Competitor Signal Identification ---");
+    const wf7_6Result = WorkflowsService.runWf7_6Benchmark();
+    pipelineLogMessages.push(`WF7-6 Result: ${wf7_6Result.success ? "SUCCESS" : "FAILED"} - ${wf7_6Result.message}`);
+    if (!wf7_6Result.success) overallSuccess = false;
+
+    // ====================================================================
+    // 第三层：统一证据验证 (WF8) - 这个工作流处理所有已识别的信号，无论其来源如何。
+    // 它应该在所有WF7-X工作流完成之后运行。
+    // ====================================================================
+
+    Logger.log("[PIPELINE] Executing Layer 3: Unified Evidence Validation (WF8)");
+
+    // WF8: 统一证据验证
+    pipelineLogMessages.push("\n--- Executing WF8: Unified Evidence Validation ---");
+    const wf8Result = WorkflowsService.runWf8_EvidenceValidation();
+    pipelineLogMessages.push(`WF8 Result: ${wf8Result.success ? "SUCCESS" : "FAILED"} - ${wf8Result.message}`);
+    if (!wf8Result.success) overallSuccess = false;
+
+    Logger.log("[PIPELINE] All scheduled workflows completed.");
+
+  } catch (e) {
+    Logger.log(`!!! CRITICAL PIPELINE ERROR: ${e.message}\n${e.stack}`);
+    pipelineLogMessages.push(`\n!!! CRITICAL PIPELINE ERROR: ${e.message}`);
+    overallSuccess = false;
+  } finally {
+    const overallEndTime = new Date();
+    const overallDuration = (overallEndTime.getTime() - overallStartTime.getTime()) / 1000;
+    // 使用小写状态与_logExecution保持一致
+    const finalStatus = overallSuccess ? "completed" : "failed";
+    const summaryMsg = `Daily intelligence pipeline finished. Status: ${finalStatus}. Duration: ${overallDuration} seconds.`;
+
+    // 记录整个管线的执行日志
+    // 注意：这里的 processedCount/successCount/errorCount 无法简单聚合，
+    // 因为每个子工作流都有自己的计数。这里主要记录管线自身的成功/失败状态。
+    WorkflowsService._logExecution(
+      "Daily Intelligence Pipeline", // 工作流名称
+      overallExecutionId, // 执行ID
+      overallStartTime, // 开始时间
+      finalStatus, // 状态
+      0, // processedCount (不易聚合，可根据需要调整)
+      overallSuccess ? 1 : 0, // successCount (管线本身是否成功)
+      overallSuccess ? 0 : 1, // errorCount (管线本身是否失败)
+      summaryMsg + "\n\nDetailed Workflow Results:\n" + pipelineLogMessages.join("\n") // 详细日志
+    );
+    Logger.log("--- [PIPELINE END] Daily intelligence pipeline finished ---");
   }
 }
 

@@ -57,6 +57,70 @@ const SystemAdminService = {
     }
   },
 
+/**
+   * ✅ [Final Corrected Version] 获取用于绘制数据流桑基图的数据。
+   * 该函数现在采用严格的瀑布流模型，确保数据在每个阶段逻辑正确地递减。
+   * @returns {object} 包含 nodes 和 links 数组，用于 ECharts 桑基图。
+   */
+  /**
+   * ✅ [Final Corrected Version 3.0] 获取用于绘制数据流桑基图的数据。
+   * 通过创建虚拟的“过滤汇总”节点，实现最终阶段视觉上的颜色分割。
+   * @returns {object} 包含 nodes 和 links 数组，用于 ECharts 桑基图。
+   */
+  getSankeyData: function() {
+    Logger.log("--- SystemAdminService.getSankeyData() [Strict Waterfall Logic] 开始执行 ---");
+    try {
+      // --- 1. 数据获取 ---
+      const rawStats = RawDataStatsService.getStats() || { total: 0 };
+      const allInsights = DataService.getDataAsObjects('TECH_INSIGHTS_MASTER') || [];
+
+      // --- 2. 阶段数据计算 ---
+      const rawTotal = rawStats.total || 0;
+      const totalSignalsIdentified = allInsights.length;
+      const passedToValidation = allInsights.filter(item => item && ['analyzing', 'completed', 'decision_completed', 'published'].includes(item.processing_status)).length;
+      const passedToAnalysis = allInsights.filter(item => item && ['completed', 'decision_completed', 'published'].includes(item.processing_status)).length;
+      const finalInsights = allInsights.filter(item => item && item.processing_status === 'published').length;
+
+      // --- 3. 过滤数据计算 ---
+      const filteredAtIngestion = Math.max(0, rawTotal - totalSignalsIdentified);
+      const filteredAtSignal = Math.max(0, totalSignalsIdentified - passedToValidation);
+      const filteredAtValidation = Math.max(0, passedToValidation - passedToAnalysis);
+      const filteredAtAnalysis = Math.max(0, passedToAnalysis - finalInsights);
+      const totalFiltered = filteredAtIngestion + filteredAtSignal + filteredAtValidation + filteredAtAnalysis;
+
+      // --- 4. 节点定义 ---
+      const nodes = [
+        { name: '数据采集', value: rawTotal, x: 0, y: 50 },
+        { name: '线索识别', value: totalSignalsIdentified, x: 25, y: 50 },
+        { name: '证据验证', value: passedToValidation, x: 50, y: 50 },
+        { name: '深度分析', value: passedToAnalysis, x: 75, y: 50 },
+        { name: '洞察产出', value: finalInsights, x: 100, y: 30 },
+        { name: '过滤归档', value: totalFiltered, x: 100, y: 70 }
+      ];
+
+      // ✅ 核心修改: 严格按照瀑布流模型生成连接
+      const links = [];
+      // 主流程
+      if (totalSignalsIdentified > 0) links.push({ source: '数据采集', target: '线索识别', value: totalSignalsIdentified });
+      if (passedToValidation > 0) links.push({ source: '线索识别', target: '证据验证', value: passedToValidation });
+      if (passedToAnalysis > 0) links.push({ source: '证据验证', target: '深度分析', value: passedToAnalysis });
+      if (finalInsights > 0) links.push({ source: '深度分析', target: '洞察产出', value: finalInsights });
+      
+      // 过滤流程，每个阶段都可能分流
+      if (filteredAtIngestion > 0) links.push({ source: '数据采集', target: '过滤归档', value: filteredAtIngestion });
+      if (filteredAtSignal > 0) links.push({ source: '线索识别', target: '过滤归档', value: filteredAtSignal });
+      if (filteredAtValidation > 0) links.push({ source: '证据验证', target: '过滤归档', value: filteredAtValidation });
+      if (filteredAtAnalysis > 0) links.push({ source: '深度分析', target: '过滤归档', value: filteredAtAnalysis });
+
+      Logger.log("--- SystemAdminService.getSankeyData() [Strict Waterfall Logic] 执行完毕 ---");
+      return { nodes: nodes, links: links.filter(l => l.value > 0) }; // 最终保险：只返回 value > 0 的连接
+
+    } catch (e) {
+      Logger.log(`CRITICAL ERROR in SystemAdminService.getSankeyData: ${e.message}\n${e.stack}`);
+      return { error: `后端计算桑基图数据时发生错误: ${e.message}` };
+    }
+  },
+
   /**
    * 更新指定注册表（集合）中的条目。
    * @param {string} collectionKey - CONFIG.FIRESTORE_COLLECTIONS 中定义的集合键名。

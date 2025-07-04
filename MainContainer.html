@@ -149,7 +149,7 @@
         <i class="fa fa-lightbulb-o mr-2"></i>Analyzation
       </a>
       <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="actions">
-        <i class="fa fa-cogs mr-2"></i>Action
+        <i class="fa fa-cogs mr-2"></i>Research
       </a>
       <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="reports">
         <i class="fa fa-file-text-o mr-2"></i>Reports
@@ -284,6 +284,38 @@
             <i class="fa fa-chevron-right text-xs"></i>
           </div>
         </div>
+
+        <!-- ✅ 新增: 全新的数据流转化漏斗组件 -->
+        <div class="col-span-1 md:col-span-6 lg:col-span-6 bg-white rounded-xl shadow-card p-6">
+          <h3 class="text-xl font-semibold mb-2 flex items-center">
+            <i class="fa fa-sitemap text-primary mr-3" style="transform: rotate(90deg);"></i>
+            技术洞察转化漏斗
+          </h3>
+          
+          <div class="w-full">
+            <div class="w-11/12 mx-auto">
+              <!-- 桑基图组件的完整包裹器 -->
+              <div id="sankey-component-wrapper">
+                <!-- 顶部标签容器 -->
+                <div id="sankey-labels-top" class="relative h-12">
+                    <!-- JS 将在此处动态生成标签 -->
+                </div>
+
+                <!-- ✅ 核心修改: 移除内联的 background-color 样式 -->
+                <div id="sankey-chart-container" 
+                     class="h-48 w-full relative rounded-lg">
+                    <!-- ECharts 画布将渲染在此容器中 -->
+                </div>
+
+                <!-- 底部标签容器 -->
+                <div id="sankey-labels-bottom" class="relative h-6 mt-1">
+                    <!-- JS 将在此处动态生成 "被过滤/归档" 标签 -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- 新增组件结束 -->
 
         <!-- 系统状态卡片 -->
         <div class="kpi-card bg-white rounded-xl shadow-card p-6 col-span-1 md:col-span-3 lg:col-span-3 group3 bg-group3 transition-all hover:shadow-card-hover">
@@ -974,11 +1006,11 @@
           <!-- 注册表子导航 -->
           <div class="border-b border-gray-200 mb-4">
             <nav id="registry-tabs" class="-mb-px flex space-x-4" aria-label="Registry Tabs">
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="TECH_REGISTRY">技术领域</a>
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="COMPETITOR_REGISTRY">竞争对手</a>
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="CONFERENCE_REGISTRY">学术顶会</a>
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="REPORT_RECIPIENTS">报告接收者</a>
-              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-xs" data-registry="SCHEDULED_REPORTS_CONFIG">计划报告</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="TECH_REGISTRY">技术领域</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="COMPETITOR_REGISTRY">业界标杆</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="CONFERENCE_REGISTRY">学术顶会</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="REPORT_RECIPIENTS">报告接收者</a>
+              <a href="#" class="registry-tab whitespace-nowrap py-2 px-1 border-b-2 font-medium text-base" data-registry="SCHEDULED_REPORTS_CONFIG">计划报告</a>
             </nav>
           </div>
 

@@ -769,6 +769,7 @@
     pageInitializers: {
       home: {
         isInitialized: false,
+        sankeyChart: null, // ✅ 新增：用于存储桑基图的ECharts实例
         init: async function() {
             console.log('正在初始化主页...');
             if (!this.isInitialized) {
@@ -785,7 +786,8 @@
                     App.callApi('ConfigDataService', 'getTechnologyDomainStats'),
                     App.callApi('ConfigDataService', 'getIndustryBenchmarkStats'),
                     App.callApi('ConfigDataService', 'getConferenceStats'),
-                    App.callApi('SystemHealthStatsService', 'getStats')
+                    App.callApi('SystemHealthStatsService', 'getStats'),
+                    App.callApi('SystemAdminService', 'getSankeyData')
                 ]);
                 
                 // ✅ 从 results 数组中安全地提取数据
@@ -795,6 +797,7 @@
                 const benchmarks = results[3].status === 'fulfilled' ? results[3].value : { total: 0, focus: 0 };
                 const conferences = results[4].status === 'fulfilled' ? results[4].value : { total: 0, monitoring: 0 };
                 const health = results[5].status === 'fulfilled' ? results[5].value : { overall: 0, workflow: 0, dataQuality: 0, alerts: [] };
+                const sankeyData = results[6].status === 'fulfilled' ? results[6].value : null; // ✅ 新增: 获取桑基图数据
 
                 // 检查是否有任何 API 调用失败，并在控制台打印日志
                 results.forEach((result, index) => {
@@ -842,12 +845,145 @@
                     document.getElementById('dataQualityBar').style.width = `${health.dataQuality || 0}%`;
                 }
                 
+                // ✅ 新增: 调用桑基图渲染函数
+                if (sankeyData) {
+                    this.renderSankeyChart(sankeyData);
+                } else {
+                    document.getElementById('sankey-chart-container').innerHTML = '<div class="text-red-500">加载数据流图失败。</div>';
+                }
+
                 document.querySelectorAll('#page-home .skeleton').forEach(el => el.classList.remove('skeleton'));
             } catch(e) { 
                 handleFailure(e); 
             }
+          },
+          // ✅ 用下面的最终版本替换整个 renderSankeyChart 函数
+          renderSankeyChart: function(data) {
+            const chartContainer = document.getElementById('sankey-chart-container');
+            const topLabelsContainer = document.getElementById('sankey-labels-top');
+            const bottomLabelsContainer = document.getElementById('sankey-labels-bottom');
+            
+            if (!chartContainer || !topLabelsContainer || !bottomLabelsContainer) {
+                console.error("Sankey Chart: 关键HTML容器缺失。");
+                return;
+            }
+
+            // 清空旧内容
+            topLabelsContainer.innerHTML = '';
+            bottomLabelsContainer.innerHTML = '';
+            chartContainer.innerHTML = '';
+
+            if (this.sankeyChart && !this.sankeyChart.isDisposed()) {
+                this.sankeyChart.dispose();
+            }
+            this.sankeyChart = echarts.init(chartContainer);
+
+            if (!data || data.error || !Array.isArray(data.nodes) || !Array.isArray(data.links)) {
+                const errorMessage = data ? data.error : "从后端接收到的数据无效。";
+                console.error("Sankey Chart Error:", errorMessage);
+                chartContainer.innerHTML = `<div class="w-full h-full flex items-center justify-center text-red-500 text-sm p-4">${errorMessage}</div>`;
+                return;
+            }
+            if (data.nodes.length === 0) {
+                 chartContainer.innerHTML = `<div class="w-full h-full flex items-center justify-center text-gray-500 text-sm">暂无数据可供可视化。</div>`;
+                 return;
+            }
+
+            // --- 动态生成 HTML 标签 ---
+            const allNodesData = data.nodes;
+            
+            // ✅ 核心修改: 分离处理顶部标签和底部标签
+            const topNodes = allNodesData.filter(n => n.name !== '过滤归档');
+            const bottomNode = allNodesData.find(n => n.name === '过滤归档');
+
+            // 处理顶部标签
+            topNodes.forEach(node => {
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'absolute';
+                labelDiv.style.top = '0';
+                labelDiv.style.left = `${node.x}%`;
+                labelDiv.style.transform = 'translateX(-50%)';
+                labelDiv.style.textAlign = 'center';
+                labelDiv.style.width = '120px';
+                
+                labelDiv.innerHTML = `
+                    <span class="text-sm text-gray-500">${node.name}</span><br/>
+                    <span class="text-xl font-bold text-gray-900">${(node.value || 0).toLocaleString()}</span>
+                `;
+                topLabelsContainer.appendChild(labelDiv);
+            });
+
+            // 处理底部标签
+            if (bottomNode) {
+                 const labelDiv = document.createElement('div');
+                 labelDiv.className = 'absolute';
+                 labelDiv.style.bottom = '0'; // 紧贴底部
+                 labelDiv.style.left = `${bottomNode.x}%`; // 使用其X坐标定位
+                 labelDiv.style.transform = 'translateX(-50%)'; // 居中对齐
+                 labelDiv.style.textAlign = 'center';
+                 labelDiv.style.width = '120px';
+
+                 labelDiv.innerHTML = `<span class="text-xs text-gray-500">${bottomNode.name} (${(bottomNode.value || 0).toLocaleString()})</span>`;
+                 bottomLabelsContainer.appendChild(labelDiv);
+            }
+
+            // --- ECharts 配置 (保持不变) ---
+            const nodeColors = {
+                '数据采集': '#2c3e50',
+                '线索识别': '#3498db',
+                '证据验证': '#1abc9c',
+                '深度分析': '#f1c40f',
+                '洞察产出': '#5f27cd',
+                '过滤归档': '#95a5a6'
+            };
+            
+            const nodesWithStyle = allNodesData.map(node => ({
+                ...node,
+                itemStyle: { color: nodeColors[node.name] || '#ccc' }
+            }));
+
+            const mainFlowColor = 'rgba(76, 89, 106, 0.4)';    // 深灰蓝色，带有透明度
+            const filteredFlowColor = 'rgba(189, 195, 199, 0.6)';
+            const linksWithStyle = data.links.filter(link => link.value > 0).map(link => ({
+                ...link,
+                lineStyle: {
+                    color: link.target === '被过滤/归档' ? filteredFlowColor : mainFlowColor
+                }
+            }));
+
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: { show: false },
+                series: [{
+                    type: 'sankey',
+                    layout: 'none',
+                    data: nodesWithStyle,
+                    links: linksWithStyle,
+                    emphasis: { focus: 'adjacency' },
+                    nodeWidth: 3,
+                    label: { show: false },
+                    edgeLabel: { show: false },
+                    left: '0.5%',
+                    right: '0.5%',
+                    top: '10%',
+                    bottom: '10%'
+                }]
+            };
+
+            if (linksWithStyle.length > 0) {
+                this.sankeyChart.setOption(option);
+            } else {
+                console.warn("Sankey Chart: 没有有效的数据流（所有连接值为0），不渲染桑基图。");
+                chartContainer.innerHTML = `<div class="w-full h-full flex items-center justify-center text-gray-500 text-sm">暂无数据流信息。</div>`;
+            }
+
+            window.addEventListener('resize', () => {
+                if (this.sankeyChart && !this.sankeyChart.isDisposed()) {
+                    this.sankeyChart.resize();
+                }
+            });
         }
-    },
+      },
       collection: {
         isInitialized: false,
         activeTab: 'overview', // 默认激活的标签页
