@@ -80,23 +80,46 @@ const InsightsService = {
       }
       Logger.log("DEBUG: InsightsService - 趋势图数据计算完成。");
 
-      // 3. 计算词云数据
+      // 3. 计算词云数据 (***请用以下代码块替换你现有文件中的此部分***)
       let keywordData = [];
       if (allInsights && allInsights.length > 0) {
         let combinedText = '';
         allInsights.forEach(item => {
-            combinedText += (item.title || '') + ' ';
-            combinedText += (item.tech_keyword || '') + ' ';
+            // ✅ 核心优化：优先使用 ai_keywords，如果不存在，再使用 tech_keywords，最后才考虑 title
+            // ai_keywords 是AI从内容中提取的，通常更精准
+            // tech_keywords 是注册的技术领域关键词，也是高价值的
+            // title 是最泛的，作为补充
+            const keywordsFromAI = item.ai_keywords ? String(item.ai_keywords).split(',').map(s => s.trim()).filter(Boolean) : [];
+            const keywordsFromReg = item.tech_keywords ? String(item.tech_keywords).split(',').map(s => s.trim()).filter(Boolean) : [];
+            
+            // 合并所有明确的关键词
+            const allSpecificKeywords = [...keywordsFromAI, ...keywordsFromReg];
+            if (allSpecificKeywords.length > 0) {
+                combinedText += allSpecificKeywords.join(' ') + ' ';
+            } else {
+                // 如果没有明确的关键词，才使用标题作为补充
+                combinedText += (item.title || '') + ' ';
+            }
         });
         if (combinedText.length > 0) {
             const wordCounts = {};
-            const stopWords = new Set(['a', 'an', 'the', 'in', 'on', 'for', 'with', 'to', 'of', 'and', 'is', 'are', 'was', 'were', 'it', 'that', 'this', 'get', 'new', 'fully', 'system', 'web', 'via', 'how', 'use', 'using', 'based', 'its', 'also', 'can', 'we', 'our', 'data', 'model', 'approach', 'method', 'results', 'paper', 'study', 'research', 'analysis', 'propose', 'show']);
-            const words = combinedText.toLowerCase().split(/[^a-z0-9]+/).filter(word => word && word.length > 3 && !stopWords.has(word) && isNaN(word));
+            // 你的停用词列表，可以根据需要扩充
+            const stopWords = new Set([
+              'a', 'an', 'the', 'in', 'on', 'for', 'with', 'to', 'of', 'and', 'is', 'are', 'was', 'were', 'it', 'that', 'this', 'get', 'new', 'fully', 'system', 'web', 'via', 'how', 'use', 'using', 'based', 'its', 'also', 'can', 'we', 'our', 'data', 'model', 'approach', 'method', 'results', 'paper', 'study', 'research', 'analysis', 'propose', 'show',
+              // 针对你截图中的泛化词，可以考虑添加到停用词列表
+              'internet', 'patent', 'agents', 'robotics', 'market', 'nvidia', 'security', 'threat', 'detection', 'machine', 'learning', 'behavioral', 'anomaly', 'distribution', 'quantum', 'cryptography', 'post', 'key', 'qkd', 'resistant', 'silicon', '光电', '集成', '公司', '企业', '技术', '研究', '发展', '行业', '创新', '领域', '新' // 扩充中文停用词
+            ]);
+            // 过滤规则：长度大于1（因为有些关键词如“AI”很短），不是停用词，不是纯数字。
+            // 使用 /u 标志支持 Unicode 字符，包括中文。
+            const words = combinedText.toLowerCase().split(/[^a-z0-9\u4e00-\u9fa5]+/u) 
+                                     .filter(word => word && word.length > 1 && !stopWords.has(word) && !/^\d+$/.test(word)); // 确保不是纯数字
+
             words.forEach(word => { wordCounts[word] = (wordCounts[word] || 0) + 1; });
             keywordData = Object.entries(wordCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 150);
         }
       }
       Logger.log("DEBUG: InsightsService - 词云数据计算完成。");
+      // 3. 计算词云数据 结束
 
       // 4. 获取最新洞察列表
       let latestInsights = [];
