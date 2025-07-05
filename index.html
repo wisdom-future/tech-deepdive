@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting to the Latest Report...</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .loader { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div>
+        <div class="loader"></div>
+        <p>正在获取最新报告，请稍候...</p>
+    </div>
+
+    <script>
+      (async function() {
+        // 1. 这是你的固定索引文件URL
+        const latestJsonUrl = 'https://wisdom-future.github.io/tech-deepdive/reports/latest.json';
+
+        try {
+          // 2. 使用fetch获取索引文件内容
+          const response = await fetch(latestJsonUrl);
+          
+          if (!response.ok) {
+            throw new Error('无法获取最新报告索引文件。');
+          }
+
+          // 3. 解析JSON
+          const data = await response.json();
+
+          // 4. 从JSON中获取最新的报告URL
+          const latestReportUrl = data.latestReportUrl;
+
+          if (latestReportUrl) {
+            // 5. 【核心】执行跳转
+            console.log('即将跳转到:', latestReportUrl);
+            window.location.href = latestReportUrl;
+          } else {
+            throw new Error('索引文件中没有找到报告URL。');
+          }
+
+        } catch (error) {
+          console.error('跳转失败:', error);
+          document.body.innerHTML = `<p style="color: red;">获取最新报告失败: ${error.message}</p>`;
+        }
+      })();
+    </script>
+</body>
+</html>
