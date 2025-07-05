@@ -396,6 +396,17 @@ function runDailyIntelligencePipeline() {
     pipelineLogMessages.push(`WF8 Result: ${wf8Result.success ? "SUCCESS" : "FAILED"} - ${wf8Result.message}`);
     if (!wf8Result.success) overallSuccess = false;
 
+
+    // ==================================================================
+    //  ✅ 新增：第七层 - 专家网络构建 (WF-AG)
+    //  在所有数据采集和识别之后运行
+    // ==================================================================
+    Logger.log("[PIPELINE] Executing Layer 7: Expert Network Graph Building (WF-AG)");
+    pipelineLogMessages.push("\n--- Executing WF-AG: Expert Network Graph Builder ---");
+    const wfAgResult = WorkflowsService.runWf_AuthorGraphBuilder();
+    pipelineLogMessages.push(`WF-AG Result: ${wfAgResult.success ? "SUCCESS" : "FAILED"} - ${wfAgResult.message}`);
+    if (!wfAgResult.success) overallSuccess = false; // 如果图谱构建失败，标记整个管线运行不完全成功
+
     Logger.log("[PIPELINE] All scheduled workflows completed.");
 
   } catch (e) {

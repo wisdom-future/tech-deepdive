@@ -2022,4 +2022,466 @@ const WorkflowsService = {
   // ====================================================================================================================
   runWf14_DataQualityMonitor: function() { return { success: false, message: "WF14 功能尚未实现。", log: "WF14 功能尚未实现。" }; },
   runWf15_SystemHealthCheck: function() { return { success: false, message: "WF15 功能尚未实现。", log: "WF15 功能尚未实现。" }; },
+
+  // ====================================================================
+  //  作者图谱构建辅助函数
+  // ====================================================================
+
+  /**
+   * 规范化作者姓名，生成唯一的作者ID。
+   * @param {string} name - 作者原始姓名。
+   * @returns {string} 规范化的作者ID。
+   */
+  _normalizeAuthorName: function(name) {
+      return String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  },
+
+  /**
+   * 规范化机构名称，生成唯一的机构ID。
+   * @param {string} name - 机构原始名称。
+   * @returns {string} 规范化的机构ID。
+   */
+  _normalizeAffiliationName: function(name) {
+      return String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  },
+
+  // ====================================================================
+  //  WF-AuthorGraphBuilder: 专家网络图谱构建工作流
+  // ====================================================================
+
+  /**
+   * 自动构建和更新专家（作者）网络图谱。
+   * 扫描新处理的论文和专利数据，提取作者和机构信息，建立关联。
+   */
+  // 请用此代码块完整替换您文件中现有的 runWf_AuthorGraphBuilder 函数
+
+runWf_AuthorGraphBuilder: function() {
+    const wfName = 'WF-AG: 专家网络图谱构建';
+    const startTime = new Date();
+    const executionId = `exec_wf_ag_${startTime.getTime()}`;
+    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+    // ... [其他变量声明保持不变] ...
+    let processedDocsCount = 0, newAuthorsCount = 0, updatedAuthorsCount = 0, newAffiliationsCount = 0, updatedAffiliationsCount = 0;
+
+    try {
+        logMessages.push("正在获取所有论文和专利数据...");
+        const academicPapers = DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS') || [];
+        const patentData = DataService.getDataAsObjects('RAW_PATENT_DATA') || [];
+        const allDocs = [...academicPapers, ...patentData];
+        
+        if (allDocs.length === 0) {
+            logMessages.push("没有可用于构建图谱的论文或专利数据。");
+            this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, "没有可处理的文档。");
+            return { success: true, message: "没有可处理的文档。", log: logMessages.join('\n') };
+        }
+        
+        processedDocsCount = allDocs.length;
+        logMessages.push(`发现 ${processedDocsCount} 篇文档需要处理。`);
+
+        const authorsToUpsert = new Map();
+        const affiliationsToUpsert = new Map();
+        const existingAuthors = new Map((DataService.getDataAsObjects('AUTHORS_REGISTRY') || []).map(a => [a.author_id, a]));
+        const existingAffiliations = new Map((DataService.getDataAsObjects('AFFILIATIONS_REGISTRY') || []).map(a => [a.affiliation_id, a]));
+
+        // ... [for 循环处理 allDocs 的逻辑保持不变] ...
+        for (const doc of allDocs) {
+            const docAuthors = (doc.authors || '').split(',').map(name => this._normalizeAuthorName(name)).filter(Boolean);
+            const docAffiliationName = doc.affiliation || (doc.authors_affiliation ? doc.authors_affiliation[0] : null);
+            const docAffiliationId = this._normalizeAffiliationName(docAffiliationName);
+            const docTechAreas = (doc.tech_keywords || '').split(',').map(t => t.trim()).filter(Boolean);
+
+            for (const authorId of docAuthors) {
+                const authorData = authorsToUpsert.get(authorId) || existingAuthors.get(authorId) || { author_id: authorId, full_name: authorId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), paper_count: 0, patent_count: 0, coauthor_ids: [], last_known_affiliation: null, main_tech_areas: [], };
+                if (doc.source_type === 'academic_papers') authorData.paper_count = (authorData.paper_count || 0) + 1;
+                if (doc.source_type === 'patent_data') authorData.patent_count = (authorData.patent_count || 0) + 1;
+                const otherAuthorsInDoc = docAuthors.filter(id => id !== authorId);
+                authorData.coauthor_ids = [...new Set([...(authorData.coauthor_ids || []), ...otherAuthorsInDoc])];
+                authorData.main_tech_areas = [...new Set([...(authorData.main_tech_areas || []), ...docTechAreas])];
+                if (docAffiliationId) authorData.last_known_affiliation = docAffiliationId;
+                authorsToUpsert.set(authorId, authorData);
+            }
+
+            if (docAffiliationId && docAffiliationId !== 'null') {
+                const affData = affiliationsToUpsert.get(docAffiliationId) || existingAffiliations.get(docAffiliationId) || { affiliation_id: docAffiliationId, name: docAffiliationName, author_count: 0, paper_count: 0, patent_count: 0, main_tech_areas: [] };
+                affData.author_count = new Set([...(affData.authors || []), ...docAuthors]).size;
+                if (doc.source_type === 'academic_papers') affData.paper_count = (affData.paper_count || 0) + 1;
+                if (doc.source_type === 'patent_data') affData.patent_count = (affData.patent_count || 0) + 1;
+                affData.main_tech_areas = [...new Set([...(affData.main_tech_areas || []), ...docTechAreas])];
+                affiliationsToUpsert.set(docAffiliationId, affData);
+            }
+        }
+
+        const authorsArray = Array.from(authorsToUpsert.values());
+        if (authorsArray.length > 0) {
+            // ✅ 核心修复：直接使用 Firestore 的真实集合名 'authors'
+            FirestoreService.batchUpsert('authors', authorsArray, 'author_id');
+            newAuthorsCount = authorsArray.filter(a => !existingAuthors.has(a.author_id)).length;
+            updatedAuthorsCount = authorsArray.length - newAuthorsCount;
+            logMessages.push(`成功写入 ${authorsArray.length} 位作者到 'authors' 集合。`);
+        }
+
+        const affiliationsArray = Array.from(affiliationsToUpsert.values());
+        if (affiliationsArray.length > 0) {
+            // ✅ 核心修复：直接使用 Firestore 的真实集合名 'affiliations'
+            FirestoreService.batchUpsert('affiliations', affiliationsArray, 'affiliation_id');
+            newAffiliationsCount = affiliationsArray.filter(a => !existingAffiliations.has(a.affiliation_id)).length;
+            updatedAffiliationsCount = affiliationsArray.length - newAffiliationsCount;
+            logMessages.push(`成功写入 ${affiliationsArray.length} 家机构到 'affiliations' 集合。`);
+        }
+
+        const finalMessage = `图谱构建完成。处理文档: ${processedDocsCount}，作者: ${newAuthorsCount}新增/${updatedAuthorsCount}更新，机构: ${newAffiliationsCount}新增/${updatedAffiliationsCount}更新。`;
+        this._logExecution(wfName, executionId, startTime, 'completed', processedDocsCount, authorsArray.length + affiliationsArray.length, 0, finalMessage);
+        return { success: true, message: finalMessage, log: logMessages.join('\n') };
+
+    } catch (e) {
+        const errorMessage = `严重错误: ${e.message}\n${e.stack}`;
+        this._logExecution(wfName, executionId, startTime, 'failed', processedDocsCount, 0, 1, errorMessage);
+        return { success: false, message: errorMessage, log: logMessages.join('\n') };
+    }
+  }
 };
+
+// 文件名: backend/svc.Workflows.gs (在文件末尾添加此函数)
+
+/**
+ * =================================================================================
+ *  ✅ 独立的测试入口函数
+ * =================================================================================
+ * 目的：手动触发“专家网络图谱构建”工作流，并清晰地打印出执行结果。
+ * 使用方法：在 Apps Script 编辑器中，从函数列表中选择此函数并点击“运行”。
+ */
+function runManualAuthorGraphBuilderTest() {
+  console.log("==================================================");
+  console.log("--- 开始手动触发专家网络图谱构建工作流 (WF-AG) ---");
+  console.log("==================================================");
+  
+  try {
+    // 调用核心的工作流函数
+    const result = WorkflowsService.runWf_AuthorGraphBuilder();
+
+    // 根据返回结果打印格式化的日志
+    console.log("\n--- 工作流执行完毕 ---");
+    console.log(`状态: ${result.success ? '✅ 成功' : '❌ 失败'}`);
+    console.log(`消息: ${result.message}`);
+    
+    // 如果有详细日志，也打印出来
+    if (result.log) {
+      console.log("\n--- 详细执行日志 ---");
+      // 将日志字符串按换行符分割，逐行打印，更易读
+      result.log.split('\n').forEach(line => console.log(line));
+    }
+
+  } catch (e) {
+    // 捕获可能在调用过程中发生的意外错误
+    console.error("!!! 在执行测试函数时捕获到顶层错误 !!!");
+    console.error(`错误信息: ${e.message}`);
+    console.error(`错误堆栈: ${e.stack}`);
+  } finally {
+    console.log("==================================================");
+    console.log("--- 测试函数执行结束 ---");
+    console.log("==================================================");
+  }
+}
+
+
+function test_ReadAuthorsCollection() {
+  console.log("======================================================");
+  console.log("--- 开始执行【最小化】`authors` 集合读取测试 ---");
+  console.log("======================================================");
+
+  try {
+    // 步骤 1: 直接调用我们怀疑有问题的 FirestoreService 的核心方法
+    console.log("正在调用 FirestoreService.queryCollection('authors')...");
+    const authors = FirestoreService.queryCollection('authors');
+
+    // 步骤 2: 检查返回结果
+    if (authors) {
+      console.log(`✅ 调用成功！函数返回了一个类型为 '${typeof authors}' 的结果。`);
+      
+      if (Array.isArray(authors)) {
+        console.log(`✅ 返回结果是一个数组。`);
+        console.log(`⭐ 关键诊断：从 'authors' 集合中读取到 ${authors.length} 条记录。`);
+
+        if (authors.length > 0) {
+          console.log("🎉🎉🎉 测试成功！已成功从 'authors' 集合读取到数据！");
+          console.log("第一条记录内容示例: ", JSON.stringify(authors[0], null, 2));
+        } else {
+          console.error("❌ 测试失败：虽然调用成功，但返回了一个空数组。这意味着查询逻辑本身没问题，但因为某种原因（权限、索引、API端点模式）未能获取到实际数据。");
+        }
+      } else {
+        console.error("❌ 测试失败：返回结果不是一个数组，这不符合预期！");
+      }
+    } else {
+      console.error("❌ 测试失败：FirestoreService.queryCollection('authors') 返回了 null 或 undefined。");
+    }
+
+  } catch (e) {
+    console.error(`!!! 测试过程中捕获到严重错误: ${e.message} !!!`);
+    console.error(`错误堆栈: ${e.stack}`);
+  } finally {
+    console.log("======================================================");
+    console.log("--- `authors` 集合读取测试结束 ---");
+    console.log("======================================================");
+  }
+}
+
+// 测试函数 1：验证 Native Mode API
+
+function test_NativeModeAPI() {
+  console.log("======================================================");
+  console.log("--- 开始执行【模式一：Native Mode API】读取测试 ---");
+  console.log("======================================================");
+
+  try {
+    // 强制设置 FirestoreService 使用 Native Mode 端点
+    FirestoreService.firestoreHost = 'firestore.googleapis.com';
+    // 对于 Native Mode，区域ID是URL的一部分，但对于基础查询可以省略
+    
+    console.log("正在使用 Native Mode API 调用 FirestoreService.queryCollection('authors')...");
+    
+    // 我们需要一个适配 Native API 的 queryCollection 版本
+    // 为了不修改 FirestoreService，我们在这里临时模拟一个
+    const projectId = PropertiesService.getScriptProperties().getProperty('FIRESTORE_PROJECT_ID');
+    const url = `https://${FirestoreService.firestoreHost}/v1/projects/${projectId}/databases/(default)/documents/authors`;
+    const response = FirestoreService._request(url, 'GET'); // Native Mode 使用 GET
+
+    console.log("✅ Native Mode API 调用成功！");
+    
+    if (response && Array.isArray(response.documents)) {
+        console.log(`⭐ 关键诊断 (Native Mode)：从 'authors' 集合中读取到 ${response.documents.length} 条记录。`);
+        if (response.documents.length > 0) {
+            console.log("🎉🎉🎉 [结论] 您的数据库响应 Native Mode API！");
+        } else {
+            console.log("⚠️ [结论] 您的数据库不响应 Native Mode API（或集合为空）。");
+        }
+    } else {
+        console.error("❌ Native Mode API 返回了非预期的格式:", response);
+    }
+
+  } catch (e) {
+    console.error(`!!! Native Mode 测试过程中捕获到严重错误: ${e.message} !!!`);
+  } finally {
+    console.log("--- Native Mode API 测试结束 ---");
+  }
+}
+
+// 测试函数 2：验证 Datastore Mode API
+
+function test_DatastoreModeAPI() {
+  console.log("======================================================");
+  console.log("--- 开始执行【模式二：Datastore Mode API】读取测试 ---");
+  console.log("======================================================");
+  
+  try {
+    // 强制设置 FirestoreService 使用 Datastore Mode 端点
+    FirestoreService.firestoreHost = 'datastore.googleapis.com';
+
+    console.log("正在使用 Datastore Mode API 调用 FirestoreService.queryCollection('authors')...");
+    
+    // 直接调用我们之前重构好的、适配 Datastore API 的 queryCollection
+    const authors = FirestoreService.queryCollection('authors');
+    
+    console.log("✅ Datastore Mode API 调用成功！");
+
+    if (Array.isArray(authors)) {
+        console.log(`⭐ 关键诊断 (Datastore Mode)：从 'authors' 集合中读取到 ${authors.length} 条记录。`);
+        if (authors.length > 0) {
+            console.log("🎉🎉🎉 [结论] 您的数据库响应 Datastore Mode API！");
+        } else {
+            console.log("⚠️ [结论] 您的数据库不响应 Datastore Mode API（或集合为空）。");
+        }
+    } else {
+       console.error("❌ Datastore Mode API 返回了非预期的格式:", authors);
+    }
+
+  } catch (e) {
+    console.error(`!!! Datastore Mode 测试过程中捕获到严重错误: ${e.message} !!!`);
+  } finally {
+    console.log("--- Datastore Mode API 测试结束 ---");
+    console.log("======================================================");
+  }
+}
+
+// =================================================================================
+//  终极诊断函数
+// =================================================================================
+function ultimateDiagnosis() {
+  console.log("================== ULTIMATE DIAGNOSIS START ==================");
+
+  try {
+    // 诊断步骤 1: 检查 CONFIG 对象和键名
+    console.log("\n--- 诊断步骤 1: 检查 CONFIG 配置 ---");
+    if (typeof CONFIG !== 'undefined' && CONFIG.FIRESTORE_COLLECTIONS) {
+      console.log("✅ CONFIG 对象存在。");
+      const authorKey = 'AUTHORS_REGISTRY';
+      const authorCollectionName = CONFIG.FIRESTORE_COLLECTIONS[authorKey];
+      if (authorCollectionName) {
+        console.log(`✅ 键名 '${authorKey}' 存在，映射到集合名: '${authorCollectionName}'`);
+      } else {
+        console.error(`❌ 错误: 在 CONFIG.FIRESTORE_COLLECTIONS 中找不到键名 '${authorKey}'`);
+        return;
+      }
+    } else {
+      console.error("❌ 致命错误: 全局 CONFIG 对象不存在！请检查 Config.gs 文件是否正确加载。");
+      return;
+    }
+
+    // 诊断步骤 2: 检查 DataService 是否能正确调用 FirestoreService
+    console.log("\n--- 诊断步骤 2: 测试 DataService -> FirestoreService 调用链 ---");
+    if (typeof DataService !== 'undefined' && typeof DataService.getDataAsObjects === 'function') {
+      console.log("✅ DataService.getDataAsObjects 函数存在。");
+      if (typeof FirestoreService !== 'undefined' && typeof FirestoreService.queryCollection === 'function') {
+        console.log("✅ FirestoreService.queryCollection 函数存在。");
+      } else {
+        console.error("❌ 致命错误: FirestoreService.queryCollection 不是一个函数！请检查 FirestoreService.gs 文件。");
+        return;
+      }
+    } else {
+      console.error("❌ 致命错误: DataService.getDataAsObjects 不是一个函数！请检查 DataService.gs 文件。");
+      return;
+    }
+
+    // 诊断步骤 3: 使用 DataService 读取一个已知可以工作的集合
+    console.log("\n--- 诊断步骤 3: 读取一个已知正常的集合 (e.g., raw_tech_news) ---");
+    const techNews = DataService.getDataAsObjects('RAW_TECH_NEWS');
+    console.log(`通过 DataService 读取 'RAW_TECH_NEWS'，获取到 ${techNews.length} 条记录。`);
+    if (techNews.length > 0) {
+      console.log("✅ 结论: DataService 读取旧集合的功能完全正常。");
+    } else {
+      console.warn("⚠️ 警告: 读取 'RAW_TECH_NEWS' 也返回了空数组，问题可能在更底层。");
+    }
+    
+    // 诊断步骤 4: 使用 DataService 读取 'authors' 集合
+    console.log("\n--- 诊断步骤 4: 使用 DataService 读取 'authors' 集合 ---");
+    const authorsFromDataService = DataService.getDataAsObjects('AUTHORS_REGISTRY');
+    console.log(`通过 DataService 读取 'AUTHORS_REGISTRY'，获取到 ${authorsFromDataService.length} 条记录。`);
+    if (authorsFromDataService.length > 0) {
+      console.log("✅ 结论: DataService 读取 'authors' 集合的功能是正常的！问题可能在 getExpertNetworkData 的后续处理中。");
+    } else {
+      console.error("❌ 核心问题定位: DataService 读取 'authors' 集合返回了空数组！");
+    }
+
+    // 诊断步骤 5: 直接使用 FirestoreService 读取 'authors' 集合
+    console.log("\n--- 诊断步骤 5: 直接使用 FirestoreService 读取 'authors' 集合 ---");
+    const authorsFromFirestoreService = FirestoreService.queryCollection('authors');
+    console.log(`直接通过 FirestoreService 读取 'authors'，获取到 ${authorsFromFirestoreService.length} 条记录。`);
+    if (authorsFromFirestoreService.length > 0) {
+      console.log("✅ 结论: 底层 FirestoreService 读取 'authors' 集合的功能是正常的！");
+    } else {
+      console.error("❌ 核心问题定位: 底层 FirestoreService 读取 'authors' 集合也返回了空数组！这指向了 API 端点或权限问题。");
+    }
+
+  } catch (e) {
+    console.error(`!!! 诊断过程中捕获到严重错误: ${e.message} !!!`);
+    console.error(`错误堆栈: ${e.stack}`);
+  } finally {
+    console.log("\n================== ULTIMATE DIAGNOSIS END ==================");
+  }
+}
+
+function ultimateDiagnosis_ExpertNetwork() {
+  Logger.log("================== ULTIMATE DIAGNOSIS (Expert Network) START ==================");
+
+  try {
+    // 步骤 1: 直接用 FirestoreService 读取数据，确保拿到最原始的数据
+    Logger.log("\n--- 诊断步骤 1: 直接从 Firestore 读取原始数据 ---");
+    const authorsRaw = FirestoreService.queryCollection('authors') || [];
+    const affiliationsRaw = FirestoreService.queryCollection('affiliations') || [];
+    Logger.log(`读取完成: ${authorsRaw.length} 位作者, ${affiliationsRaw.length} 家机构。`);
+
+    if (authorsRaw.length === 0) {
+        Logger.log("作者数据为空，诊断结束。");
+        return;
+    }
+
+    // 步骤 2: 构建节点 (Nodes) - 使用最简单、最笨拙但最可靠的方法
+    Logger.log("\n--- 诊断步骤 2: 开始构建节点 ---");
+    const nodes = [];
+    const nodeIds = []; // 使用简单数组来跟踪ID
+
+    // 添加机构节点
+    affiliationsRaw.forEach(aff => {
+        if (aff && aff.affiliation_id && nodeIds.indexOf(aff.affiliation_id) === -1) {
+            nodes.push({
+                id: aff.affiliation_id,
+                name: aff.name || 'Unknown Affiliation',
+                category: '机构',
+                value: aff.author_count || 1
+            });
+            nodeIds.push(aff.affiliation_id);
+        }
+    });
+    Logger.log(`添加机构后，节点数: ${nodes.length}`);
+
+    // 添加作者节点
+    authorsRaw.forEach(author => {
+        if (author && author.author_id && nodeIds.indexOf(author.author_id) === -1) {
+            nodes.push({
+                id: author.author_id,
+                name: author.full_name || 'Unknown Author',
+                category: '专家',
+                value: (author.paper_count || 0) + (author.patent_count || 0) + 1
+            });
+            nodeIds.push(author.author_id);
+        }
+    });
+    Logger.log(`添加作者后，总节点数: ${nodes.length}`);
+
+    // 步骤 3: 检查节点构建结果
+    Logger.log("\n--- 诊断步骤 3: 验证节点构建结果 ---");
+    if(nodes.length > 0) {
+        Logger.log(`✅ 成功构建了 ${nodes.length} 个节点！`);
+        Logger.log("节点构建逻辑看起来没有问题。");
+        Logger.log("第一个节点示例: " + JSON.stringify(nodes[0]));
+        Logger.log("最后一个节点示例: " + JSON.stringify(nodes[nodes.length - 1]));
+    } else {
+        Logger.log("❌ 核心错误定位：节点构建循环未能产生任何节点！请检查 forEach 循环内部的 if 条件。");
+        return;
+    }
+
+    // 步骤 4: 构建边 (Edges)
+    Logger.log("\n--- 诊断步骤 4: 开始构建边 ---");
+    const edges = [];
+    const edgeKeys = {}; // 使用对象作为 Set
+
+    authorsRaw.forEach(author => {
+        if (!author || !author.author_id || nodeIds.indexOf(author.author_id) === -1) return;
+
+        // 作者 -> 机构
+        if (author.last_known_affiliation && nodeIds.indexOf(author.last_known_affiliation) > -1) {
+            const edgeKey = `${author.author_id}->${author.last_known_affiliation}`;
+            if (!edgeKeys[edgeKey]) {
+                edges.push({ source: author.author_id, target: author.last_known_affiliation });
+                edgeKeys[edgeKey] = true;
+            }
+        }
+
+        // 作者 -> 合作者
+        if (Array.isArray(author.coauthor_ids)) {
+            author.coauthor_ids.forEach(coauthorId => {
+                if (coauthorId && nodeIds.indexOf(coauthorId) > -1) {
+                    const edgeKey = author.author_id < coauthorId ? `${author.author_id}-${coauthorId}` : `${coauthorId}-${author.author_id}`;
+                    if (!edgeKeys[edgeKey]) {
+                        edges.push({ source: author.author_id, target: coauthorId });
+                        edgeKeys[edgeKey] = true;
+                    }
+                }
+            });
+        }
+    });
+    Logger.log(`构建边完成后，总边数: ${edges.length}`);
+
+    // 步骤 5: 最终返回的对象
+    const finalResult = { nodes, edges };
+    Logger.log("\n--- 诊断步骤 5: 最终返回给前端的数据 ---");
+    Logger.log(`节点总数: ${finalResult.nodes.length}`);
+    Logger.log(`边总数: ${finalResult.edges.length}`);
+    
+  } catch (e) {
+    Logger.log(`!!! 诊断过程中捕获到严重错误: ${e.message} !!!`);
+    Logger.log(`错误堆栈: ${e.stack}`);
+  } finally {
+    Logger.log("\n================== ULTIMATE DIAGNOSIS (Expert Network) END ==================");
+  }
+}
+

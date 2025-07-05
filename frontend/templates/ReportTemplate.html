@@ -2,17 +2,203 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- 关键：视口设置，确保手机正确缩放 -->
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <title><?!= reportTitle ?></title>
+  <style>
+    /* 基础样式 - 确保在所有邮件客户端中的一致性 */
+    body {
+      font-family: -apple-system, BlinkMacMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #1a202c;
+      background-color: #f7fafc;
+      margin: 0;
+      padding: 0;
+      -webkit-text-size-adjust: 100%; /* 防止iOS自动调整字体大小 */
+      -ms-text-size-adjust: 100%;    /* 防止Windows Phone自动调整字体大小 */
+    }
+    h1, h2, h3, h4, p, ul, ol, li {
+      margin: 0; /* 重置默认边距 */
+      padding: 0; /* 重置默认内边距 */
+    }
+    a {
+      text-decoration: none;
+      color: inherit; /* 继承父元素颜色 */
+    }
+
+    /* 强制文字换行，以防长单词或URL溢出 */
+    p, li, div, span, a {
+        word-wrap: break-word; /* 旧版浏览器兼容 */
+        overflow-wrap: break-word; /* 现代浏览器 */
+        word-break: break-word; /* 针对CJK字符和更激进的换行 */
+    }
+
+    /* PC端默认样式（通过inline style或此处设置，会被移动端覆盖） */
+    .container-table {
+      width: 800px;
+      max-width: 800px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+    }
+    .main-content-cell {
+      padding: 30px 40px;
+    }
+    /* AI 概要部分的两列 */
+    .summary-columns > td {
+      width: 50%;
+      display: table-cell;
+      vertical-align: top;
+    }
+    .summary-left-col { padding-right: 15px; }
+    .summary-right-col { padding-left: 15px; }
+
+    /* 宏观洞察部分的三列KPI */
+    .macro-kpi-row > td {
+      display: table-cell;
+      vertical-align: top;
+    }
+    .kpi-col-padding-right { padding-right: 10px; }
+    .kpi-col-padding-left { padding-left: 10px; }
+
+    /* 宏观洞察部分的两列趋势/关联 */
+    .trend-relation-columns > td {
+      display: table-cell;
+      vertical-align: top;
+    }
+    .trend-col { padding-right: 15px; }
+    .relation-col { padding-left: 15px; }
+
+    /* 移动端样式 */
+    @media screen and (max-width: 768px) {
+      .container-table {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+      }
+      /* 确保外层td的padding为0，内层table再设置 */
+      td[align="center"] > table.container-table { 
+          padding: 0 !important;
+      }
+      .header-cell {
+        padding: 25px 20px !important; /* 调整头部横幅内边距 */
+      }
+      .main-content-cell {
+        padding: 20px 15px !important; /* 调整主内容区内边距 */
+      }
+      .footer-cell {
+        padding: 20px 15px !important; /* 调整页脚内边距 */
+      }
+
+      /* 字体大小调整 */
+      h1 { font-size: 26px !important; }
+      h2 { font-size: 20px !important; }
+      h3 { font-size: 18px !important; } 
+      p, li { font-size: 14px !important; } /* 正文和列表项 */
+      /* 针对特定较小文本，保持更小的字体 */
+      .update-card-meta, .update-card-meta span, 
+      .kpi-card-inner-table div:last-child, 
+      .section .update-card li span {
+          font-size: 12px !important; /* 保持较小字体 */
+      }
+
+      /* 强制包含列的TR元素堆叠 */
+      .summary-columns,
+      .macro-kpi-row,
+      .trend-relation-columns {
+        display: block !important; /* 使TR本身成为块级元素 */
+      }
+
+      /* 强制列TD元素堆叠 */
+      .summary-columns > td,
+      .macro-kpi-row > td,
+      .trend-relation-columns > td {
+        width: 100% !important;
+        display: block !important; /* 强制TD堆叠 */
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin-bottom: 15px !important; /* 堆叠后增加间距 */
+      }
+      /* 调整特定列的内边距/外边距，以适应堆叠 */
+      .summary-columns > td:last-child,
+      .macro-kpi-row > td:last-child,
+      .trend-relation-columns > td:last-child {
+        margin-bottom: 0 !important; /* 最后一个不加底部间距 */
+      }
+      .summary-left-col { padding-bottom: 15px !important; } /* AI概要左侧在堆叠后增加底部间距 */
+      .summary-right-col { padding-top: 0 !important; } /* AI概要右侧在堆叠后移除顶部间距 */
+      
+      /* Trend/Relation specific adjustments when stacked */
+      .trend-col { padding-bottom: 15px !important; } /* Add bottom padding for trend col when stacked */
+      .relation-col { padding-top: 0 !important; } /* Remove top padding for relation col when stacked */
+
+      /* KPI卡片样式 (内部表格) */
+      .kpi-col { /* 包含KPI卡片的td元素 */
+          padding-left: 0 !important; 
+          padding-right: 0 !important; 
+      }
+      .kpi-card-inner-table { /* KPI卡片内部的表格 */
+        width: 95% !important; /* 让卡片内容有点左右边距 */
+        margin: 0 auto !important; /* 居中 */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* 为KPI卡片添加阴影 */
+        padding: 15px !important; /* 调整内边距 */
+      }
+
+      /* 趋势和关联卡片内的列表项 */
+      .section .update-card ol,
+      .section .update-card ul {
+        padding-left: 10px !important; /* 减少列表项的左内边距 */
+      }
+      .section .update-card li {
+        line-height: 1.4 !important; /* 增加行高 */
+      }
+
+      /* 业界标杆/技术领域进展卡片样式 */
+      .update-card { /* 适用于所有 update-card 类，包括宏观洞察里的趋势/关联卡片 */
+          padding: 12px !important; /* 调整内边距 */
+      }
+      /* 调整标题和摘要的间距 */
+      .update-card-title {
+          margin-bottom: 5px !important;
+      }
+      .update-card-summary {
+          margin-bottom: 8px !important;
+      }
+
+      /* 整体 Section 标题和内容的间距 */
+      .section h2 {
+          margin-bottom: 15px !important;
+      }
+      .section h3 {
+          margin-bottom: 10px !important;
+          padding-bottom: 5px !important;
+      }
+      .summary-right-col table { /* 热词趋势表的内边距 */
+          padding: 15px !important;
+      }
+      .summary-right-col table td { /* 热词趋势表中的文字行间距 */
+          padding-bottom: 5px !important;
+      }
+      ul li, ol li { /* 列表项的通用底部外边距 */
+          margin-bottom: 6px !important;
+      }
+    }
+  </style>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a202c; background-color: #f7fafc; margin: 0; padding: 0;">
   <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #f7fafc;">
     <tr>
       <td align="center">
-        <table class="container" width="800" border="0" align="center" cellpadding="0" cellspacing="0" role="presentation" style="width: 800px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
+        <!-- 主内容容器表格 -->
+        <table class="container-table" border="0" align="center" cellpadding="0" cellspacing="0" role="presentation">
           
           <!-- 1. 头部横幅 -->
           <tr>
-            <td class="header" align="center" style="background-image: url('https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg'); background-size: cover; background-position: center; padding: 40px; color: white;">
+            <td class="header-cell" align="center" style="background-image: url('https://images.pexels.com/photos/8386440/pexels-photo-8386440.jpeg'); background-size: cover; background-position: center; padding: 40px; color: white;">
               <h1 style="font-size: 32px; font-weight: 700; margin: 0; text-shadow: 0 2px 4px rgba(0,0,0,0.5);"><?!= reportTitle ?></h1>
               <p style="font-size: 16px; margin-top: 8px; opacity: 0.9;">联接Next · AI驱动的技术洞察</p>
               <p style="font-size: 14px; margin-top: 15px; background-color: rgba(0, 31, 63, 0.6); display: inline-block; padding: 5px 15px; border-radius: 15px;"><?!= periodStartStr ?> 至 <?!= periodEndStr ?></p>
@@ -20,7 +206,7 @@
           </tr>
 
           <tr>
-            <td style="padding: 30px 40px;">
+            <td class="main-content-cell" style="padding: 30px 40px;">
               <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
 
                 <!-- 2. AI 智能洞察摘要 -->
@@ -28,8 +214,8 @@
                   <td class="section" style="padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 20px;">
                     <h2 style="font-size: 22px; font-weight: 600; color: #001f3f; margin-top: 0;">联接NEXT智能洞察摘要</h2>
                     <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
-                      <tr>
-                        <td width="66%" valign="top" style="padding-right: 15px;">
+                      <tr class="summary-columns"> <!-- 添加 class="summary-columns" -->
+                        <td class="summary-left-col" width="66%" valign="top" style="padding-right: 15px;">
                           <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 0;">本期概要</h3>
                           <p style="font-size: 15px; color: #4a5568; margin-top: 0;"><?= reportData.aiSummary || "（无概要）" ?></p>
                           <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 25px;">关键发现</h3>
@@ -43,9 +229,9 @@
                           <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 25px;">战略建议</h3>
                           <p style="font-size: 15px; color: #4a5568; margin-top: 0;"><?= reportData.aiRecommendations || "（无建议）" ?></p>
                         </td>
-                        <td width="34%" valign="top" style="padding-left: 15px;">
+                        <td class="summary-right-col" width="34%" valign="top" style="padding-left: 15px;">
                           <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #f7fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                            <tr><td style="font-size: 18px; font-weight: 600; color: #2c5282; padding-bottom: 15px;">本期热词趋势</td></tr>
+                            <tr><td style="font-size: 18px; font-weight: 600; color: #2c5282; padding-bottom: 15px;">热词趋势</td></tr>
                             <? if (reportData.trendingKeywords && reportData.trendingKeywords.length > 0) { ?>
                               <? for (let keyword of reportData.trendingKeywords) { ?>
                                 <tr><td style="font-size: 14px; padding-bottom: 5px; color: #2d3748;"><span style="color: #48bb78; margin-right: 8px;">▲</span><?= keyword ?></td></tr>
@@ -63,27 +249,39 @@
                   <td class="section" style="padding-top: 30px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 20px;">
                     <h2 style="font-size: 22px; font-weight: 600; color: #001f3f; margin-top: 0; margin-bottom: 20px;">本期宏观洞察</h2>
                     <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom: 30px;">
-                      <tr>
-                        <td align="center" style="padding-right: 10px;"><table width="100%" height="100%" style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;"><tr><td align="center" style="padding: 20px;"><div style="font-size: 28px; font-weight: bold; color: #0000ff;"><?= reportData.stats.newInsightsCount || 0 ?></div><div style="font-size: 14px; color: #718096; margin-top: 5px;">新增高价值线索</div></td></tr></table></td>
-                        <td align="center" style="padding-left: 10px; padding-right: 10px;"><table width="100%" height="100%" style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;"><tr><td align="center" style="padding: 20px;"><div style="font-size: 28px; font-weight: bold; color: #1a202c;"><?= reportData.stats.newRawDataCount || 0 ?></div><div style="font-size: 14px; color: #718096; margin-top: 5px;">采集原始数据</div></td></tr></table></td>
-                        <td align="center" style="padding-left: 10px;"><table width="100%" height="100%" style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;"><tr><td align="center" style="padding: 20px;"><div style="font-size: 28px; font-weight: bold; color: #1a202c;"><?= reportData.stats.competitorNewsCount || 0 ?></div><div style="font-size: 14px; color: #718096; margin-top: 5px;">关键竞情动态</div></td></tr></table></td>
+                      <tr class="macro-kpi-row"> <!-- 添加 class="macro-kpi-row" -->
+                        <td class="kpi-col kpi-col-padding-right" align="center" style="padding-right: 10px;">
+                          <table class="kpi-card-inner-table" width="100%" height="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <tr><td align="center" style="padding: 20px;"><div style="font-size: 28px; font-weight: bold; color: #0000ff;"><?= reportData.stats.newInsightsCount || 0 ?></div><div style="font-size: 14px; color: #718096; margin-top: 5px;">新增高价值线索</div></td></tr>
+                          </table>
+                        </td>
+                        <td class="kpi-col kpi-col-padding-left kpi-col-padding-right" align="center" style="padding-left: 10px; padding-right: 10px;">
+                          <table class="kpi-card-inner-table" width="100%" height="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <tr><td align="center" style="padding: 20px;"><div style="font-size: 28px; font-weight: bold; color: #1a202c;"><?= reportData.stats.newRawDataCount || 0 ?></div><div style="font-size: 14px; color: #718096; margin-top: 5px;">采集原始数据</div></td></tr>
+                          </table>
+                        </td>
+                        <td class="kpi-col kpi-col-padding-left" align="center" style="padding-left: 10px;">
+                          <table class="kpi-card-inner-table" width="100%" height="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <tr><td align="center" style="padding: 20px;"><div style="font-size: 28px; font-weight: bold; color: #1a202c;"><?= reportData.stats.competitorNewsCount || 0 ?></div><div style="font-size: 14px; color: #718096; margin-top: 5px;">关键竞情动态</div></td></tr>
+                          </table>
+                        </td>
                       </tr>
                     </table>
                     <table width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
-                      <tr>
-                        <td width="50%" valign="top" style="padding-right: 15px;">
-                          <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 0; margin-bottom: 15px;">🔥 本期上升最快趋势</h3>
-                          <div style="background-color: #f7fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 150px;">
+                      <tr class="trend-relation-columns"> <!-- 添加 class="trend-relation-columns" -->
+                        <td class="trend-col" width="50%" valign="top" style="padding-right: 15px;">
+                          <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 0; margin-bottom: 15px;">🔥 本期上升趋势</h3>
+                          <div class="update-card" style="background-color: #f7fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 150px;">
                             <? if (reportData.topTrends && reportData.topTrends.length > 0) { ?>
-                              <ol style="padding-left: 20px; margin: 0;"><? for (let trend of reportData.topTrends) { ?><li style="margin-bottom: 10px; font-size: 15px; color: #2d3748;"><?= trend.name ?> <span style="color: #718096; font-size: 13px;">(提及 <?= trend.value ?> 次)</span></li><? } ?></ol>
+                              <ol style="padding-left: 20px; margin: 0;"><? for (let trend of reportData.topTrends) { ?><li style="margin-bottom: 10px; font-size: 15px; color: #2d3748;"><?= trend.name ?> <span style="color: #718096; margin-left: 5px;">(提及 <?= trend.value ?> 次)</span></li><? } ?></ol>
                             <? } else { ?><p style="color: #a0aec0; margin: 0;">暂无明显趋势</p><? } ?>
                           </div>
                         </td>
-                        <td width="50%" valign="top" style="padding-left: 15px;">
-                          <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 0; margin-bottom: 15px;">🔗 核心技术关联网络</h3>
-                          <div style="background-color: #f7fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 150px;">
+                        <td class="relation-col" width="50%" valign="top" style="padding-left: 15px;">
+                          <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; margin-top: 0; margin-bottom: 15px;">🔗 技术关联网络</h3>
+                          <div class="update-card" style="background-color: #f7fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 150px;">
                             <? if (reportData.topRelations && reportData.topRelations.length > 0) { ?>
-                              <ul style="padding-left: 0; list-style: none; margin: 0;"><? for (let relation of reportData.topRelations) { ?><li style="margin-bottom: 10px; font-size: 15px; color: #2d3748;"><strong><?= relation.source ?></strong> 与 <strong><?= relation.target ?></strong> 关联紧密 <span style="color: #718096; font-size: 13px;">(共现 <?= relation.value ?> 次)</span></li><? } ?></ul>
+                              <ul style="padding-left: 0; list-style: none; margin: 0;"><? for (let relation of reportData.topRelations) { ?><li style="margin-bottom: 10px; font-size: 15px; color: #2d3748;"><strong><?= relation.source ?></strong> 与 <strong><?= relation.target ?></strong> 关联紧密 <span style="color: #718096; margin-left: 5px;">(共现 <?= relation.value ?> 次)</span></li><? } ?></ul>
                             <? } else { ?><p style="color: #a0aec0; margin: 0;">暂无明显关联</p><? } ?>
                           </div>
                         </td>
@@ -101,10 +299,10 @@
                       <div style="margin-bottom: 25px;">
                         <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; border-bottom: 1px solid #e9ecef; padding-bottom: 8px; margin-bottom: 15px;"><?= benchmark.company_name ?></h3>
                         <? for (let update of benchmark.updates) { ?>
-                          <div style="border: 1px solid #e2e8f0; border-left: 4px solid #4299e1; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                            <a href="<?= update.source_url ?>" target="_blank" style="text-decoration: none;"><p style="font-size: 16px; font-weight: 600; margin: 0 0 8px 0; color: #2b6cb0;"><?= update.title ?></p></a>
-                            <p style="font-size: 14px; color: #4a5568; margin: 0 0 10px 0;"><?= update.summary ?></p>
-                            <div style="font-size: 12px; color: #718096;"><span style="background-color: #ebf8ff; color: #3182ce; padding: 2px 8px; border-radius: 10px;"><?= update.type ?></span><span style="margin-left: 10px;">来源: <?= update.source_platform ?></span></div>
+                          <div class="update-card update-card-benchmark" style="border: 1px solid #e2e8f0; border-left: 4px solid #4299e1; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                            <a href="<?= update.source_url ?>" target="_blank" style="text-decoration: none;"><p class="update-card-title" style="font-size: 16px; font-weight: 600; margin: 0 0 8px 0; color: #2b6cb0;"><?= update.title ?></p></a>
+                            <p class="update-card-summary" style="font-size: 14px; color: #4a5568; margin: 0 0 10px 0;"><?= update.summary ?></p>
+                            <div class="update-card-meta" style="font-size: 12px; color: #718096;"><span style="background-color: #ebf8ff; color: #3182ce; padding: 2px 8px; border-radius: 10px;"><?= update.type ?></span><span style="margin-left: 10px;">来源: <?= update.source_platform ?></span></div>
                           </div>
                         <? } ?>
                       </div>
@@ -122,10 +320,10 @@
                       <div style="margin-bottom: 25px;">
                         <h3 style="font-size: 18px; font-weight: 600; color: #2c5282; border-bottom: 1px solid #e9ecef; padding-bottom: 8px; margin-bottom: 15px;"><?= domain.tech_name ?></h3>
                         <? for (let update of domain.updates) { ?>
-                          <div style="border: 1px solid #e2e8f0; border-left: 4px solid #38a169; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                            <a href="<?= update.source_url ?>" target="_blank" style="text-decoration: none;"><p style="font-size: 16px; font-weight: 600; margin: 0 0 8px 0; color: #276749;"><?= update.title ?></p></a>
-                            <p style="font-size: 14px; color: #4a5568; margin: 0 0 10px 0;"><?= update.summary ?></p>
-                            <div style="font-size: 12px; color: #718096;"><span style="background-color: #e6fffa; color: #2c7a7b; padding: 2px 8px; border-radius: 10px;"><?= update.type ?></span><span style="margin-left: 10px;">来源: <?= update.source_platform ?></span></div>
+                          <div class="update-card update-card-tech" style="border: 1px solid #e2e8f0; border-left: 4px solid #38a169; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                            <a href="<?= update.source_url ?>" target="_blank" style="text-decoration: none;"><p class="update-card-title" style="font-size: 16px; font-weight: 600; margin: 0 0 8px 0; color: #276749;"><?= update.title ?></p></a>
+                            <p class="update-card-summary" style="font-size: 14px; color: #4a5568; margin: 0 0 10px 0;"><?= update.summary ?></p>
+                            <div class="update-card-meta" style="font-size: 12px; color: #718096;"><span style="background-color: #e6fffa; color: #2c7a7b; padding: 2px 8px; border-radius: 10px;"><?= update.type ?></span><span style="margin-left: 10px;">来源: <?= update.source_platform ?></span></div>
                           </div>
                         <? } ?>
                       </div>
@@ -140,7 +338,7 @@
 
           <!-- 6. 页脚 -->
           <tr>
-            <td class="footer" align="center" style="background-color: #2c5280; color: #a0aec0; padding: 25px 40px;">
+            <td class="footer-cell" align="center" style="background-color: #2c5280; color: #a0aec0; padding: 25px 40px;">
               <p style="margin: 0; font-size: 14px;">由 <strong>联接Next AI智能分析引擎</strong> 强力驱动</p>
               <p style="margin: 8px 0 0 0; font-size: 12px; opacity: 0.7;">© <?= new Date().getFullYear() ?> Deepdive Engine | <a href="#" style="color: #7f9cf5; text-decoration: none;">访问在线仪表板</a></p>
             </td>

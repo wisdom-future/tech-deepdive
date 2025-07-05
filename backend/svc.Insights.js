@@ -1,8 +1,8 @@
-// 文件名: backend/svc.Insights.gs (最终 Firestore 适配版)
+// 文件名: backend/svc.Insights.gs (最终修复版，同时支持两种图谱)
 
 /**
  * @file 智能分析服务
- * @version 5.0 - 完全适配 Firestore
+ * @version 6.0 - 完全适配 Firestore，并同时支持技术知识图谱和专家网络图谱
  */
 
 // 辅助函数：格式化日期
@@ -339,6 +339,192 @@ const InsightsService = {
     } catch (e) {
         Logger.log(`!!! ERROR in getKnowledgeGraphData: ${e.message}\n${e.stack}`);
         return { nodes: [], edges: [] };
+    }
+  },
+
+  /**
+   * ✅ 新增：获取专家网络图谱数据
+   * 节点是作者和机构。
+   */
+   getExpertNetworkData: function() {
+    Logger.log("======================================================");
+    Logger.log("--- [BACKEND LOG] getExpertNetworkData 开始执行 (v7 - 多色渲染版，含机构) ---");
+
+    try {
+        const authors = DataService.getDataAsObjects('AUTHORS_REGISTRY') || [];
+        const affiliations = DataService.getDataAsObjects('AFFILIATIONS_REGISTRY') || [];
+
+        Logger.log(`[BACKEND LOG] 读取到 ${authors.length} 位作者, ${affiliations.length} 家机构。`);
+
+        if (authors.length === 0) {
+            Logger.log("[BACKEND LOG] 作者集合为空，无法构建图谱。");
+            return { nodes: [], edges: [] };
+        }
+
+        const nodesMap = {};
+        const edgeWeights = new Map();
+        
+        // 新增：创建机构ID到机构名称的映射，方便快速查找
+        const affiliationsNameMap = new Map();
+        affiliations.forEach(aff => {
+            if (aff && aff.affiliation_id && aff.name) {
+                affiliationsNameMap.set(aff.affiliation_id, aff.name);
+            }
+        });
+
+        // 步骤 1: 创建节点
+        affiliations.forEach(aff => {
+            if (aff && aff.id) { // aff.id 实际上是 affiliation_id
+                nodesMap[aff.id] = { 
+                    id: aff.id, 
+                    name: aff.name, 
+                    category: '机构', 
+                    value: aff.author_count || 1 
+                };
+            }
+        });
+
+        authors.forEach(author => {
+            if (author && author.id) { // author.id 实际上是 author_id
+                const affiliationName = author.last_known_affiliation ? 
+                                        affiliationsNameMap.get(author.last_known_affiliation) || '未知机构' : 
+                                        '未知机构'; // 获取机构名称
+
+                nodesMap[author.id] = {
+                    id: author.id,
+                    name: author.full_name,
+                    category: '专家',
+                    paper_count: author.paper_count || 0,
+                    patent_count: author.patent_count || 0,
+                    value: (author.paper_count || 0) + (author.patent_count || 0),
+                    main_tech_areas: author.main_tech_areas || [],
+                    // ✅ 新增字段：专家所属机构的名称
+                    affiliation_name: affiliationName 
+                };
+            }
+        });
+
+        const finalNodes = Object.values(nodesMap);
+        const finalEdges = [];
+        const addedEdgeKeys = new Set();
+
+        // 步骤 2: 创建边并计算权重 (此部分逻辑不变)
+        authors.forEach(author => {
+            if (!author || !author.id || !nodesMap[author.id]) return;
+
+            if (author.last_known_affiliation && nodesMap[author.last_known_affiliation]) {
+                const edgeKey = `aff-${author.id}-${author.last_known_affiliation}`;
+                if (!addedEdgeKeys.has(edgeKey)) {
+                    finalEdges.push({ source: author.id, target: author.last_known_affiliation, value: 1 });
+                    addedEdgeKeys.add(edgeKey);
+                }
+            }
+
+            if (Array.isArray(author.coauthor_ids)) {
+                author.coauthor_ids.forEach(coauthorId => {
+                    if (coauthorId && nodesMap[coauthorId]) {
+                        const edgeKey = author.id < coauthorId ? 
+                                        `${author.id}--${coauthorId}` : `${coauthorId}--${author.id}`;
+                        edgeWeights.set(edgeKey, (edgeWeights.get(edgeKey) || 0) + 1);
+                    }
+                });
+            }
+        });
+
+        edgeWeights.forEach((weight, key) => {
+            const [source, target] = key.split('--');
+            finalEdges.push({ source, target, value: weight });
+        });
+
+        Logger.log(`[BACKEND LOG] 最终构建完成: ${finalNodes.length} 个节点, ${finalEdges.length} 条边。`);
+        Logger.log("======================================================");
+        return { nodes: finalNodes, edges: finalEdges };
+
+    } catch (e) {
+        Logger.log(`!!! [BACKEND LOG] getExpertNetworkData 捕获到严重错误: ${e.message} !!!\n${e.stack}`);
+        return { nodes: [], edges: [], error: e.message };
+    }
+  },
+
+  /**
+   * AI生成专家简介。
+   * 增加：所属机构名称作为AI提示的上下文信息。
+   * @param {string} expertName - 专家姓名。
+   * @param {string} primaryTechArea - 专家主要技术领域。
+   * @param {string} affiliationName - 专家所属机构名称。 // ✅ 新增参数
+   * @param {number} paperCount - 论文数量。
+   * @param {number} patentCount - 专利数量。
+   * @param {Array<string>} mainTechAreas - 其他主要技术领域列表。
+   * @returns {string} AI生成的专家简介文本。
+   */
+  generateExpertSummary: function(expertName, primaryTechArea, affiliationName, paperCount, patentCount, mainTechAreas) {
+    Logger.log(`[AI-ExpertSummary] 开始生成专家简介 for: ${expertName}`);
+    Logger.log(`[AI-ExpertSummary] 参数: 主领域=${primaryTechArea}, 机构=${affiliationName}, 论文=${paperCount}, 专利=${patentCount}`);
+
+    const OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      Logger.log("ERROR: OPENAI_API_KEY 未在项目属性中配置。");
+      return "AI简介生成失败：AI API Key未配置。";
+    }
+    Logger.log("[AI-ExpertSummary] OPENAI_API_KEY 已加载。");
+
+    // 构建AI的输入提示 (Prompt)
+    const prompt = `你是一个专业的专家简介生成器。根据以下信息为专家生成一个简洁、专业、积极的个人简介（大约80-120字）。
+      请着重描述他们在研究领域的贡献、专业知识和潜在影响力。
+      只输出简介文本，不要包含任何额外对话或标题。
+
+      信息：
+      姓名: ${expertName}
+      主要研究领域: ${primaryTechArea}
+      所属机构: ${affiliationName}
+      发表论文数量: ${paperCount}
+      拥有专利数量: ${patentCount}
+      其他技术领域: ${mainTechAreas.length > 0 ? mainTechAreas.join(', ') : '无'}
+
+      请开始生成简介：`;
+
+    Logger.log(`[AI-ExpertSummary] 发送给AI的Prompt (前200字符): ${prompt.substring(0, 200)}...`);
+
+    const payload = {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 200,
+      temperature: 0.7
+    };
+
+    const requestOptions = {
+      method: "post",
+      contentType: "application/json",
+      headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+
+    try {
+      Logger.log("[AI-ExpertSummary] 正在调用 OpenAI API...");
+      const response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", requestOptions);
+      const responseCode = response.getResponseCode();
+      const responseText = response.getContentText();
+      Logger.log(`[AI-ExpertSummary] OpenAI API响应码: ${responseCode}`);
+      Logger.log(`[AI-ExpertSummary] OpenAI API原始响应: ${responseText.substring(0, 500)}...`); // 限制日志长度
+
+      if (responseCode === 200) {
+        const jsonResponse = JSON.parse(responseText);
+        if (jsonResponse.choices && jsonResponse.choices.length > 0 && jsonResponse.choices[0].message) {
+          const aiGeneratedSummary = jsonResponse.choices[0].message.content.trim();
+          Logger.log(`[AI-ExpertSummary] AI生成简介成功 (前100字符): ${aiGeneratedSummary.substring(0, 100)}...`);
+          return aiGeneratedSummary;
+        } else {
+          Logger.log("ERROR: AI响应格式不正确，缺少choices或message。");
+          return "AI简介生成失败：AI响应格式错误。";
+        }
+      } else {
+        Logger.log(`ERROR: AI API返回错误，状态码: ${responseCode}, 响应: ${responseText}`);
+        return `AI简介生成失败：API错误 (${responseCode})。`;
+      }
+    } catch (e) {
+      Logger.log(`CRITICAL ERROR: AI生成专家简介 API调用失败: ${e.message}\\n${e.stack}`);
+      return `AI简介生成失败：连接或解析错误 (${e.message})。`;
     }
   }
 };

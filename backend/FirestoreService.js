@@ -8,7 +8,8 @@
  * 包含了所有必需的 CRUD (创建、读取、更新、删除) 辅助函数。
  */
 const FirestoreService = {
-  
+  REGION_ID: 'northamerica-northeast2',
+
   // 添加一个唯一的初始化标志，方便调试
   _initialized: (function() {
     Logger.log("[DEBUG_FS_INIT] FirestoreService initialized.");

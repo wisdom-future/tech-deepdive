@@ -549,98 +549,103 @@
     <!-- 技术洞察页面 -->
     <div id="page-insights" class="page-container hidden">
       <div class="p-6 bg-white rounded-xl shadow-lg">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-            <h3 class="text-xl font-semibold mb-4 flex items-center">
-              <i class="fa fa-area-chart text-primary mr-2"></i>趋势分析
-            </h3>
-            <!-- ✅ 为图表容器添加ID -->
-            <div id="trend-chart-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-              <!-- 占位符将被ECharts替换 -->
-              <div class="flex items-center justify-center h-full text-gray-400">
-                <i class="fa fa-spinner fa-spin text-4xl mr-3"></i>
-                <span>正在加载图表数据...</span>
-              </div>
-            </div>
-          </div>
-        
-          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-            <h3 class="text-xl font-semibold mb-4 flex items-center">
-              <i class="fa fa-tags text-primary mr-2"></i>热点关键词
-            </h3>
-            <!-- ✅ 为图表容器添加ID -->
-            <div id="keyword-cloud-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-              <!-- 热词云占位 -->
-              <div class="flex items-center justify-center h-full text-gray-400">
-                <i class="fa fa-cloud text-4xl mr-3"></i>
-                <span>关键词云将在这里显示</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-          <h3 class="text-xl font-semibold mb-4 flex items-center">
-            <i class="fa fa-line-chart text-primary mr-2"></i>技术成熟度曲线
-          </h3>
-          <div id="hype-cycle-chart-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <!-- 占位符 -->
-            <div class="flex items-center justify-center h-full text-gray-400">
-              <i class="fa fa-spinner fa-spin text-4xl mr-3"></i>
-              <span>正在加载图表数据...</span>
-            </div>
-          </div>
+        <!-- 标签页导航 -->
+        <div class="border-b border-gray-200 mb-6">
+          <nav id="analyzation-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="trends">
+              <i class="fa fa-area-chart mr-2"></i>关键技术线索
+            </a>
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="hype-cycle">
+              <i class="fa fa-line-chart mr-2"></i>技术成熟度
+            </a>
+            <!-- ✅ 恢复：技术知识图谱标签页 -->
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="knowledge-graph">
+              <i class="fa fa-sitemap mr-2"></i>技术知识图谱
+            </a>
+            <!-- ✅ 新增：专家网络标签页 -->
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="expert-network">
+              <i class="fa fa-users mr-2"></i>领域专家网络
+            </a>
+          </nav>
         </div>
 
-        <!-- 知识图谱 -->
-        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
-            <h3 class="text-xl font-semibold mb-4 flex items-center">
-                <i class="fa fa-sitemap text-primary mr-2"></i>技术知识图谱
-            </h3>
-            <div id="knowledge-graph-container" class="h-96 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <!-- 占位符将被ECharts替换 -->
-                <div class="flex items-center justify-center h-full text-gray-400">
-                    <i class="fa fa-spinner fa-spin text-4xl mr-3"></i>
-                    <span>正在加载知识图谱...</span>
-                </div>
-            </div>
-        </div>
+        <!-- 标签页内容区域 -->
 
-        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
-          <h3 class="text-xl font-semibold mb-4 flex items-center">
-            <i class="fa fa-lightbulb-o text-primary mr-2"></i>最新洞察线索
-          </h3>
-          <div class="overflow-x-auto">
-            <!-- ✅ 修改：为 table 添加 table-fixed 类 -->
-            <table class="min-w-full divide-y divide-gray-200 table-fixed">
-              <thead class="bg-gray-100">
-                <tr>
-                  <!-- ✅ 修改：为 th 添加宽度类 -->
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">标题</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">来源</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">日期</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/10">状态</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/10">操作</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                <!-- 表格内容将由JS动态填充 -->
-                <!-- 初始加载状态，此行会被JS替换 -->
-                <tr><td colspan="5" class="text-center py-4 text-gray-500">正在加载最新线索...</td></tr>
-              </tbody>
-            </table>
+        <!-- "趋势与关键词" 内容 -->
+        <div id="tab-content-trends" class="analyzation-tab-content">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-area-chart text-primary mr-2"></i>趋势分析</h3>
+              <div id="trend-chart-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
+            </div>
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-tags text-primary mr-2"></i>热点关键词</h3>
+              <div id="keyword-cloud-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
+            </div>
           </div>
-          <!-- ✅ 新增：洞察线索分页控件 -->
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+            <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-lightbulb-o text-primary mr-2"></i>最新洞察线索</h3>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200 table-fixed">
+                <thead>
+                  <tr>
+                    <th class="w-2/5 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">标题</th>
+                    <th class="w-1/5 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">来源</th>
+                    <th class="w-1/5 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日期</th>
+                    <th class="w-1/5 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                    <th class="w-auto px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                  </tr>
+                </thead>
+                <tbody><!-- JS will populate this --></tbody>
+              </table>
+            </div>
+            <!-- ✅ 新增：为最新洞察线索添加分页控件 -->
             <div class="flex justify-between items-center mt-4">
-              <button id="insightsPrevPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">上一页</button>
-              <span id="insightsPaginationInfo" class="text-sm text-gray-600"></span>
-              <button id="insightsNextPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">下一页</button>
+                <button id="insightsPrevPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">上一页</button>
+                <span id="insightsPaginationInfo" class="text-sm text-gray-600"></span>
+                <button id="insightsNextPageBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50">下一页</button>
             </div>
-            <!-- ✅ 新增：洞察线索分页控件 结束 -->
+          </div>
         </div>
-        
+
+        <!-- "技术成熟度" 内容 -->
+        <div id="tab-content-hype-cycle" class="analyzation-tab-content hidden">
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-line-chart text-primary mr-2"></i>技术成熟度曲线</h3>
+            <div id="hype-cycle-chart-container" class="h-[600px] bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
+          </div>
+        </div>
+
+        <!-- ✅ 恢复："技术知识图谱" 内容 -->
+        <div id="tab-content-knowledge-graph" class="analyzation-tab-content hidden">
+          <div class="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200" style="min-height: 600px;">
+            <div id="knowledge-graph-container" style="width: 100%; height: 600px;"></div>
+          </div>
+        </div>
+
+        <!-- ✅ 新增："专家网络" 内容 -->
+        <div id="tab-content-expert-network" class="analyzation-tab-content hidden">
+          <div class="flex flex-col md:flex-row gap-6">
+            <div class="w-full md:w-3/4 bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200" style="min-height: 600px;">
+              <div id="expert-network-container" style="width: 100%; height: 100%;">
+                <div class="flex items-center justify-center h-full text-gray-400">
+                  <i class="fa fa-spinner fa-spin text-4xl mr-3"></i>
+                  <span>正在加载专家网络图谱...</span>
+                </div>
+              </div>
+            </div>
+            <div class="w-full md:w-1/4 bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+              <h3 class="text-lg font-semibold mb-3">节点详情</h3>
+              <div id="expert-node-details" class="text-sm text-gray-700 space-y-2">
+                <p>点击图谱中的节点查看详情。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
+
 
     <!-- 决策行动页面 -->
     <div id="page-actions" class="page-container hidden">
