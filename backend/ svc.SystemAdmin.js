@@ -29,36 +29,51 @@ const SystemAdminService = {
    * @returns {Object} 确认消息。
    */
   addRegistryEntry: function(registryKey, entryData) {
-    Logger.log(`SystemAdminService: 正在向 '${registryKey}' 添加新条目`);
     try {
-      // 这里的逻辑需要根据你实际的 DataService 和 FirestoreService 实现来调整
-      // 我们假设 DataService 有一个 addObject 方法
-      // 并且它能处理ID生成和时间戳添加
-      
-      // 为了确保功能完整，我们在这里实现一个完整的逻辑
-      const collectionName = DataService._getCollectionName(registryKey);
-      
-      // 生成一个唯一的 ID
-      const newId = `${registryKey.slice(0, 4)}_${new Date().getTime()}`;
-      
-      const dataToSave = {
-        ...entryData,
-        id: newId, // 确保有 'id' 字段用于未来的引用
-        created_timestamp: new Date(),
-        updated_timestamp: new Date()
+      // 定义每个注册表类型的主键字段
+      const idFieldMapping = {
+        'REPORT_RECIPIENTS': 'recipient_id',
+        'TECH_REGISTRY': 'tech_id',
+        'COMPETITOR_REGISTRY': 'competitor_id',
+        'CONFERENCE_REGISTRY': 'conference_id'
       };
+      
+      const idField = idFieldMapping[registryKey];
+      if (!idField) {
+        throw new Error(`未找到注册表的主键映射: ${registryKey}`);
+      }
 
-      // 在你的 FirestoreService 中，你需要一个方法来创建或设置一个带指定ID的文档
-      // 假设有这样一个方法：FirestoreService.setDocument(path, data)
-      const firestoreDocId = newId.replace(/\//g, '_'); // Firestore ID 不能包含斜杠
-      const path = `${collectionName}/${firestoreDocId}`;
-      FirestoreService.createDocument(path, dataToSave); // 假设 createDocument 接受完整路径
+      // 如果条目没有 ID，则生成一个新的唯一 ID。
+      if (!entryData[idField]) {
+        // 示例 ID 生成方式，可以根据您的需求调整
+        entryData[idField] = `REC_${new Date().getTime()}`; 
+      }
+      
+      // 添加创建和更新时间戳，这是良好的实践
+      const now = new Date();
+      entryData.created_timestamp = now;
+      entryData.updated_timestamp = now;
 
-      Logger.log(`成功将ID为 '${firestoreDocId}' 的条目添加到 '${collectionName}'.`);
-      return { success: true, id: firestoreDocId };
+      // --- 这是修复之处 ---
+
+      // 错误的代码 (您的现有代码可能类似于此):
+      // FirestoreService.createDocument('some/path', entryData); // 此函数不存在。
+
+      // 正确的代码 (使用 DataService 封装的 batchUpsert):
+      // 我们将单个 entryData 对象封装在一个数组中，因为 batchUpsert 期望一个数组。
+      const resultCount = DataService.batchUpsert(registryKey, [entryData], idField);
+
+      if (resultCount > 0) {
+        Logger.log(`成功在 '${registryKey}' 中添加/更新了 ID 为 ${entryData[idField]} 的条目。`);
+        return { success: true, message: "条目保存成功。", data: entryData };
+      } else {
+        // 理论上，如果未抛出错误，则不应达到此情况
+        throw new Error("批量更新操作完成，但未写入任何文档。");
+      }
 
     } catch (e) {
-      Logger.log(`在 addRegistryEntry ('${registryKey}') 中出错: ${e.message}\n${e.stack}`);
+      Logger.log(`SystemAdminService.addRegistryEntry 在 '${registryKey}' 中发生错误: ${e.message}\n${e.stack}`);
+      // 重新抛出错误，以便前端接收到正确的失败消息
       throw new Error(`向注册表 '${registryKey}' 添加条目失败: ${e.message}`);
     }
   },

@@ -217,114 +217,128 @@ const InsightsService = {
    */
   getKnowledgeGraphData: function() {
     try {
-      Logger.log("DEBUG: InsightsService.getKnowledgeGraphData - 开始获取数据...");
+        Logger.log("开始获取知识图谱数据 (基于最终正确逻辑)...");
 
-      const allInsights = DataService.getDataAsObjects('TECH_INSIGHTS_MASTER') || [];
-      const allTechnologies = DataService.getDataAsObjects('TECH_REGISTRY') || [];
-      const allCompetitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY') || [];
+        // --- 1. 数据准备 ---
+        const allInsights = DataService.getDataAsObjects('TECH_INSIGHTS_MASTER') || [];
+        const allTechnologies = DataService.getDataAsObjects('TECH_REGISTRY') || [];
+        const allCompetitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY') || [];
 
-      const nodesMap = new Map(); // Map 用于存储唯一节点 { id: nodeObject }
-      const edgesMap = new Map(); // Map 用于存储唯一边 { "sourceId-targetId": edgeObject }
+        const nodesMap = new Map();
+        const edgesMap = new Map();
 
-      // 辅助函数：添加/更新节点
-      const addNode = (id, name, type, category = '') => {
-        if (!nodesMap.has(id)) {
-          nodesMap.set(id, {
-            id: id,
-            name: name,
-            category: type, // 用于 ECharts 类别
-            value: 1, // 初始值，可根据频率增加
-            symbolSize: 10 // 基础大小
-          });
-        } else {
-          nodesMap.get(id).value++; // 增加重要性/大小（基于提及次数）
-        }
-      };
-
-      // 辅助函数：添加/更新边
-      const addEdge = (sourceId, targetId) => {
-        // 确保边键的顺序一致 (例如，始终是 "id1-id2")
-        const edgeKey = sourceId < targetId ? `${sourceId}-${targetId}` : `${targetId}-${sourceId}`;
-        if (!edgesMap.has(edgeKey)) {
-          edgesMap.set(edgeKey, {
-            source: sourceId,
-            target: targetId,
-            value: 1, // 初始值，根据共同出现频率增加
-            lineStyle: { width: 1, opacity: 0.6 }
-          });
-        } else {
-          edgesMap.get(edgeKey).value++; // 增加权重
-          edgesMap.get(edgeKey).lineStyle.width = Math.min(5, edgesMap.get(edgeKey).value); // 最大宽度 5
-        }
-      };
-
-      // 1. 将技术作为节点处理
-      allTechnologies.forEach(tech => {
-        addNode(tech.tech_id, tech.tech_name, '技术领域', tech.tech_category);
-      });
-
-      // 2. 将竞争对手作为节点处理
-      allCompetitors.forEach(comp => {
-        addNode(comp.competitor_id, comp.company_name, '竞争对手', comp.industry_category);
-      });
-
-      // 3. 处理洞察以发现关系并添加关键词作为节点
-      allInsights.forEach(insight => {
-        const insightEntities = new Set(); // 与此特定洞察相关的实体
-
-        // 添加洞察的技术关键词作为节点并链接到洞察
-        if (insight.tech_keywords) {
-          String(insight.tech_keywords).split(',').map(k => k.trim()).filter(Boolean).forEach(keyword => {
-            const keywordId = `kw_${Utilities.base64EncodeWebSafe(keyword).replace(/=/g, '')}`; // 关键词的简单 ID
-            addNode(keywordId, keyword, '关键词');
-            insightEntities.add(keywordId);
-          });
-        }
-
-        // 如果 evidence_chain 中有原始数据，则添加相关公司/技术
-        if (insight.evidence_chain && Array.isArray(insight.evidence_chain)) {
-          insight.evidence_chain.forEach(evidence => {
-            if (evidence.source_type === 'competitor_intelligence' && evidence.competitor_name) {
-              const comp = allCompetitors.find(c => c.company_name === evidence.competitor_name);
-              if (comp) {
-                insightEntities.add(comp.competitor_id);
-              }
-            } else if (evidence.source_type === 'tech_news' && evidence.tech_keywords) { // 与技术相关的新闻
-              String(evidence.tech_keywords).split(',').map(k => k.trim()).filter(Boolean).forEach(keyword => {
-                const keywordId = `kw_${Utilities.base64EncodeWebSafe(keyword).replace(/=/g, '')}`;
-                addNode(keywordId, keyword, '关键词');
-                insightEntities.add(keywordId);
-              });
+        // --- 2. 辅助函数 (增强版) ---
+        const addNode = (id, name, type) => {
+            if (!id || !name) return;
+            const trimmedId = String(id).trim();
+            if (!nodesMap.has(trimmedId)) {
+                nodesMap.set(trimmedId, { id: trimmedId, name: String(name).trim(), category: type, value: 0 });
             }
-            // 您可以在此处添加更多逻辑，将其他原始数据类型链接到现有节点
-          });
+            nodesMap.get(trimmedId).value++; // 每次提及，节点权重+1
+        };
+
+        const addEdge = (sourceId, targetId) => {
+            if (!sourceId || !targetId || sourceId === targetId) return;
+            const edgeKey = String(sourceId) < String(targetId) ? `${sourceId}-${targetId}` : `${targetId}-${sourceId}`;
+            if (!edgesMap.has(edgeKey)) {
+                edgesMap.set(edgeKey, { source: String(sourceId), target: String(targetId), value: 0 });
+            }
+            edgesMap.get(edgeKey).value++; // 每次共现，边的权重+1
+        };
+
+        // --- 3. 核心算法：恢复你的正确逻辑 ---
+        
+        // a. 初始化基础节点 (技术领域和竞争对手)
+        allTechnologies.forEach(tech => {
+            addNode(tech.tech_id, tech.tech_name, '技术领域');
+        });
+        allCompetitors.forEach(comp => {
+            addNode(comp.competitor_id, comp.company_name, '竞争对手');
+        });
+        
+        // b. 遍历洞察，构建关系
+        allInsights.forEach(insight => {
+            const insightEntities = new Set();
+            
+            // 关联技术领域 (从 insight.tech_id)
+            if (insight.tech_id && nodesMap.has(insight.tech_id)) {
+                insightEntities.add(insight.tech_id);
+            }
+
+            // 关联关键词
+            if (insight.tech_keywords) {
+                String(insight.tech_keywords).split(',').map(k => k.trim()).filter(Boolean).forEach(keyword => {
+                    const keywordId = `kw_${keyword}`;
+                    addNode(keywordId, keyword, '关键词');
+                    insightEntities.add(keywordId);
+                });
+            }
+
+            // 关联竞争对手 (从 insight.evidence_chain)
+            if (Array.isArray(insight.evidence_chain)) {
+                insight.evidence_chain.forEach(evidence => {
+                    if (evidence.competitor_name) {
+                        const comp = allCompetitors.find(c => c.company_name === evidence.competitor_name);
+                        if (comp && nodesMap.has(comp.competitor_id)) {
+                            insightEntities.add(comp.competitor_id);
+                        }
+                    }
+                });
+            }
+            
+            // 为本条洞察中共同出现的所有实体两两之间增加边的权重
+            const entitiesArray = Array.from(insightEntities);
+            if (entitiesArray.length > 1) {
+                for (let i = 0; i < entitiesArray.length; i++) {
+                    for (let j = i + 1; j < entitiesArray.length; j++) {
+                        addEdge(entitiesArray[i], entitiesArray[j]);
+                    }
+                }
+            }
+        });
+
+        // --- 4. 后处理与返回 (增强版) ---
+        const nodes = Array.from(nodesMap.values());
+        const edges = Array.from(edgesMap.values());
+        
+        // 根据权重动态调整节点大小
+        if (nodes.length > 0) {
+            const maxNodeValue = Math.max(...nodes.map(node => node.value), 1);
+            nodes.forEach(node => {
+                node.symbolSize = 10 + (node.value / maxNodeValue) * 40;
+            });
+        }
+        
+        // 根据权重动态调整边的粗细和透明度
+        if (edges.length > 0) {
+            // 步骤 1: 计算最大权重值
+            const maxEdgeValue = Math.max(...edges.map(edge => edge.value), 1);
+            
+            // 步骤 2: 计算最大权重的平方根，作为归一化的分母
+            const maxSqrtValue = Math.sqrt(maxEdgeValue);
+
+            edges.forEach(edge => {
+                // 步骤 3: 计算当前边权重的平方根
+                const currentSqrtValue = Math.sqrt(edge.value);
+                
+                // 步骤 4: 使用平方根的比率来计算宽度和不透明度
+                const ratio = currentSqrtValue / maxSqrtValue;
+                
+                edge.lineStyle = {
+                    // 基础宽度0.5，最大额外增加6.5，总宽度在0.5到7之间
+                    width: 0.5 + ratio * 6.5, 
+                    // 基础不透明度0.3，最大额外增加0.6，总不透明度在0.3到0.9之间
+                    opacity: 0.3 + ratio * 0.6
+                };
+            });
         }
 
-        // 在同一洞察中发现的实体之间创建边
-        const entitiesArray = Array.from(insightEntities);
-        for (let i = 0; i < entitiesArray.length; i++) {
-          for (let j = i + 1; j < entitiesArray.length; j++) {
-            addEdge(entitiesArray[i], entitiesArray[j]);
-          }
-        }
-      });
-
-      // 将 Map 转换为数组
-      const nodes = Array.from(nodesMap.values());
-      const edges = Array.from(edgesMap.values());
-
-      // 根据值（频率）规范化节点大小
-      const maxVal = nodes.reduce((max, node) => Math.max(max, node.value), 0);
-      nodes.forEach(node => {
-          node.symbolSize = 10 + (node.value / maxVal) * 30; // 将大小缩放到 10 到 40
-      });
-
-      Logger.log(`DEBUG: InsightsService - 知识图谱数据准备完成: ${nodes.length} 个节点, ${edges.length} 条边。`);
-      return { nodes, edges };
+        Logger.log(`知识图谱加权算法完成: ${nodes.length} 个节点, ${edges.length} 条边。`);
+        return { nodes, edges };
 
     } catch (e) {
-      Logger.log(`!!! ERROR in InsightsService.getKnowledgeGraphData: ${e.message}\n${e.stack}`);
-      return { error: `获取知识图谱数据时发生错误: ${e.message}` };
+        Logger.log(`!!! ERROR in getKnowledgeGraphData: ${e.message}\n${e.stack}`);
+        return { nodes: [], edges: [] };
     }
   }
 };

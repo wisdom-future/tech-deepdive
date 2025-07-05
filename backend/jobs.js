@@ -11,76 +11,114 @@
  * 遍历Scheduled_Reports_Config表，触发所有活跃的自动化报告任务。
  */
 function scheduleAllReports() {
-  Logger.log("--- 开始执行所有计划报告任务 ---");
-  const scriptProperties = PropertiesService.getScriptProperties(); // 用于获取API Key等
-
+  Logger.log("--- [JOB START] 开始执行所有计划报告任务 ---");
+  
   try {
-    // ✅ 调用方式简化，直接使用集合键名
-    const scheduledConfigs = DataService.getDataAsObjects('SCHEDULED_REPORTS_CONFIG');
-
-    if (!scheduledConfigs || scheduledConfigs.length === 0) {
-      Logger.log("未找到任何计划报告配置。");
+    const allConfigs = DataService.getDataAsObjects('SCHEDULED_REPORTS_CONFIG');
+    if (!allConfigs || allConfigs.length === 0) {
+      Logger.log("未找到任何计划报告配置，任务结束。");
       return;
     }
 
-    scheduledConfigs.forEach(config => {
-      // 检查任务是否启用
-      const isActive = String(config.is_active).toLowerCase() === 'true';
-      if (!isActive) {
-        Logger.log(`跳过任务 (未启用): ${config.job_id} - ${config.report_title_template}`);
-        return;
+    const today = new Date();
+    // getDay() 返回 0 (周日) 到 6 (周六)
+    const dayOfWeek = today.getDay(); 
+    // getDate() 返回月份中的第几天 (1-31)
+    const dayOfMonth = today.getDate();
+
+    allConfigs.forEach(config => {
+      // 1. 检查任务是否被激活
+      if (String(config.is_active).toLowerCase() !== 'true') {
+        Logger.log(`跳过任务 (未激活): ${config.job_id || '未知ID'}`);
+        return; // continue to the next item in forEach
+      }
+      
+      // 2. 核心逻辑：检查今天是否是这个任务的预定执行日
+      let shouldRunToday = false;
+      const frequency = String(config.schedule_frequency || '').toUpperCase();
+
+      switch (frequency) {
+        case 'DAILY':
+          shouldRunToday = true;
+          break;
+        case 'WEEKLY_MONDAY': // 每周一执行
+          if (dayOfWeek === 1) { // 1 代表周一
+            shouldRunToday = true;
+          }
+          break;
+        case 'MONTHLY_1ST': // 每月1号执行
+          if (dayOfMonth === 1) {
+            shouldRunToday = true;
+          }
+          break;
+        // 可以在此添加更多自定义频率规则
+        default:
+          Logger.log(`未知的调度频率 '${frequency}'，跳过任务: ${config.job_id || '未知ID'}`);
+          return; // continue
       }
 
-      Logger.log(`正在处理计划任务: ${config.job_id} - ${config.report_title_template}`);
+      // 如果今天不是执行日，则跳过此任务
+      if (!shouldRunToday) {
+        Logger.log(`今天不是任务 '${config.job_id || '未知ID'}' 的执行日，跳过。`);
+        return; // continue
+      }
+
+      // 3. 如果需要执行，则准备所有参数
+      Logger.log(`✅ 符合执行条件，正在处理任务: ${config.job_id} - ${config.report_title_template}`);
+      
       try {
-        // 1. 计算报告周期日期
-        const { periodStartStr, periodEndStr } = calculatePeriodDates(String(config.schedule_frequency || 'DAILY').toUpperCase());
+        // 3a. 计算报告的开始和结束日期
+        const { periodStartStr, periodEndStr } = calculatePeriodDates(frequency);
 
-        // 2. 动态生成报告标题
+        // 3b. ✅ 核心：动态生成报告标题
         const reportTitle = replaceTitlePlaceholders(config.report_title_template, periodStartStr, periodEndStr);
+        Logger.log(`动态生成报告标题: "${reportTitle}"`);
 
-        // 3. 提取技术领域（如果配置为逗号分隔字符串）
-        const techAreas = config.default_tech_areas ? String(config.default_tech_areas).split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
+        // 3c. 准备其他参数
+        const techAreas = config.default_tech_areas ? String(config.default_tech_areas).split(',').map(s => s.trim()).filter(Boolean) : [];
+        const recipientEmails = config.recipient_emails || '';
+        const reportOwner = config.report_owner || '自动化系统';
+        const targetAudience = config.target_audience || '默认受众';
+        const description = config.description || '由系统根据预设规则自动生成的报告。';
 
-        // 4. 提取接收者邮箱（如果配置为逗号分隔字符串）
-        const recipientEmails = config.recipient_emails ? String(config.recipient_emails).split(',').map(s => s.trim()).filter(s => s.length > 0) : [];
-
-        // 5. AI功能启用标志
-        const aiOptions = {
-          aiSummaryEnabled: String(config.ai_summary_enabled).toLowerCase() === 'true',
-          aiKeyFindingsEnabled: String(config.ai_key_findings_enabled).toLowerCase() === 'true',
-          aiRecommendationsEnabled: String(config.ai_recommendations_enabled).toLowerCase() === 'true'
-        };
-
-        // 6. 调用ReportsService生成报告
-        // 传入所有必要参数，包括AI选项
+        // 4. 调用报告生成服务
         ReportsService.generateReport(
           config.report_type,
-          reportTitle,
+          reportTitle, // <-- 使用我们刚刚处理好的动态标题
           periodStartStr,
           periodEndStr,
           techAreas,
-          config.target_audience,
-          config.report_owner,
-          config.description || "系统自动生成的报告，请查看附件。", // 使用任务描述作为用户摘要
-          recipientEmails.join(','), // 传递给 additionalRecipientEmail，在ReportsService内部会被合并
-          aiOptions // 传递AI选项
+          targetAudience,
+          reportOwner,
+          description,
+          recipientEmails
         );
 
-        // 7. 更新任务的上次运行时间和状态
-        updateScheduledReportStatus(config.job_id, 'SUCCESS');
+        // 5. 更新任务状态为成功
+        DataService.updateObject('SCHEDULED_REPORTS_CONFIG', config.id, {
+            last_run_timestamp: new Date(),
+            last_run_status: 'SUCCESS',
+            last_run_error_message: '' // 清空上次的错误信息
+        });
         Logger.log(`✅ 报告任务 '${config.job_id}' 生成成功。`);
 
       } catch (e) {
-        Logger.log(`❌ 报告任务 '${config.job_id}' 生成失败: ${e.message}\n${e.stack}`);
-        updateScheduledReportStatus(config.job_id, 'FAILED', e.message); // 更新失败状态和错误信息
-        // 可以在这里发送错误通知邮件给管理员
+        // 如果单个报告生成失败，记录错误并继续处理下一个任务
+        Logger.log(`❌ 报告任务 '${config.job_id}' 生成失败: ${e.message}`);
+        DataService.updateObject('SCHEDULED_REPORTS_CONFIG', config.id, {
+            last_run_timestamp: new Date(),
+            last_run_status: 'FAILED',
+            last_run_error_message: e.message // 记录详细错误信息
+        });
       }
     });
+
   } catch (e) {
+    // 如果在获取配置等初始步骤就发生严重错误，则记录并退出
     Logger.log(`❌ 调度器主函数发生严重错误: ${e.message}\n${e.stack}`);
+    // 可以在这里给管理员发邮件通知整个调度任务失败
   }
-  Logger.log("--- 计划报告任务执行完毕 ---");
+  Logger.log("--- [JOB END] 所有计划报告任务执行完毕 ---");
 }
 
 /**
@@ -169,30 +207,36 @@ function calculatePeriodDates(frequency) {
   };
 }
 
-/**
- * 替换报告标题模板中的占位符。
- * @param {string} template - 报告标题模板字符串。
- * @param {string} periodStartStr - 报告周期开始日期字符串 (YYYY-MM-DD)。
- * @param {string} periodEndStr - 报告周期结束日期字符串 (YYYY-MM-DD)。
- * @returns {string} 替换占位符后的报告标题。
- */
 function replaceTitlePlaceholders(template, periodStartStr, periodEndStr) {
+  if (!template) return "未命名报告";
+
   const startDate = new Date(periodStartStr);
-  const endDate = new Date(periodEndStr);
+  
+  // 检查日期是否有效，无效则直接返回模板
+  if (isNaN(startDate.getTime())) {
+    return template;
+  }
 
   const year = startDate.getFullYear();
-  const month = startDate.getMonth() + 1;
+  const month = startDate.getMonth() + 1; // 月份从0开始
   const day = startDate.getDate();
+  const quarter = Math.floor(month / 3) + 1;
 
   let title = template
+    .replace(/{YYYY}/g, year)
     .replace(/{YEAR}/g, year)
+    .replace(/{MM}/g, String(month).padStart(2, '0'))
     .replace(/{MONTH}/g, month)
-    .replace(/{DAY}/g, day);
+    .replace(/{DD}/g, String(day).padStart(2, '0'))
+    .replace(/{DAY}/g, day)
+    .replace(/{QUARTER}/g, `Q${quarter}`);
 
-  // 对于 {DATE}，根据报告周期长度选择合适的格式
-  if (periodStartStr === periodEndStr) { // 日报
-    title = title.replace(/{DATE}/g, `${year}年${month}月${day}日`);
-  } else { // 周报、月报等
+  // 智能处理 {DATE} 占位符
+  if (periodStartStr === periodEndStr) {
+    // 如果是日报
+    title = title.replace(/{DATE}/g, periodStartStr);
+  } else {
+    // 如果是周报、月报等
     title = title.replace(/{DATE}/g, `${periodStartStr}至${periodEndStr}`);
   }
 
