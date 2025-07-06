@@ -70,7 +70,7 @@
     techDomain: [
         { key: 'title', label: '技术名称', width: '30%' }, 
         { key: 'infoA', label: '技术类别', width: '25%' },
-        { key: 'infoB', label: '监控状态', width: '15%' }, 
+        { key: 'infoB', label: '关注状态', width: '15%' }, 
         { key: 'date', label: '创建日期', width: '15%' }, 
         { key: 'id', label: '技术ID', width: '15%' },
     ],
@@ -84,7 +84,7 @@
     conference: [
         { key: 'title', label: '会议名称', linkField: 'sourceUrl', width: '30%' }, 
         { key: 'infoA', label: '行业焦点', width: '25%' },
-        { key: 'infoB', label: '监控状态', width: '15%' }, 
+        { key: 'infoB', label: '关注状态', width: '15%' }, 
         { key: 'date', label: '下次活动', width: '15%' }, 
         { key: 'id', label: '会议ID', width: '15%' },
     ],
@@ -863,7 +863,7 @@ const uiUtils = {
 
                 if (conferences) {
                     document.getElementById('conferenceTotal').textContent = conferences.total || 0;
-                    document.getElementById('conferenceMonitoring').textContent = `监控中: ${conferences.monitoring || 0}`;
+                    document.getElementById('conferenceMonitoring').textContent = `关注中: ${conferences.monitoring || 0}`;
                 }
                 
                 if (health && health.alerts) {
@@ -1490,10 +1490,10 @@ const uiUtils = {
             const container = document.getElementById('tab-content-workflows');
             const workflowsByLayer = {
                 1: [
-                    { id: 'wf1', title: 'WF1: 学术论文监控', description: '从 arXiv 等来源监控与已注册技术相关的最新学术论文。', runFunction: 'runWf1_AcademicPapers' },
+                    { id: 'wf1', title: 'WF1: 学术论文关注', description: '从 arXiv 等来源关注与已注册技术相关的最新学术论文。', runFunction: 'runWf1_AcademicPapers' },
                     { id: 'wf2', title: 'WF2: 专利申请追踪', description: '从专利数据库追踪相关专利申请和授权情况。', runFunction: 'runWf2_PatentData' },
                     { id: 'wf3', title: 'WF3: 开源项目监测', description: '监测GitHub等平台上的新兴开源项目和技术趋势。', runFunction: 'runWf3_OpenSource' },
-                    { id: 'wf4', title: 'WF4: 技术新闻获取', description: '从主流科技媒体获取与监控领域相关的产业新闻。', runFunction: 'runWf4_TechNews' },
+                    { id: 'wf4', title: 'WF4: 技术新闻获取', description: '从主流科技媒体获取与关注领域相关的产业新闻。', runFunction: 'runWf4_TechNews' },
                     { id: 'wf5', title: 'WF5: 产业动态捕获', description: '捕获行业会议、财报、法规等关键产业动态。', runFunction: 'runWf5_IndustryDynamics' },
                     { id: 'wf6', title: 'WF6: 业界标杆收集', description: '收集和整理来自多渠道的业界标杆公开线索。', runFunction: 'runWf6_Benchmark' }
                 ],
@@ -1508,9 +1508,9 @@ const uiUtils = {
                 3: [{ id: 'wf8', title: 'WF8: 统一证据验证', description: '对所有新生成的线索进行多源交叉验证和质量评分。', runFunction: 'runWf8_EvidenceValidation' }],
                 4: [{ id: 'wf9', title: 'WF9: 商业价值分析', description: '对已验证线索进行TAM/SAM/SOM市场建模和ROI计算。', runFunction: 'runWf9_CommercialValueAnalysis' }, { id: 'wf10', 'title': 'WF10: 竞争线索分析', description: '评估竞争格局、技术威胁，并识别机会与挑战。', runFunction: 'runWf10_CompetitiveIntelAnalysis' }, { id: 'wf11', title: 'WF11: 技术深度分析', description: '评估技术成熟度(TRL)、技术壁垒和演进路径。', runFunction: 'runWf11_TechnicalDeepAnalysis' }],
                 5: [{ id: 'wf12', title: 'WF12: 线索整合决策', description: '综合所有分析维度，计算综合评分并生成行动建议。', runFunction: 'runWf12_IntelligenceIntegration' }, { id: 'wf13', title: 'WF13: 报告生成输出', description: '自动生成日报、周报，并分发至邮件、仪表板等渠道。', runFunction: 'runWf13_ReportGeneration' }],
-                6: [{ id: 'wf14', title: 'WF14: 数据质量监控', description: '定期检查整个系统的数据质量、完整性和一致性。', runFunction: 'runWf14_DataQualityMonitor' }, { id: 'wf15', title: 'WF15: 系统健康检查', description: '监控所有工作流的运行状态和系统性能指标。', runFunction: 'runWf15_SystemHealthCheck' }]
+                6: [{ id: 'wf14', title: 'WF14: 数据质量关注', description: '定期检查整个系统的数据质量、完整性和一致性。', runFunction: 'runWf14_DataQualityMonitor' }, { id: 'wf15', title: 'WF15: 系统健康检查', description: '关注所有工作流的运行状态和系统性能指标。', runFunction: 'runWf15_SystemHealthCheck' }]
             };
-            const layerTitles = ["精准数据采集 (并行)", "分表信号识别 (串行)", "统一证据验证 (统一处理)", "深度分析 (并行)", "决策支撑 (串行)", "监控与维护 (独立运行)"];
+            const layerTitles = ["精准数据采集 (并行)", "分表信号识别 (串行)", "统一证据验证 (统一处理)", "深度分析 (并行)", "决策支撑 (串行)", "关注与维护 (独立运行)"];
             
             let html = `
                 <div id="workbench-nav" class="sticky top-[var(--header-height)] bg-white/80 backdrop-blur-sm z-30 py-3 mb-6 rounded-lg shadow-sm">
@@ -1521,7 +1521,7 @@ const uiUtils = {
                       <a href="#wf-section-3" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第三层: 验证</a>
                       <a href="#wf-section-4" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第四层: 分析</a>
                       <a href="#wf-section-5" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第五层: 决策</a>
-                      <a href="#wf-section-6" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第六层: 监控</a>
+                      <a href="#wf-section-6" class="workbench-nav-link px-3 py-2 font-semibold text-gray-600 hover:bg-gray-200 hover:text-primary rounded-md transition-all">第六层: 关注</a>
                     </nav>
                   </div>
                 </div>
@@ -1670,909 +1670,1132 @@ const uiUtils = {
 //  请将此代码块完整替换您文件中 App.pageInitializers.insights 的部分
 // ====================================================================================================
 
-        // ✅ 最终、完整、无省略的 insights 初始化器
-        insights: {
-            isInitialized: false,
-            activeTab: 'trends',
-            charts: { // ✅ 确保这里有 benchmarkGraph
-                trendChart: null,
-                keywordChart: null,
-                hypeCycleChart: null,
-                knowledgeGraphChart: null,
-                expertNetworkChart: null,
-                benchmarkGraph: null // ✅ 为标杆图谱添加 ECharts 实例引用
-            },
-            expertNetworkCategories: [],
-            
-            init: async function() {
-                if (this.isInitialized) {
-                    // 如果已经初始化，只需确保当前激活的tab内容被加载
-                    await this.loadActiveTabContent();
-                    return;
-                }
+// ✅ 最终、完整、无省略的 insights 初始化器
+    insights: {
+          isInitialized: false, // 整个 insights 页面是否首次初始化
+          activeTab: 'trends',
+          charts: {
+              trendChart: null,
+              keywordChart: null,
+              hypeCycleChart: null,
+              knowledgeGraphChart: null,
+              expertNetworkChart: null,
+              benchmarkGraph: null
+          },
+          // ✅ 核心修正：为每个子标签页维护一个初始化状态，防止重复绑定事件
+          tabInitialized: {
+              trends: false,
+              hypeCycle: false,
+              knowledgeGraph: false,
+              expertNetwork: false,
+              benchmarkNetwork: false,
+              benchmarkTimeline: false // <-- 新增时间轴标签页的状态
+          },
+          expertNetworkCategories: [],
+          
+          init: async function() {
+              if (this.isInitialized) {
+                  // 如果 insights 页面已经初始化过，只需加载当前激活的标签页内容
+                  await this.loadActiveTabContent();
+                  return;
+              }
 
-                console.log('首次初始化智能分析页面...');
-                this.bindEventListeners(); // 只绑定一次静态事件
-                // ✅ 核心修复：在加载内容前，先调用函数更新标签的视觉样式
-                this.updateTabStyles();
-                // 初始加载默认标签页
-                await this.loadActiveTabContent();
-                this.isInitialized = true;
-            },
-        
-            bindEventListeners: function() {
-                window.addEventListener('resize', () => {
-                    setTimeout(() => {
-                        Object.values(this.charts).forEach(chart => {
-                            if (chart && !chart.isDisposed()) chart.resize();
-                        });
-                    }, 200);
-                });
-        
-                document.getElementById('insightsPrevPageBtn').addEventListener('click', () => {
-                    if (App.insightsCurrentPage > 1) {
-                        App.insightsCurrentPage--;
-                        this.loadLatestInsightsTable();
-                    }
-                });
-                document.getElementById('insightsNextPageBtn').addEventListener('click', () => {
-                    if (App.insightsCurrentPage < App.insightsTotalPages) {
-                        App.insightsCurrentPage++;
-                        this.loadLatestInsightsTable();
-                    }
-                });
-                document.getElementById('analyzation-tabs').addEventListener('click', this.handleTabClick.bind(this));
-
-                // ✅ 【新增代码】为标杆图谱筛选器绑定事件
-                const companyFilterToggle = document.getElementById('company-filter-toggle');
-                const companyFilterOptions = document.getElementById('company-filter-options');
-                const companyFilterList = document.getElementById('company-filter-list');
-                const applyBenchmarkFilterBtn = document.getElementById('apply-benchmark-filter-btn');
-
-                // 检查元素是否存在，因为它们只在特定tab里
-                if (companyFilterToggle && companyFilterOptions && companyFilterList && applyBenchmarkFilterBtn) {
-                    // 点击下拉开关按钮
-                    companyFilterToggle.addEventListener('click', (e) => {
-                        e.stopPropagation(); // 阻止事件冒泡到 document
-                        companyFilterOptions.classList.toggle('hidden');
-                    });
-
-                    // 点击文档其他地方关闭下拉框
-                    document.addEventListener('click', (e) => {
-                        // 只有当点击目标不在筛选器内部时才关闭
-                        if (!companyFilterOptions.contains(e.target) && !companyFilterToggle.contains(e.target) && !companyFilterOptions.classList.contains('hidden')) {
-                            companyFilterOptions.classList.add('hidden');
-                        }
-                    });
-
-                    // 点击下拉框内部不关闭
-                    companyFilterOptions.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                    });
-
-                    // 监听复选框变化，更新提示文本
-                    companyFilterList.addEventListener('change', this.updateFilterToggleText.bind(this));
-
-                    // 应用筛选按钮点击事件
-                    applyBenchmarkFilterBtn.addEventListener('click', () => {
-                        const selectedCompanies = Array.from(companyFilterList.querySelectorAll('input[type="checkbox"]:checked'))
-                                                    .map(checkbox => checkbox.value);
-                        this.renderBenchmarkGraph(selectedCompanies.length > 0 ? selectedCompanies : null);
-                        companyFilterOptions.classList.add('hidden'); // 应用后隐藏下拉框
-                    });
-                }
-            },
-        
-            handleTabClick: function(event) {
-                const link = event.target.closest('a.analyzation-tab');
-                if (!link) return;
-                event.preventDefault();
-                const tabName = link.dataset.tab;
-                if (tabName === this.activeTab) return;
-                
-                this.activeTab = tabName;
-                this.updateTabStyles();
-                this.loadActiveTabContent();
-            },
-        
-            updateTabStyles: function() {
-                document.querySelectorAll('.analyzation-tab').forEach(tab => {
-                    tab.classList.toggle('border-primary', tab.dataset.tab === this.activeTab);
-                    tab.classList.toggle('text-primary', tab.dataset.tab === this.activeTab);
-                    tab.classList.toggle('border-transparent', tab.dataset.tab !== this.activeTab);
-                    tab.classList.toggle('text-gray-500', tab.dataset.tab !== this.activeTab);
-                });
-                document.querySelectorAll('.analyzation-tab-content').forEach(content => {
-                    content.classList.toggle('hidden', content.id !== `tab-content-${this.activeTab}`);
-                });
-            },
-        
-            getOrCreateChart: function(key, containerId) {
-                if (!this.charts[key] || this.charts[key].isDisposed()) {
-                    const container = document.getElementById(containerId);
-                    if (container) {
-                        this.charts[key] = echarts.init(container);
-                        console.log(`ECharts 实例 "${key}" 已在可见容器上创建。`);
-                    } else {
-                        console.error(`图表容器 "${containerId}" 未找到！`);
-                        return null;
-                    }
-                }
-                return this.charts[key];
-            },
-        
-            loadActiveTabContent: async function() {
-                const tab = this.activeTab;
-                console.log(`加载标签页: ${tab}`);
-                
-                try {
-                    if (tab === 'trends') {
-                        this.loadLatestInsightsTable();
-                        const chartTrend = this.getOrCreateChart('trendChart', 'trend-chart-container');
-                        const chartKeyword = this.getOrCreateChart('keywordChart', 'keyword-cloud-container');
-                        if (App.cachedData.trendsAndKeywords) {
-                            this.renderTrendsChart(App.cachedData.trendsAndKeywords.trendData);
-                            this.renderKeywordsCloud(App.cachedData.trendsAndKeywords.keywordData);
-                        } else {
-                            chartTrend.showLoading({ text: '加载中...' });
-                            chartKeyword.showLoading({ text: '加载中...' });
-                            const data = await App.callApi('InsightsService', 'getInsightsPageData');
-                            App.cachedData.trendsAndKeywords = data;
-                            this.renderTrendsChart(data.trendData);
-                            this.renderKeywordsCloud(data.keywordData);
-                        }
-                    } else if (tab === 'hype-cycle') {
-                        const chart = this.getOrCreateChart('hypeCycleChart', 'hype-cycle-chart-container');
-                        if (App.cachedData.hypeCycleData) {
-                            this.renderHypeCycleChart(App.cachedData.hypeCycleData);
-                        } else {
-                            chart.showLoading({ text: '加载中...' });
-                            const data = await App.callApi('InsightsService', 'getInsightsPageData');
-                            App.cachedData.hypeCycleData = data.hypeCycleData;
-                            this.renderHypeCycleChart(data.hypeCycleData);
-                        }
-                    } else if (tab === 'knowledge-graph') {
-                        const chart = this.getOrCreateChart('knowledgeGraphChart', 'knowledge-graph-container');
-                        if (App.cachedData.knowledgeGraphData) {
-                            this.renderKnowledgeGraph(App.cachedData.knowledgeGraphData);
-                        } else {
-                            chart.showLoading({ text: '加载中...' });
-                            const data = await App.callApi('InsightsService', 'getKnowledgeGraphData');
-                            App.cachedData.knowledgeGraphData = data;
-                            this.renderKnowledgeGraph(data);
-                        }
-                    } else if (tab === 'expert-network') {
-                        const chart = this.getOrCreateChart('expertNetworkChart', 'expert-network-container');
-                        if (App.cachedData.expertNetworkData) {
-                            this.renderExpertNetwork(App.cachedData.expertNetworkData);
-                            if (chart && !chart.isDisposed()) {
-                              chart.off('click'); // 清理旧的点击事件监听器
-                              chart.on('click', 'series.graph', (params) => {
-                                  if (params.dataType === 'node') {
-                                      console.log("DEBUG: ECharts node click event fired. params.data:", params.data); // 新增调试日志
-                                      this.updateExpertNodeDetails(params.data);
-                                  }
-                              });
-                              console.log("专家网络图谱的点击事件已成功绑定。");
-                          }
-                        } else {
-                            chart.showLoading({ text: '加载中...' });
-                            const data = await App.callApi('InsightsService', 'getExpertNetworkData');
-                            App.cachedData.expertNetworkData = data;
-                            this.renderExpertNetwork(data);
-
-                            // ✅ 核心修复：在渲染完成后，为最新的图表实例绑定事件
-                            if (chart && !chart.isDisposed()) {
-                                chart.off('click'); // 先清理
-                                chart.on('click', 'series.graph', (params) => {
-                                    if (params.dataType === 'node') {
-                                        this.updateExpertNodeDetails(params.data);
-                                    }
-                                });
-                                console.log("专家网络图谱的点击事件已成功绑定。");
-                            }
-                        }
-                    } else if (tab === 'benchmark-network') { // ✅ 【新增标签页逻辑】
-                        const chart = this.getOrCreateChart('benchmarkGraph', 'benchmark-graph-chart'); // 注意这里的ID
-                        // 1. 填充筛选器
-                        await this.populateCompanyFilter();
-                        // 2. 加载图谱
-                        if (App.cachedData.benchmarkGraphData) {
-                            this.renderBenchmarkGraph(App.cachedData.benchmarkGraphData);
-                        } else {
-                            chart.showLoading({ text: '正在构建关系图谱...' });
-                            const data = await App.callApi('InsightsService', 'getBenchmarkGraphData');
-                            App.cachedData.benchmarkGraphData = data; // 缓存数据
-                            this.renderBenchmarkGraph(data);
-                        }
-                    }
-                } catch (error) {
-                    handleFailure(error);
-                }
-            },
-        
-            renderTrendsChart: function(data) {
-                const chart = this.getOrCreateChart('trendChart', 'trend-chart-container');
-                if (!chart) return;
-                chart.hideLoading();
-                if (!data || !data.xAxis || data.xAxis.length === 0) {
-                    chart.clear();
-                    document.getElementById('trend-chart-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无趋势分析数据</div>';
-                    return;
-                }
-                const option = {
-                    tooltip: { trigger: 'axis', axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } } },
-                    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-                    xAxis: [{ type: 'category', boundaryGap: false, data: data.xAxis }],
-                    yAxis: [{ type: 'value', min: 0, splitLine: { lineStyle: { type: 'dashed' } } }],
-                    series: [{ name: '洞察数量', type: 'line', smooth: true, data: data.seriesData, symbol: 'circle', symbolSize: 8, lineStyle: { width: 3, color: '#007bff' }, itemStyle: { color: '#007bff' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0, 123, 255, 0.3)' }, { offset: 1, color: 'rgba(255, 255, 255, 0)' }]) }, emphasis: { focus: 'series' } }]
-                };
-                chart.setOption(option, true);
-            },
-        
-            renderKeywordsCloud: function(data) {
-                const chart = this.getOrCreateChart('keywordChart', 'keyword-cloud-container');
-                if (!chart) return;
-                chart.hideLoading();
-                if (!data || data.length === 0) {
-                    chart.clear();
-                    document.getElementById('keyword-cloud-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无热点关键词数据</div>';
-                    return;
-                }
-                const option = {
-                    tooltip: { show: true, formatter: params => `${params.name} : ${params.value}` },
-                    series: [{ type: 'wordCloud', left: 'center', top: 'center', width: '100%', height: '100%', shape: 'pentagon', gridSize: 2, sizeRange: [14, 60], rotationRange: [-45, 45], rotationStep: 45, drawOutOfBound: false, textStyle: { color: () => `rgb(${[Math.round(Math.random() * 160), Math.round(Math.random() * 160), Math.round(Math.random() * 160)].join(',')})` }, emphasis: { focus: 'self', textStyle: { shadowBlur: 10, shadowColor: '#333' } }, data: data }]
-                };
-                chart.setOption(option, true);
-            },
-        
-
-
-        renderHypeCycleChart: function(data) {
-          const chart = this.getOrCreateChart('hypeCycleChart', 'hype-cycle-chart-container');
-          if (!chart) return;
-          chart.hideLoading();
-
-          if (!data || data.length === 0) {
-              chart.clear();
-              document.getElementById('hype-cycle-chart-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无有效的技术成熟度数据。</div>';
-              return;
-          }
-
-          const getGraphicElements = () => {
-              const stageStyles = {
-                  fontSize: 14, 
-                  fontWeight: 'bold'
-              };
-              return [
-                  { type: 'text', left: '10%', top: '93%', style: { ...stageStyles, text: '创新萌发期', textAlign: 'center', fill: '#0056b3' } },
-                  { type: 'text', left: '30%', top: '8%', style: { ...stageStyles, text: '期望膨胀期', textAlign: 'center', fill: '#d9534f' } },
-                  { type: 'text', left: '50%', top: '93%', style: { ...stageStyles, text: '泡沫破裂谷底期', textAlign: 'center', fill: '#6c757d' } },
-                  { type: 'text', left: '70%', top: '45%', style: { ...stageStyles, text: '稳步爬升复苏期', textAlign: 'center', fill: '#28a745' } },
-                  { type: 'text', left: '90%', top: '65%', style: { ...stageStyles, text: '生产力成熟期', textAlign: 'center', fill: '#ffc107' } }
-              ];
-          };
-
-          const option = {
-              backgroundColor: 'transparent',
-              tooltip: {
-                  trigger: 'item',
-                  formatter: p => p.seriesType === 'scatter' ? `<b>${p.data[4]}</b><br/>商业价值: ${p.data[2]}<br/>预计成熟时间: ${p.data[3]}` : ''
-              },
-              xAxis: {
-                  type: 'value', min: 0, max: 5.5, show: true,
-                  axisLabel: { show: false }, 
-                  axisTick: { show: false }, 
-                  axisLine: { lineStyle: { color: '#ccc' } },
-                  splitLine: { show: true, lineStyle: { color: '#eee', type: 'dashed' } }
-              },
-              yAxis: {
-                  type: 'value', min: 0, max: 100, show: true,
-                  axisLabel: { show: false }, 
-                  axisTick: { show: false }, 
-                  axisLine: { lineStyle: { color: '#ccc' } },
-                  splitLine: { show: true, lineStyle: { color: '#eee', type: 'dashed' } }
-              },
-              grid: {
-                  left: '2%', right: '2%', top: '15%', bottom: '15%'
-              },
-              graphic: getGraphicElements(),
-              series: [
-                  {
-                      type: 'line',
-                      data: [[0.5, 30], [2.0, 95], [3.0, 25], [4.0, 60], [5.0, 50]],
-                      smooth: 0.6,
-                      symbol: 'none',
-                      lineStyle: {
-                          color: '#28a745',
-                          width: 2,
-                          type: 'solid'
-                      }
-                  },
-                  {
-                      type: 'scatter',
-                      data: data,
-                      symbolSize: d => Math.sqrt(d[2] || 1) * 8 + 6,
-                      itemStyle: {
-                          color: '#0056b3',
-                          opacity: 0.9
-                      },
-                      emphasis: {
-                          focus: 'self',
-                          scale: 1.25
-                      },
-                      // --- 核心修改点：动态显示标签 ---
-                      label: {
-                          // 使用函数来决定是否显示标签
-                          show: function (params) {
-                              // params.data 是一个数组，例如：[x, y, commercialValue, maturity, name]
-                              // 我们根据商业价值分（索引为2）来判断
-                              const commercialValue = params.data[2] || 0;
-                              // 只为商业价值评分大于等于7的技术显示标签
-                              return commercialValue >= 7;
-                          },
-                          position: 'top',
-                          formatter: p => p.data[4], // 标签内容为技术名称
-                          fontSize: 11,
-                          color: '#333',
-                          distance: 5, // 标签与数据点的距离
-                          backgroundColor: 'rgba(255, 255, 255, 0.7)', // 为标签添加半透明背景，防止与曲线重叠
-                          padding: [3, 5],
-                          borderRadius: 3
-                      }
-                      // --- 核心修改点结束 ---
-                  }
-              ]
-          };
-          chart.setOption(option, true);
-          // 确保窗口大小调整时，文本能重新计算位置
-          chart.on('resize', () => chart.setOption({ graphic: getGraphicElements() }));
-        },
-
-
-
-        
-        renderKnowledgeGraph: function(data) {
-          const chart = this.getOrCreateChart('knowledgeGraphChart', 'knowledge-graph-container');
-          if (!chart) return;
-          chart.hideLoading();
-          if (!data || !data.nodes || data.nodes.length === 0) {
-              chart.clear();
-              document.getElementById('knowledge-graph-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无技术知识图谱数据</div>';
-              return;
-          }
-          const edges = data.edges || [];
-          let linksWithStyle = [];
-          if (edges.length > 0) {
-              const values = edges.map(edge => edge.value || 1);
-              const maxEdgeValue = Math.max(...values);
-              const logBase = 2;
-              const maxLogValue = Math.log(maxEdgeValue) / Math.log(logBase);
-              linksWithStyle = edges.map(edge => {
-                  const weight = edge.value || 1;
-                  const logValue = Math.log(weight) / Math.log(logBase);
-                  const ratio = maxLogValue > 0 ? logValue / maxLogValue : 0;
-                  return { ...edge, lineStyle: { width: 0.5 + ratio * 10, opacity: 0.4 + ratio * 0.5, curveness: 0.2 } };
+              console.log('首次初始化智能分析页面...');
+              // ✅ 核心：只绑定页面通用事件，标签页特定事件在各自的 initXxxTab 中绑定
+              this.bindEventListeners(); 
+              this.activeTab = 'hype-cycle';
+              this.updateTabStyles(); // 更新标签页的视觉样式
+              await this.loadActiveTabContent(); // 初始加载默认标签页内容
+              this.isInitialized = true;
+          },
+      
+          bindEventListeners: function() {
+              // 通用事件监听器：
+              window.addEventListener('resize', () => {
+                  setTimeout(() => {
+                      Object.values(this.charts).forEach(chart => {
+                          if (chart && !chart.isDisposed()) chart.resize();
+                      });
+                  }, 200);
               });
-          }
+      
+              document.getElementById('insightsPrevPageBtn').addEventListener('click', () => {
+                  if (App.insightsCurrentPage > 1) {
+                      App.insightsCurrentPage--;
+                      this.loadLatestInsightsTable();
+                  }
+              });
+              document.getElementById('insightsNextPageBtn').addEventListener('click', () => {
+                  if (App.insightsCurrentPage < App.insightsTotalPages) {
+                      App.insightsCurrentPage++;
+                      this.loadLatestInsightsTable();
+                  }
+              });
+              // 标签页导航的点击事件委托
+              document.getElementById('analyzation-tabs').addEventListener('click', this.handleTabClick.bind(this));
 
-          // --- 核心修改在这里 ---
-          const option = {
-              tooltip: { 
-                formatter: function(params) { 
-                  if (params.dataType === 'node') { return `<b>${params.name}</b><br/>类型: ${params.data.category}<br/>提及次数: ${params.data.value}`; } 
-                  if (params.dataType === 'edge') { 
-                    const sourceName = params.data.sourceName || params.data.source; 
-                    const targetName = params.data.targetName || params.data.target; 
-                    return `<b>${sourceName}</b> - <b>${targetName}</b><br/>关系强度: ${params.data.value}`; 
-                  } 
-                  return ''; 
-                } 
-              },
-              legend: [{ 
-                data: ['技术领域', '竞争对手', '关键词'], 
-                selectedMode: 'multiple', 
-                bottom: 10, 
-                itemGap: 20, 
-                textStyle: { color: '#333' } 
-              }],
-              series: [{
-                  name: '技术知识图谱', type: 'graph', layout: 'force',
-                  data: data.nodes.map(node => {
-                      const symbolSize = Math.log2(node.value + 1) * 10 + 15;
-                      const isLabelInside = symbolSize > 40;
-                      return { 
-                        ...node, 
-                        symbolSize: symbolSize, 
-                        label: { 
-                          show: true, 
-                          position: isLabelInside ? 'inside' : 'right', 
-                          formatter: '{b}', 
-                          color: '#000000', 
-                          fontWeight: 'normal', 
-                          textBorderColor: isLabelInside ? '#FFFFFF' : 'transparent', 
-                          textBorderWidth: isLabelInside ? 2 : 0, 
-                          fontSize: 12 
-                        } 
-                      };
-                  }),
-                  links: linksWithStyle.map(link => { 
-                    const sourceNode = data.nodes.find(n => n.id === link.source); 
-                    const targetNode = data.nodes.find(n => n.id === link.target); 
-                    return { ...link, sourceName: sourceNode ? sourceNode.name : link.source, targetName: targetNode ? targetNode.name : link.target }; 
-                  }),
-                  
-                  // --- 优化后的 categories 配置 ---
-                  categories: [ 
-                    { 
-                      name: '技术领域',
-                      itemStyle: {
-                        color: '#5470C6', // 专业蓝紫色
-                        shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)'
-                      }
-                    }, 
-                    { 
-                      name: '竞争对手',
-                      itemStyle: {
-                        color: '#EE6666', // 醒目红色
-                        shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)'
-                      }
-                    }, 
-                    { 
-                      name: '关键词',
-                      itemStyle: {
-                        color: '#FFD700', // 明亮金色
-                        shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)'
-                      }
-                    } 
-                  ],
-                  // --- 优化配置结束 ---
+              // ✅ 注意：与特定标签页DOM元素相关的事件绑定代码，已从此处移除，
+              // 它们将被移动到各自的 `initXxxTab` 函数中，确保在元素存在时才绑定。
+          },
+      
+          handleTabClick: function(event) {
+              const link = event.target.closest('a.analyzation-tab');
+              if (!link) return;
+              event.preventDefault();
+              const tabName = link.dataset.tab;
+              if (tabName === this.activeTab) return; // 如果点击的是当前激活的标签，则不处理
+              
+              this.activeTab = tabName;
+              this.updateTabStyles(); // 更新标签页的视觉样式
+              this.loadActiveTabContent(); // 加载新标签页的内容
+          },
+      
+          updateTabStyles: function() {
+              document.querySelectorAll('.analyzation-tab').forEach(tab => {
+                  tab.classList.toggle('border-primary', tab.dataset.tab === this.activeTab);
+                  tab.classList.toggle('text-primary', tab.dataset.tab === this.activeTab);
+                  tab.classList.toggle('border-transparent', tab.dataset.tab !== this.activeTab);
+                  tab.classList.toggle('text-gray-500', tab.dataset.tab !== this.activeTab);
+              });
+              document.querySelectorAll('.analyzation-tab-content').forEach(content => {
+                  content.classList.toggle('hidden', content.id !== `tab-content-${this.activeTab}`);
+              });
+          },
+      
+          getOrCreateChart: function(key, containerId) {
+              if (!this.charts[key] || this.charts[key].isDisposed()) {
+                  const container = document.getElementById(containerId);
+                  if (container) {
+                      this.charts[key] = echarts.init(container);
+                      console.log(`ECharts 实例 "${key}" 已在可见容器上创建。`);
+                  } else {
+                      console.error(`图表容器 "${containerId}" 未找到！`);
+                      return null;
+                  }
+              }
+              return this.charts[key];
+          },
+      
+          // ✅ 核心重构：此函数现在只负责调度每个标签页的特定加载逻辑
+          loadActiveTabContent: async function() {
+              const tab = this.activeTab;
+              console.log(`[Insights] 准备加载标签页: ${tab}`);
+              try {
+                  switch(tab) {
+                      case 'trends':
+                          await this.initTrendsTab();
+                          break;
+                      case 'hype-cycle':
+                          await this.initHypeCycleTab();
+                          break;
+                      case 'knowledge-graph':
+                          await this.initKnowledgeGraphTab();
+                          break;
+                      case 'expert-network':
+                          await this.initExpertNetworkTab();
+                          break;
+                      case 'benchmark-network':
+                          await this.initBenchmarkNetworkTab();
+                          break;
+                      case 'benchmark-timeline': // <-- 标杆时间轴标签页
+                          await this.initBenchmarkTimelineTab();
+                          break;
+                      default:
+                          console.warn(`[Insights] 未知标签页: ${tab}`);
+                          break;
+                  }
+              } catch (error) {
+                  console.error(`[Insights] 加载标签页 "${tab}" 失败:`, error);
+                  handleFailure(error);
+              }
+          },
 
-                  roam: true, draggable: true,
-                  force: { repulsion: 300, edgeLength: [100, 250], gravity: 0.08, },
-                  emphasis: { focus: 'adjacency', lineStyle: { opacity: 1, width: w => w + 2 }, label: { fontWeight: 'bold', fontSize: 14 } }
-              }]
-          };
-          // --- 核心修改结束 ---
+          // --- 每个标签页的独立初始化函数 ---
+          // 这些函数只在首次激活该标签页时执行一次性的DOM/事件绑定，以及每次激活时的数据刷新
 
-          chart.setOption(option, true);
-        },
-        
-      // ✅ 最终美化版：专家网络图谱渲染函数 (v11 - 修复交互健壮性)
-      renderExpertNetwork: function(data) {
-        const chart = this.getOrCreateChart('expertNetworkChart', 'expert-network-container');
-        if (!chart) return;
-        chart.hideLoading();
+          initTrendsTab: async function() {
+              if (!this.tabInitialized.trends) {
+                  // 这里可以放置 trends 标签页特有的、只执行一次的事件绑定等
+                  this.tabInitialized.trends = true;
+              }
+              // 每次切换到 trends 标签页都刷新表格和图表数据
+              this.loadLatestInsightsTable(); 
+              // const chartTrend = this.getOrCreateChart('trendChart', 'trend-chart-container');
+              // const chartKeyword = this.getOrCreateChart('keywordChart', 'keyword-cloud-container');
+              // if (App.cachedData.trendsAndKeywords) {
+              //     this.renderTrendsChart(App.cachedData.trendsAndKeywords.trendData);
+              //     this.renderKeywordsCloud(App.cachedData.trendsAndKeywords.keywordData);
+              // } else {
+              //     chartTrend.showLoading({ text: '加载中...' });
+              //     chartKeyword.showLoading({ text: '加载中...' });
+              //     const data = await App.callApi('InsightsService', 'getInsightsPageData');
+              //     App.cachedData.trendsAndKeywords = data;
+              //     this.renderTrendsChart(data.trendData);
+              //     this.renderKeywordsCloud(data.keywordData);
+              // }
+          },
 
-        if (!data || !data.nodes || data.nodes.length === 0) {
-            chart.clear();
-            document.getElementById('expert-network-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无专家网络数据。</div>';
-            return;
-        }
+          renderTrendsChart: function(data) {
+              const chart = this.getOrCreateChart('trendChart', 'trend-chart-container');
+              if (!chart) return;
+              chart.hideLoading();
+              if (!data || !data.xAxis || data.xAxis.length === 0) {
+                  chart.clear();
+                  document.getElementById('trend-chart-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无趋势分析数据</div>';
+                  return;
+              }
+              const option = {
+                  tooltip: { trigger: 'axis', axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } } },
+                  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                  xAxis: [{ type: 'category', boundaryGap: false, data: data.xAxis }],
+                  yAxis: [{ type: 'value', min: 0, splitLine: { lineStyle: { type: 'dashed' } } }],
+                  series: [{ name: '洞察数量', type: 'line', smooth: true, data: data.seriesData, symbol: 'circle', symbolSize: 8, lineStyle: { width: 3, color: '#007bff' }, itemStyle: { color: '#007bff' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0, 123, 255, 0.3)' }, { offset: 1, color: 'rgba(255, 255, 255, 0)' }]) }, emphasis: { focus: 'series' } }]
+              };
+              chart.setOption(option, true);
+          },
+      
+          renderKeywordsCloud: function(data) {
+              const chart = this.getOrCreateChart('keywordChart', 'keyword-cloud-container');
+              if (!chart) return;
+              chart.hideLoading();
+              if (!data || data.length === 0) {
+                  chart.clear();
+                  document.getElementById('keyword-cloud-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无热点关键词数据</div>';
+                  return;
+              }
+              const option = {
+                  tooltip: { show: true, formatter: params => `${params.name} : ${params.value}` },
+                  series: [{ type: 'wordCloud', left: 'center', top: 'center', width: '100%', height: '100%', shape: 'pentagon', gridSize: 2, sizeRange: [14, 60], rotationRange: [-45, 45], rotationStep: 45, drawOutOfBound: false, textStyle: { color: () => `rgb(${[Math.round(Math.random() * 160), Math.round(Math.random() * 160), Math.round(Math.random() * 160)].join(',')})` }, emphasis: { focus: 'self', textStyle: { shadowBlur: 10, shadowColor: '#333' } }, data: data }]
+              };
+              chart.setOption(option, true);
+          },
 
-        // --- 动态颜色和类别生成 (保持不变) ---
-        const colorPalette = ['#FFC300', '#FF5733', '#C70039', '#900C3F', '#581845', '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
-        let colorIndex = 0;
-        this.expertNetworkCategories = [{ name: '机构', itemStyle: { color: '#6c757d' } }];
-        const techAreaCategoryMap = new Map([['机构', 0]]);
-        data.nodes.forEach(node => {
-            if (node.category === '专家' && node.main_tech_areas && node.main_tech_areas.length > 0) {
-                const primaryArea = node.main_tech_areas[0];
-                if (!techAreaCategoryMap.has(primaryArea)) {
-                    const categoryIndex = this.expertNetworkCategories.length;
-                    techAreaCategoryMap.set(primaryArea, categoryIndex);
-                    this.expertNetworkCategories.push({ name: primaryArea, itemStyle: { color: colorPalette[colorIndex++ % colorPalette.length] } });
+          initHypeCycleTab: async function() {
+            if (this.tabInitialized.hypeCycle) {
+                // 每次切换到该标签页，即使已初始化，也刷新图表
+                const hypeChart = this.getOrCreateChart('hypeCycleChart', 'hype-cycle-chart-container');
+                const keywordChart = this.getOrCreateChart('keywordChart', 'keyword-cloud-container');
+                if (App.cachedData.insightsPageData) { // 假设 insightsPageData 包含了所有图表数据
+                    this.renderHypeCycleChart(App.cachedData.insightsPageData.hypeCycleData);
+                    this.renderKeywordsCloud(App.cachedData.insightsPageData.keywordData);
+                } else {
+                    hypeChart.showLoading({ text: '加载中...' });
+                    keywordChart.showLoading({ text: '加载中...' });
+                    const data = await App.callApi('InsightsService', 'getInsightsPageData');
+                    App.cachedData.insightsPageData = data; // 缓存整个 insightsPageData
+                    this.renderHypeCycleChart(data.hypeCycleData);
+                    this.renderKeywordsCloud(data.keywordData);
                 }
+                return;
             }
-        });
 
-        // --- 节点和边的处理 (保持不变) ---
-        const MAX_NODE_VALUE = Math.max(1, ...data.nodes.map(n => n.value || 0));
-        const nodes = data.nodes.map(node => {
-            const value = node.value || 0;
-            const primaryArea = node.main_tech_areas && node.main_tech_areas.length > 0 ? node.main_tech_areas[0] : '机构';
-            return {
-                ...node,
-                symbolSize: 12 + (value / MAX_NODE_VALUE) * 38,
-                category: techAreaCategoryMap.get(primaryArea) || 0,
-            };
-        });
-        const maxEdgeValue = Math.max(1, ...data.edges.map(e => e.value || 1));
-        const links = data.edges.map(edge => ({
-            ...edge,
-            lineStyle: { width: 0.5 + Math.sqrt(edge.value || 1) }
-        }));
-        
-        // ✅ 修复：将 this.expertNetworkCategories 赋值给一个局部变量，以解决作用域问题
-        const categoriesForOption = this.expertNetworkCategories;
+            // 首次初始化
+            const hypeChart = this.getOrCreateChart('hypeCycleChart', 'hype-cycle-chart-container');
+            const keywordChart = this.getOrCreateChart('keywordChart', 'keyword-cloud-container'); // 获取词云图容器
 
-        const option = {
-            backgroundColor: '#FFFFFF',
-            tooltip: {
-                formatter: (params) => { // 使用箭头函数保持 this 指向（虽然这里没用this，但好习惯）
-                    if (params.dataType === 'edge') return `合作强度: ${params.value}`;
-                    if (params.dataType === 'node') {
-                        const nodeData = params.data;
-                        // ✅ 使用从外部传入的 categoriesForOption，不再报错
-                        const categoryName = categoriesForOption[nodeData.category].name;
-                        let details = `<div style="font-weight:bold; margin-bottom: 5px;">${nodeData.name}</div>`;
-                        details += `<div>类型: ${categoryName}</div>`;
-                        if (categoryName !== '机构') {
-                            details += `<div>论文数: ${nodeData.paper_count || 0}</div>`;
-                            details += `<div>专利数: ${nodeData.patent_count || 0}</div>`;
-                        } else {
-                            details += `<div>关联专家数: ${nodeData.value || 0}</div>`;
+            // 统一加载 insightsPageData，因为它包含了 hypeCycleData 和 keywordData
+            hypeChart.showLoading({ text: '加载中...' });
+            keywordChart.showLoading({ text: '加载中...' });
+            const data = await App.callApi('InsightsService', 'getInsightsPageData');
+            App.cachedData.insightsPageData = data; // 缓存整个 insightsPageData
+
+            this.renderHypeCycleChart(data.hypeCycleData);
+            this.renderKeywordsCloud(data.keywordData); // 渲染词云图
+
+            this.tabInitialized.hypeCycle = true; // 标记为已初始化
+          },
+
+          renderHypeCycleChart: function(data) {
+            const chart = this.getOrCreateChart('hypeCycleChart', 'hype-cycle-chart-container');
+            if (!chart) return;
+            chart.hideLoading();
+
+            if (!data || data.length === 0) {
+                chart.clear();
+                document.getElementById('hype-cycle-chart-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无有效的技术成熟度数据。</div>';
+                return;
+            }
+
+            // 定义阶段的中文名称和颜色
+            const stages = [
+                { name: '创新萌发期', xStart: 0, xEnd: 1.5, color: '#4CAF50' },   // 绿色
+                { name: '期望膨胀期', xStart: 1.5, xEnd: 2.5, color: '#2196F3' },   // 蓝色
+                { name: '泡沫破裂谷底期', xStart: 2.5, xEnd: 3.5, color: '#FFC107' }, // 黄色
+                { name: '稳步爬升复苏期', xStart: 3.5, xEnd: 4.5, color: '#FF9800' }, // 橙色
+                { name: '生产力成熟期', xStart: 4.5, xEnd: 5.5, color: '#9C27B0' }    // 紫色
+            ];
+
+            const option = {
+                backgroundColor: 'transparent', // 保持背景透明
+                tooltip: {
+                    trigger: 'item',
+                    formatter: p => {
+                        if (p.seriesType === 'scatter') {
+                            // p.data 结构: [x, y, commercialValue, maturity, name]
+                            return `<b>${p.data[4]}</b><br/>商业价值: ${p.data[2] || 'N/A'}<br/>预计成熟时间: ${p.data[3] || 'N/A'}`;
+                        } else if (p.seriesType === 'line') {
+                            return '技术成熟度曲线'; // 曲线本身不需要详细tooltip
                         }
-                        return details;
+                        return '';
                     }
-                    return '';
+                },
+                xAxis: {
+                    type: 'value',
+                    min: 0,
+                    max: 5.5,
+                    show: true, // 显式显示X轴
+                    axisLine: {
+                        show: true,
+                        lineStyle: { color: '#ccc' }
+                    },
+                    axisTick: { show: false },
+                    axisLabel: { show: false }, // 隐藏X轴刻度标签，因为我们用graphic绘制阶段标签
+                    splitLine: {
+                        show: true,
+                        lineStyle: { color: '#eee', type: 'dashed' }
+                    },
+                    // 标记阶段分隔线
+                    markLine: {
+                        silent: true,
+                        data: [
+                            { xAxis: 1.5, lineStyle: { type: 'solid', color: '#ddd' } },
+                            { xAxis: 2.5, lineStyle: { type: 'solid', color: '#ddd' } },
+                            { xAxis: 3.5, lineStyle: { type: 'solid', color: '#ddd' } },
+                            { xAxis: 4.5, lineStyle: { type: 'solid', color: '#ddd' } }
+                        ],
+                        symbol: 'none' // 不显示标记符号
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    min: 0,
+                    max: 100,
+                    show: true, // 显式显示Y轴
+                    axisLine: {
+                        show: true,
+                        lineStyle: { color: '#ccc' }
+                    },
+                    axisTick: { show: true }, // 显示Y轴刻度
+                    axisLabel: {
+                        show: true,
+                        formatter: '{value}%', // 显示百分比
+                        color: '#666'
+                    },
+                    splitLine: {
+                        show: true,
+                        lineStyle: { color: '#eee', type: 'dashed' }
+                    }
+                },
+                grid: {
+                    left: '3%', // 增加左边距，为Y轴标签留空间
+                    right: '3%', // 增加右边距
+                    top: '10%',  // 顶部留空间
+                    bottom: '10%' // 底部留空间给阶段标签
+                },
+                // ✅ 核心：使用 graphic 组件绘制底部阶段标签和背景条
+                graphic: [
+                    // 绘制每个阶段的背景条和文字
+                    ...stages.map(stage => ({
+                        type: 'rect',
+                        left: `${(stage.xStart / 5.5) * 100}%`, // 根据X轴范围计算位置
+                        bottom: '0%', // 放在底部
+                        shape: {
+                            width: `${((stage.xEnd - stage.xStart) / 5.5) * 100}%`, // 根据X轴范围计算宽度
+                            height: 30 // 背景条高度
+                        },
+                        style: {
+                            fill: stage.color + '33', // 半透明背景
+                            stroke: stage.color,     // 边框颜色
+                            lineWidth: 1
+                        },
+                        z: -1 // 放在图表层之下
+                    })),
+                    ...stages.map(stage => ({
+                        type: 'text',
+                        left: `${((stage.xStart + stage.xEnd) / 2 / 5.5) * 100}%`, // 文本居中
+                        bottom: '1%', // 文本位置在背景条上方
+                        style: {
+                            text: stage.name,
+                            fill: stage.color,
+                            fontSize: 12,
+                            fontWeight: 'bold',
+                            textAlign: 'center',
+                            textVerticalAlign: 'bottom'
+                        },
+                        z: 1 // 确保文字在图表层之上
+                    }))
+                ],
+                series: [
+                    {
+                        name: '技术成熟度曲线',
+                        type: 'line',
+                        data: [[0.5, 30], [2.0, 95], [3.0, 25], [4.0, 60], [5.0, 50]], // 曲线数据
+                        smooth: 0.6,
+                        symbol: 'circle', // 显示圆点
+                        symbolSize: 8,    // 圆点大小
+                        lineStyle: {
+                            color: '#007bff', // 曲线颜色
+                            width: 3,
+                            type: 'solid'
+                        },
+                        itemStyle: {
+                            color: '#007bff' // 圆点颜色
+                        },
+                        areaStyle: { // 曲线下方的填充区域
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                                offset: 0, color: 'rgba(0, 123, 255, 0.2)'
+                            }, {
+                                offset: 1, color: 'rgba(255, 255, 255, 0)'
+                            }])
+                        }
+                    },
+                    {
+                        name: '技术点',
+                        type: 'scatter',
+                        data: data, // 您的技术数据
+                        symbol: 'circle',
+                        symbolSize: d => Math.sqrt(d[2] || 1) * 8 + 6, // 气泡大小根据商业价值
+                        itemStyle: {
+                            color: (params) => { // 根据阶段动态改变颜色
+                                const xValue = params.data[0];
+                                const stage = stages.find(s => xValue >= s.xStart && xValue < s.xEnd);
+                                return stage ? stage.color : '#666'; // 默认灰色
+                            },
+                            opacity: 0.9,
+                            shadowBlur: 5,
+                            shadowOffsetX: 2,
+                            shadowOffsetY: 2,
+                            shadowColor: 'rgba(0,0,0,0.3)'
+                        },
+                        emphasis: {
+                            focus: 'self',
+                            scale: 1.25 // 悬停时放大
+                        },
+                        label: {
+                            show: true, // 总是显示标签
+                            position: 'top',
+                            formatter: p => p.data[4], // 技术名称
+                            fontSize: 10, // 减小字体大小
+                            color: '#333',
+                            distance: 8, // 标签与数据点的距离
+                            backgroundColor: 'rgba(255, 255, 255, 0.8)', // 半透明背景
+                            padding: [2, 4],
+                            borderRadius: 2,
+                            borderWidth: 1,
+                            borderColor: '#ccc'
+                        }
+                    }
+                ]
+            };
+            chart.setOption(option, true);
+            // 每次窗口大小调整时，强制重新渲染 graphic 元素以确保位置正确
+            chart.on('resize', () => chart.setOption({ graphic: option.graphic }));
+          },
+
+          initKnowledgeGraphTab: async function() {
+              if (this.tabInitialized.knowledgeGraph) return; // 已初始化则跳过
+              const chart = this.getOrCreateChart('knowledgeGraphChart', 'knowledge-graph-container');
+              if (App.cachedData.knowledgeGraphData) {
+                  this.renderKnowledgeGraph(App.cachedData.knowledgeGraphData);
+              } else {
+                  chart.showLoading({ text: '加载中...' });
+                  const data = await App.callApi('InsightsService', 'getKnowledgeGraphData');
+                  App.cachedData.knowledgeGraphData = data;
+                  this.renderKnowledgeGraph(data);
+              }
+              this.tabInitialized.knowledgeGraph = true;
+          },
+
+          renderKnowledgeGraph: function(data) {
+            const chart = this.getOrCreateChart('knowledgeGraphChart', 'knowledge-graph-container');
+            if (!chart) return;
+            chart.hideLoading();
+            if (!data || !data.nodes || data.nodes.length === 0) {
+                chart.clear();
+                document.getElementById('knowledge-graph-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无技术知识图谱数据</div>';
+                return;
+            }
+            const edges = data.edges || [];
+            let linksWithStyle = [];
+            if (edges.length > 0) {
+                const values = edges.map(edge => edge.value || 1);
+                const maxEdgeValue = Math.max(...values);
+                const logBase = 2;
+                const maxLogValue = Math.log(maxEdgeValue) / Math.log(logBase);
+                linksWithStyle = edges.map(edge => {
+                    const weight = edge.value || 1;
+                    const logValue = Math.log(weight) / Math.log(logBase);
+                    const ratio = maxLogValue > 0 ? logValue / maxLogValue : 0;
+                    return { ...edge, lineStyle: { width: 0.5 + ratio * 10, opacity: 0.4 + ratio * 0.5, curveness: 0.2 } };
+                });
+            }
+
+            const option = {
+                tooltip: { 
+                  formatter: function(params) { 
+                    if (params.dataType === 'node') { return `<b>${params.name}</b><br/>类型: ${params.data.category}<br/>提及次数: ${params.data.value}`; } 
+                    if (params.dataType === 'edge') { 
+                      const sourceName = params.data.sourceName || params.data.source; 
+                      const targetName = params.data.targetName || params.data.target; 
+                      return `<b>${sourceName}</b> - <b>${targetName}</b><br/>关系强度: ${params.data.value}`; 
+                    } 
+                    return ''; 
+                  } 
+                },
+                legend: [{ 
+                  data: ['技术领域', '竞争对手', '关键词'], 
+                  selectedMode: 'multiple', 
+                  bottom: 10, 
+                  itemGap: 20, 
+                  textStyle: { color: '#333' } 
+                }],
+                series: [{
+                    name: '技术知识图谱', type: 'graph', layout: 'force',
+                    data: data.nodes.map(node => {
+                        const symbolSize = Math.log2(node.value + 1) * 10 + 15;
+                        const isLabelInside = symbolSize > 40;
+                        return { 
+                          ...node, 
+                          symbolSize: symbolSize, 
+                          label: { 
+                            show: true, 
+                            position: isLabelInside ? 'inside' : 'right', 
+                            formatter: '{b}', 
+                            color: '#000000', 
+                            fontWeight: 'normal', 
+                            textBorderColor: isLabelInside ? '#FFFFFF' : 'transparent', 
+                            textBorderWidth: isLabelInside ? 2 : 0, 
+                            fontSize: 12 
+                          } 
+                        };
+                    }),
+                    links: linksWithStyle.map(link => { 
+                      const sourceNode = data.nodes.find(n => n.id === link.source); 
+                      const targetNode = data.nodes.find(n => n.id === link.target); 
+                      return { ...link, sourceName: sourceNode ? sourceNode.name : link.source, targetName: targetNode ? targetNode.name : link.target }; 
+                    }),
+                    
+                    categories: [ 
+                      { name: '技术领域', itemStyle: { color: '#5470C6', shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)' } }, 
+                      { name: '竞争对手', itemStyle: { color: '#EE6666', shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)' } }, 
+                      { name: '关键词', itemStyle: { color: '#FFD700', shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)' } } 
+                    ],
+
+                    roam: true, draggable: true,
+                    force: { repulsion: 300, edgeLength: [100, 250], gravity: 0.08, },
+                    emphasis: { focus: 'adjacency', lineStyle: { opacity: 1, width: w => w + 2 }, label: { fontWeight: 'bold', fontSize: 14 } }
+                }]
+            };
+            chart.setOption(option, true);
+          },
+          
+          initExpertNetworkTab: async function() {
+              if (this.tabInitialized.expertNetwork) return; // 已初始化则跳过
+              const chart = this.getOrCreateChart('expertNetworkChart', 'expert-network-container');
+              chart.on('click', 'series.graph', (params) => {
+                  if (params.dataType === 'node') this.updateExpertNodeDetails(params.data);
+              });
+              if (App.cachedData.expertNetworkData) {
+                  this.renderExpertNetwork(App.cachedData.expertNetworkData);
+              } else {
+                  chart.showLoading({ text: '加载中...' });
+                  const data = await App.callApi('InsightsService', 'getExpertNetworkData');
+                  App.cachedData.expertNetworkData = data;
+                  this.renderExpertNetwork(data);
+              }
+              this.tabInitialized.expertNetwork = true;
+          },
+
+          renderExpertNetwork: function(data) {
+            const chart = this.getOrCreateChart('expertNetworkChart', 'expert-network-container');
+            if (!chart) return;
+            chart.hideLoading();
+
+            if (!data || !data.nodes || data.nodes.length === 0) {
+                chart.clear();
+                document.getElementById('expert-network-container').innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">暂无专家网络数据。</div>';
+                return;
+            }
+
+            const colorPalette = ['#FFC300', '#FF5733', '#C70039', '#900C3F', '#581845', '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
+            let colorIndex = 0;
+            this.expertNetworkCategories = [{ name: '机构', itemStyle: { color: '#6c757d' } }];
+            const techAreaCategoryMap = new Map([['机构', 0]]);
+            data.nodes.forEach(node => {
+                if (node.category === '专家' && node.main_tech_areas && node.main_tech_areas.length > 0) {
+                    const primaryArea = node.main_tech_areas[0];
+                    if (!techAreaCategoryMap.has(primaryArea)) {
+                        const categoryIndex = this.expertNetworkCategories.length;
+                        techAreaCategoryMap.set(primaryArea, categoryIndex);
+                        this.expertNetworkCategories.push({ name: primaryArea, itemStyle: { color: colorPalette[colorIndex++ % colorPalette.length] } });
+                    }
                 }
-            },
-            legend: [{ data: categoriesForOption.map(c => c.name), bottom: 10 }],
-            series: [{
-                name: '专家网络图谱',
-                type: 'graph',
-                layout: 'force',
-                data: nodes,
-                links: links,
-                categories: categoriesForOption, // ✅ 使用局部变量
-                roam: true,
-                label: { show: true, position: 'right', color: '#000', fontWeight: 'normal', hideOverlap: true },
-                force: { repulsion: 120, edgeLength: 120, gravity: 0.03 },
-                lineStyle: { color: 'source', curveness: 0.2, opacity: 0.5 },
-                emphasis: { focus: 'adjacency', label: { fontSize: 14, fontWeight: 'bold' }, lineStyle: { width: 6, opacity: 1 } }
-            }]
-        };
-        chart.setOption(option, true);
-      },
+            });
 
-      updateExpertNodeDetails: async function(nodeData) {
-        const detailsContainer = document.getElementById('expert-node-details');
-        if (!detailsContainer) {
-            console.error("ERROR: 节点详情容器 'expert-node-details' 未找到。");
-            return;
-        }
+            const MAX_NODE_VALUE = Math.max(1, ...data.nodes.map(n => n.value || 0));
+            const nodes = data.nodes.map(node => {
+                const value = node.value || 0;
+                const primaryArea = node.main_tech_areas && node.main_tech_areas.length > 0 ? node.main_tech_areas[0] : '机构';
+                return {
+                    ...node,
+                    symbolSize: 12 + (value / MAX_NODE_VALUE) * 38,
+                    category: techAreaCategoryMap.get(primaryArea) || 0,
+                };
+            });
+            const maxEdgeValue = Math.max(1, ...data.edges.map(e => e.value || 1));
+            const links = data.edges.map(edge => ({
+                ...edge,
+                lineStyle: { width: 0.5 + Math.sqrt(edge.value || 1) }
+            }));
+            
+            const categoriesForOption = this.expertNetworkCategories;
 
-        // ========== 添加调试日志 ==========
-        console.log("DEBUG: updateExpertNodeDetails 被调用。");
-        console.log("DEBUG: 接收到的 nodeData:", nodeData);
-        if (nodeData) {
-            console.log("DEBUG: nodeData.id:", nodeData.id);
-            console.log("DEBUG: typeof nodeData.id:", typeof nodeData.id);
-        }
-        // ==================================
+            const option = {
+                backgroundColor: '#FFFFFF',
+                tooltip: {
+                    formatter: (params) => {
+                        if (params.dataType === 'edge') return `合作强度: ${params.value}`;
+                        if (params.dataType === 'node') {
+                            const nodeData = params.data;
+                            const categoryName = categoriesForOption[nodeData.category].name;
+                            let details = `<div style="font-weight:bold; margin-bottom: 5px;">${nodeData.name}</div>`;
+                            details += `<div>类型: ${categoryName}</div>`;
+                            if (categoryName !== '机构') {
+                                details += `<div>论文数: ${nodeData.paper_count || 0}</div>`;
+                                details += `<div>专利数: ${nodeData.patent_count || 0}</div>`;
+                            } else {
+                                details += `<div>关联专家数: ${nodeData.value || 0}</div>`;
+                            }
+                            return details;
+                        }
+                        return '';
+                    }
+                },
+                legend: [{ data: categoriesForOption.map(c => c.name), bottom: 10 }],
+                series: [{
+                    name: '专家网络图谱',
+                    type: 'graph',
+                    layout: 'force',
+                    data: nodes,
+                    links: links,
+                    categories: categoriesForOption,
+                    roam: true,
+                    label: { show: true, position: 'right', color: '#000', fontWeight: 'normal', hideOverlap: true },
+                    force: { repulsion: 120, edgeLength: 120, gravity: 0.03 },
+                    lineStyle: { color: 'source', curveness: 0.2, opacity: 0.5 },
+                    emphasis: { focus: 'adjacency', label: { fontSize: 14, fontWeight: 'bold' }, lineStyle: { width: 6, opacity: 1 } }
+                }]
+            };
+            chart.setOption(option, true);
+          },
 
-        if (!nodeData || nodeData.id === undefined || nodeData.id === null || nodeData.id === '') { // 更加严格的检查
-            console.log("DEBUG: nodeData 无效或 nodeData.id 缺失，显示默认提示。");
-            detailsContainer.innerHTML = '<p class="text-gray-500">点击图谱中的节点查看详情。</p>';
-            return;
-        }
-        
-        // 确保 category 是一个数字索引，并且在 expertNetworkCategories 数组范围内
-        const categoryIndex = typeof nodeData.category === 'number' ? nodeData.category : 0; // 默认为0，即“机构”
-        const categoryName = (this.expertNetworkCategories && this.expertNetworkCategories[categoryIndex])
-            ? this.expertNetworkCategories[categoryIndex].name
-            : '未知类别';
+          updateExpertNodeDetails: async function(nodeData) {
+            const detailsContainer = document.getElementById('expert-node-details');
+            if (!detailsContainer) {
+                console.error("ERROR: 节点详情容器 'expert-node-details' 未找到。");
+                return;
+            }
 
-        console.log("DEBUG: 解析出的 categoryName:", categoryName);
-        console.log("DEBUG: nodeData.paper_count:", nodeData.paper_count);
-        console.log("DEBUG: nodeData.patent_count:", nodeData.patent_count);
-        console.log("DEBUG: nodeData.main_tech_areas:", nodeData.main_tech_areas);
+            console.log("DEBUG: updateExpertNodeDetails 被调用。");
+            console.log("DEBUG: 接收到的 nodeData:", nodeData);
+            if (nodeData) {
+                console.log("DEBUG: nodeData.id:", nodeData.id);
+                console.log("DEBUG: typeof nodeData.id:", typeof nodeData.id);
+            }
 
-        let detailsHtml = '';
-        // 修正：使用 nodeData.paper_count 或 nodeData.patent_count 是否存在来判断是否为专家节点
-        // 这样即使 categoryName 被 ECharts 动态修改，也能正确识别
-        if (nodeData.paper_count !== undefined || nodeData.patent_count !== undefined) { // 假设专家节点有这两个属性
-            detailsHtml = `
-                    <div class="font-bold text-lg mb-3 pb-2 border-b">${nodeData.name || '未知专家'}</div>
+            if (!nodeData || nodeData.id === undefined || nodeData.id === null || nodeData.id === '') {
+                console.log("DEBUG: nodeData 无效或 nodeData.id 缺失，显示默认提示。");
+                detailsContainer.innerHTML = '<p class="text-gray-500">点击图谱中的节点查看详情。</p>';
+                return;
+            }
+            
+            const categoryIndex = typeof nodeData.category === 'number' ? nodeData.category : 0;
+            const categoryName = (this.expertNetworkCategories && this.expertNetworkCategories[categoryIndex])
+                ? this.expertNetworkCategories[categoryIndex].name
+                : '未知类别';
+
+            console.log("DEBUG: 解析出的 categoryName:", categoryName);
+            console.log("DEBUG: nodeData.paper_count:", nodeData.paper_count);
+            console.log("DEBUG: nodeData.patent_count:", nodeData.patent_count);
+            console.log("DEBUG: nodeData.main_tech_areas:", nodeData.main_tech_areas);
+
+            let detailsHtml = '';
+            if (nodeData.paper_count !== undefined || nodeData.patent_count !== undefined) {
+                detailsHtml = `
+                        <div class="font-bold text-lg mb-3 pb-2 border-b">${nodeData.name || '未知专家'}</div>
+                        <div class="space-y-2 text-sm">
+                            <p><strong>类型:</strong> <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">${categoryName}</span></p>
+                            <p><strong>论文数:</strong> <span class="font-semibold text-primary text-base">${nodeData.paper_count || 0}</span></p>
+                            <p><strong>专利数:</strong> <span class="font-semibold text-primary text-base">${nodeData.patent_count || 0}</span></p>
+                            <p><strong>所属机构:</strong> <span class="font-semibold text-primary text-base">${nodeData.affiliation_name || '未知机构'}</span></p>
+                            <p><strong>主要技术领域:</strong> <span class="font-semibold text-primary text-base">${(nodeData.main_tech_areas && nodeData.main_tech_areas.length > 0) ? nodeData.main_tech_areas.join(', ') : '暂无'}</span></p>
+                        </div>
+                        <h4 class="font-bold text-md mt-4 mb-2">专家简介</h4>
+                        <div id="ai-expert-summary-content" class="text-sm text-gray-700">AI生成中，请稍候...</div>
+                    `;
+                    detailsContainer.innerHTML = detailsHtml;
+
+                    try {
+                        const aiSummary = await App.callApi(
+                            'InsightsService',
+                            'generateExpertSummary',
+                            [
+                                nodeData.name,
+                                categoryName,
+                                nodeData.affiliation_name || '未知机构',
+                                nodeData.paper_count || 0,
+                                nodeData.patent_count || 0,
+                                nodeData.main_tech_areas || []
+                            ]
+                        );
+
+                        if (aiSummary && !String(aiSummary).startsWith("AI简介生成失败")) {
+                            document.getElementById('ai-expert-summary-content').innerText = aiSummary;
+                        } else {
+                            document.getElementById('ai-expert-summary-content').innerText = aiSummary || "AI简介生成失败：无返回内容。";
+                        }
+                    } catch (e) {
+                        console.error("AI专家简介生成失败:", e);
+                        document.getElementById('ai-expert-summary-content').innerText = `AI简介生成失败: ${e.message}`;
+                    }
+            } else if (categoryName === '机构') {
+                detailsHtml = `
+                    <div class="font-bold text-lg mb-3 pb-2 border-b">${nodeData.name || '未知机构'}</div>
                     <div class="space-y-2 text-sm">
-                        <p><strong>类型:</strong> <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">${categoryName}</span></p>
-                        <p><strong>论文数:</strong> <span class="font-semibold text-primary text-base">${nodeData.paper_count || 0}</span></p>
-                        <p><strong>专利数:</strong> <span class="font-semibold text-primary text-base">${nodeData.patent_count || 0}</span></p>
-                        <!-- ✅ 新增：显示所属机构 -->
-                        <p><strong>所属机构:</strong> <span class="font-semibold text-primary text-base">${nodeData.affiliation_name || '未知机构'}</span></p>
-                        <p><strong>主要技术领域:</strong> <span class="font-semibold text-primary text-base">${(nodeData.main_tech_areas && nodeData.main_tech_areas.length > 0) ? nodeData.main_tech_areas.join(', ') : '暂无'}</span></p>
+                        <p><strong>类型:</strong> <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800">机构</span></p>
+                        <p><strong>关联专家数:</strong> <span class="font-semibold text-primary text-base">${nodeData.value || 0}</span></p>
                     </div>
-                    <h4 class="font-bold text-md mt-4 mb-2">专家简介</h4>
-                    <div id="ai-expert-summary-content" class="text-sm text-gray-700">AI生成中，请稍候...</div>
                 `;
-                detailsContainer.innerHTML = detailsHtml; // 先渲染基础信息和加载提示
+            } else {
+                detailsHtml = `
+                    <div class="font-bold text-lg mb-3 pb-2 border-b">${nodeData.name || '未知名称'}</div>
+                    <div class="space-y-2 text-sm">
+                        <p><strong>类型:</strong> <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${categoryName}</span></p>
+                    </div>
+                `;
+            }
+          },
 
-                // 调用后端AI生成简介
-                try {
-                    const aiSummary = await App.callApi(
-                        'InsightsService',
-                        'generateExpertSummary',
-                        [
-                            nodeData.name,
-                            categoryName, // 传入解析后的类别名称作为主要技术领域
-                            nodeData.affiliation_name || '未知机构', // ✅ 新增：传递机构名称
-                            nodeData.paper_count || 0,
-                            nodeData.patent_count || 0,
-                            nodeData.main_tech_areas || []
-                        ]
-                    );
+          populateCompanyFilter: async function() {
+              const list = document.getElementById('company-filter-list');
+              if (!list) return;
+              list.innerHTML = '<li class="px-4 py-2 text-sm text-gray-500">正在加载企业列表...</li>';
+              try {
+                  const companies = await App.callApi('InsightsService', 'getBenchmarkCompanyList');
+                  if (companies && companies.length > 0) {
+                      list.innerHTML = companies.map(company => `
+                          <li class="px-4 py-2 hover:bg-gray-100">
+                              <label class="flex items-center space-x-3 cursor-pointer">
+                                  <input type="checkbox" value="${company}" class="form-checkbox h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
+                                  <span class="text-sm text-gray-700">${company}</span>
+                              </label>
+                          </li>
+                      `).join('');
+                  } else {
+                      list.innerHTML = '<li class="px-4 py-2 text-sm text-gray-500">无可用企业</li>';
+                  }
+                  this.updateFilterToggleText();
+              } catch (error) {
+                  console.error("加载企业筛选列表失败:", error);
+                  list.innerHTML = '<li class="px-4 py-2 text-sm text-red-500">加载失败，请检查后端服务。</li>';
+              }
+          },
 
-                    // ✅ 简化判断逻辑：直接检查返回内容是否以“AI简介生成失败”开头
-                    if (aiSummary && !String(aiSummary).startsWith("AI简介生成失败")) { // 确保aiSummary是字符串
-                        document.getElementById('ai-expert-summary-content').innerText = aiSummary; // 填充AI简介
-                    } else {
-                        // 如果aiSummary为空，或者以“AI简介生成失败”开头，则显示错误信息
-                        document.getElementById('ai-expert-summary-content').innerText = aiSummary || "AI简介生成失败：无返回内容。";
-                    }
-                } catch (e) {
-                    console.error("AI专家简介生成失败:", e);
-                    document.getElementById('ai-expert-summary-content').innerText = `AI简介生成失败: ${e.message}`; // 显示错误信息
+          updateFilterToggleText: function() {
+              const textSpan = document.getElementById('company-filter-text');
+              const list = document.getElementById('company-filter-list');
+              if (!textSpan || !list) return;
+
+              const checkedCheckboxes = list.querySelectorAll('input[type="checkbox"]:checked');
+              const checkedCount = checkedCheckboxes.length;
+
+              if (checkedCount === 0) {
+                  textSpan.textContent = '选择要分析的标杆企业...';
+                  textSpan.classList.add('text-gray-500');
+                  textSpan.classList.remove('text-gray-900');
+              } else {
+                  if (checkedCount <= 2) {
+                      textSpan.textContent = Array.from(checkedCheckboxes).map(cb => cb.value).join(', ');
+                  } else {
+                      textSpan.textContent = `${checkedCount} 个企业已选择`;
+                  }
+                  textSpan.classList.remove('text-gray-500');
+                  textSpan.classList.add('text-gray-900');
+              }
+          },
+
+          renderBenchmarkGraph: async function(selectedCompanies = null) {
+            const chartContainer = document.getElementById('benchmark-graph-chart');
+            if (!chartContainer) {
+                console.error("图谱容器 'benchmark-graph-chart' 未找到。");
+                return;
+            }
+
+            const chart = this.getOrCreateChart('benchmarkGraph', 'benchmark-graph-chart');
+            if (!chart) {
+                chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-red-500">图表初始化失败，容器不可用。</div>';
+                return;
+            }
+
+            chart.showLoading({
+                text: '正在构建关系图谱...',
+                color: '#0000ff',
+                textColor: '#0000ff',
+                maskColor: 'rgba(255, 255, 255, 0.8)',
+                zlevel: 0
+            });
+
+            try {
+                const graphData = await App.callApi('InsightsService', 'getBenchmarkGraphData', [selectedCompanies]);
+
+                if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
+                    chart.clear();
+                    chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">没有找到符合条件的数据来生成图谱。</div>';
+                    return;
                 }
-        } else if (categoryName === '机构') { // 机构节点
-            detailsHtml = `
-                <div class="font-bold text-lg mb-3 pb-2 border-b">${nodeData.name || '未知机构'}</div>
-                <div class="space-y-2 text-sm">
-                    <p><strong>类型:</strong> <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800">机构</span></p>
-                    <p><strong>关联专家数:</strong> <span class="font-semibold text-primary text-base">${nodeData.value || 0}</span></p>
-                </div>
-            `;
-        } else { // 其他未知类型或通用类型
-            detailsHtml = `
-                <div class="font-bold text-lg mb-3 pb-2 border-b">${nodeData.name || '未知名称'}</div>
-                <div class="space-y-2 text-sm">
-                    <p><strong>类型:</strong> <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">${categoryName}</span></p>
-                </div>
-            `;
-        }
-      },
+                
+                const categories = Array.from(new Set(graphData.nodes.map(n => n.category))).map(name => ({ name }));
 
-      // ✅ 【新增函数】从后端获取企业列表并填充到下拉框中
-      populateCompanyFilter: async function() {
-          const list = document.getElementById('company-filter-list');
-          if (!list) return; // 如果元素不存在，则直接返回
-          list.innerHTML = '<li class="px-4 py-2 text-sm text-gray-500">正在加载企业列表...</li>';
-          try {
+                const option = {
+                    backgroundColor: 'transparent',
+                    tooltip: {
+                        formatter: function (params) {
+                            if (params.dataType === 'node') {
+                                return `<strong>${params.data.name}</strong><br>类型: ${params.data.category}`;
+                            }
+                            if (params.dataType === 'edge') {
+                                const sourceNode = graphData.nodes.find(n => n.id === params.data.source);
+                                const targetNode = graphData.nodes.find(n => n.id === params.data.target);
+                                return `${sourceNode ? sourceNode.name : params.data.source} &rarr; ${targetNode ? targetNode.name : params.data.target}<br>关系: ${params.data.label ? params.data.label.formatter : '关联'}`;
+                            }
+                            return '';
+                        }
+                    },
+                    legend: [{
+                        data: categories.map(c => c.name),
+                        bottom: 10,
+                        itemGap: 15,
+                        textStyle: { color: '#333' }
+                    }],
+                    series: [{
+                        type: 'graph',
+                        layout: 'force',
+                        data: graphData.nodes.map(node => ({
+                            ...node,
+                            symbolSize: 15 + (node.value || 1) * 3,
+                            itemStyle: {
+                                color: (() => {
+                                    switch (node.category) {
+                                        case '标杆企业': return '#007bff';
+                                        case '产品/服务': return '#28a745';
+                                        case '技术': return '#ffc107';
+                                        case '人物': return '#dc3545';
+                                        case '相关公司': return '#6c757d';
+                                        case '会议/事件': return '#6f42c1';
+                                        case '技术/专利': return '#fd7e14';
+                                        case '开源项目': return '#20c997';
+                                        default: return '#a6a6a6';
+                                    }
+                                })()
+                            }
+                        })),
+                        links: graphData.edges,
+                        categories: categories,
+                        roam: true,
+                        label: {
+                            show: true,
+                            position: 'right',
+                            formatter: '{b}',
+                            color: '#333',
+                            fontSize: 10
+                        },
+                        lineStyle: {
+                            color: 'source',
+                            curveness: 0.3,
+                            opacity: 0.6,
+                            width: 1
+                        },
+                        emphasis: {
+                            focus: 'adjacency',
+                            lineStyle: {
+                                width: 3,
+                                opacity: 1
+                            },
+                            label: {
+                                fontWeight: 'bold',
+                                fontSize: 12
+                            }
+                        },
+                        force: {
+                            repulsion: 150,
+                            edgeLength: [50, 150],
+                            gravity: 0.05
+                        }
+                    }]
+                };
+
+                chart.setOption(option, true);
+            } catch (error) {
+                console.error("加载标杆图谱失败:", error);
+                chartContainer.innerHTML = `<div class="flex items-center justify-center h-full text-red-500">加载图谱失败: ${error.message}</div>`;
+            } finally {
+                chart.hideLoading();
+            }
+          },
+        
+          loadLatestInsightsTable: async function() {
+              const tableBody = document.querySelector('#page-insights table tbody');
+              const paginationInfoSpan = document.getElementById('insightsPaginationInfo');
+              const prevPageBtn = document.getElementById('insightsPrevPageBtn');
+              const nextPageBtn = document.getElementById('insightsNextPageBtn');
+              if (!tableBody || !paginationInfoSpan || !prevPageBtn || !nextPageBtn) { console.error("洞察线索表格或分页控件未找到。"); return; }
+              
+              tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8">正在加载最新线索...</td></tr>`;
+              prevPageBtn.disabled = true;
+              nextPageBtn.disabled = true;
+      
+              try {
+                  const { records, totalRecords } = await App.callApi('InsightsService', 'getLatestInsightsPaged', [App.insightsCurrentPage, App.insightsItemsPerPage]);
+                  App.insightsTotalRecords = totalRecords;
+                  App.insightsTotalPages = Math.ceil(totalRecords / App.insightsItemsPerPage) || 1;
+      
+                  if (!records || records.length === 0) {
+                      tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">暂无最新洞察线索。</td></tr>`;
+                  } else {
+                      const statusMap = { 'decision_completed': { text: '已完成', classes: 'bg-green-100 text-green-800' }, 'analyzing': { text: '分析中', classes: 'bg-blue-100 text-blue-800' }, 'signal_identified': { text: '待处理', classes: 'bg-yellow-100 text-yellow-800' }, 'published': { text: '已发布', classes: 'bg-purple-100 text-purple-800' }, 'default': { text: '未知', classes: 'bg-gray-100 text-gray-800' } };
+                      tableBody.innerHTML = records.map(item => {
+                          const statusKey = (item.status || 'default').toLowerCase();
+                          const statusInfo = statusMap[statusKey] || statusMap['default'];
+                          const statusText = statusInfo.text === '未知' ? item.status : statusInfo.text;
+                          return `
+                              <tr class="hover:bg-gray-50">
+                                  <td class="px-6 py-4"><div class="font-medium text-gray-900" title="${item.title || ''}">${truncate(item.title, 60)}</div></td>
+                                  <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${item.source || 'N/A'}</div></td>
+                                  <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${item.date || 'N/A'}</div></td>
+                                  <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.classes}">${statusText}</span></td>
+                                  <td class="px-6 py-4 whitespace-nowrap text-sm"><button class="text-primary hover:text-primary-dark" data-insight-id="${item.id}">查看详情</button></td>
+                              </tr>`;
+                      }).join('');
+                      
+                      tableBody.querySelectorAll('button[data-insight-id]').forEach(button => {
+                          button.onclick = async (e) => {
+                              const insightId = e.target.dataset.insightId;
+                              App.ui.showDetailListModal(`洞察详情: 正在加载...`, 'all');
+                              document.getElementById('detailTable').innerHTML = '<tbody><tr><td colspan="2" class="text-center p-4">正在加载详情...</td></tr></tbody>';
+                              try {
+                                  const insightDetail = await App.callApi('InsightsService', 'getInsightDetail', [insightId]);
+                                  if (insightDetail && !insightDetail.error) {
+                                      App.currentDetailType = 'historyDetail';
+                                      App.allModalData = Object.entries(insightDetail).map(([key, value]) => ({ key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: value }));
+                                      App.ui.showDetailListModal(`洞察详情: ${truncate(insightDetail.title, 30)}`, 'all');
+                                  } else {
+                                      alert(`未找到该洞察的详细信息: ${insightDetail.error || '未知错误'}`);
+                                      App.ui.hideDetailModal();
+                                  }
+                              } catch (error) {
+                                  alert(`获取洞察详情时发生错误: ${error.message}`);
+                                  App.ui.hideDetailModal();
+                              }
+                          };
+                      });
+                  }
+                  paginationInfoSpan.textContent = `第 ${App.insightsCurrentPage} / ${App.insightsTotalPages} 页 (共 ${App.insightsTotalRecords} 条)`;
+                  prevPageBtn.disabled = App.insightsCurrentPage === 1;
+                  nextPageBtn.disabled = App.insightsCurrentPage >= App.insightsTotalPages;
+              } catch (e) {
+                  handleFailure(e);
+                  tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-red-500">加载失败: ${e.message}</td></tr>`;
+              }
+          },
+
+          initBenchmarkNetworkTab: async function() {
+              if (this.tabInitialized.benchmarkNetwork) {
+                  // 对于后续访问，只需确保数据刷新和图谱渲染
+                  await this.populateCompanyFilter(); // 刷新筛选器选项
+                  this.renderBenchmarkGraph(); // 重新渲染图谱
+                  return;
+              }
+
+              console.log("[Benchmark Network] 首次初始化，尝试绑定事件...");
+
+              // ✅ 核心修正：添加一个小的延迟，确保DOM元素完全渲染并可访问
+              await new Promise(resolve => setTimeout(resolve, 50)); // 延迟50毫秒
+
+              // ✅ 核心：将标杆图谱筛选器相关的事件绑定放在这里，确保只执行一次
+              const companyFilterToggle = document.getElementById('company-filter-toggle');
+              const companyFilterOptions = document.getElementById('company-filter-options');
+              const companyFilterList = document.getElementById('company-filter-list');
+              const applyBenchmarkFilterBtn = document.getElementById('apply-benchmark-filter-btn');
+
+              if (companyFilterToggle && companyFilterOptions && companyFilterList && applyBenchmarkFilterBtn) {
+                  companyFilterToggle.addEventListener('click', (e) => { e.stopPropagation(); companyFilterOptions.classList.toggle('hidden'); });
+                  document.addEventListener('click', (e) => { if (!companyFilterOptions.contains(e.target) && !companyFilterToggle.contains(e.target)) companyFilterOptions.classList.add('hidden'); });
+                  companyFilterOptions.addEventListener('click', (e) => e.stopPropagation());
+                  companyFilterList.addEventListener('change', this.updateFilterToggleText.bind(this));
+                  applyBenchmarkFilterBtn.addEventListener('click', () => {
+                      const selectedCompanies = Array.from(companyFilterList.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+                      this.renderBenchmarkGraph(selectedCompanies.length > 0 ? selectedCompanies : null);
+                      companyFilterOptions.classList.add('hidden');
+                  });
+              }
+
+              const chart = this.getOrCreateChart('benchmarkGraph', 'benchmark-graph-chart');
+              await this.populateCompanyFilter(); // 填充筛选器（每次激活都刷新，以防新增企业）
+              this.renderBenchmarkGraph(); // 初次加载或每次激活都渲染图谱
+              this.tabInitialized.benchmarkNetwork = true; // 标记为已初始化
+          },
+
+          /**
+           * ✅ 最终修正版: 初始化标杆时间轴标签页 (确保 ID 和事件绑定正确)
+           */
+          initBenchmarkTimelineTab: async function() {
+            if (this.tabInitialized.benchmarkTimeline) {
+                console.log("[Timeline] 标签页已初始化，跳过事件绑定。");
+                // ✅ 确保每次重新进入时，占位符是可见的，而不是空白
+                const container = document.getElementById('timeline-container');
+                const placeholder = document.getElementById('timeline-placeholder');
+                const loader = document.getElementById('timeline-loader');
+                if (container && placeholder && loader) {
+                    // 重新注入原始HTML，确保初始状态
+                    container.innerHTML = placeholder.outerHTML + loader.outerHTML;
+                    placeholder.style.display = 'block';
+                    loader.style.display = 'none';
+                }
+                return; // 已初始化则跳过
+            }
+            console.log("[Timeline] 首次初始化标杆时间轴标签页...");
+  
+            // ✅ 核心修正：使用您HTML中正确的ID 'benchmark-timeline-selector'
+            const selector = document.getElementById('benchmark-timeline-selector');
+            const generateBtn = document.getElementById('generate-timeline-btn');
+            const container = document.getElementById('timeline-container'); // 获取主容器
+            const placeholder = document.getElementById('timeline-placeholder'); // 获取占位符
+            const loader = document.getElementById('timeline-loader'); // 获取加载器
+            
+            if (!selector || !generateBtn || !container || !placeholder || !loader) {
+                console.error("[Timeline] 错误: 关键HTML元素未找到！选择器、按钮、主容器、占位符或加载器缺失。");
+                // 即使元素未找到，也要将 tabInitialized 设为 true，避免无限尝试
+                this.tabInitialized.benchmarkTimeline = true; 
+                return;
+            }
+
+            // 确保初始状态是占位符可见，加载器隐藏
+            placeholder.style.display = 'block';
+            loader.style.display = 'none';
+            // 确保容器内有初始的占位符内容
+            container.innerHTML = placeholder.outerHTML + loader.outerHTML;
+
+
+            // 填充企业选择器
+            try {
+              selector.innerHTML = '<option>正在加载企业列表...</option>';
+              selector.disabled = true;
               const companies = await App.callApi('InsightsService', 'getBenchmarkCompanyList');
               if (companies && companies.length > 0) {
-                  list.innerHTML = companies.map(company => `
-                      <li class="px-4 py-2 hover:bg-gray-100">
-                          <label class="flex items-center space-x-3 cursor-pointer">
-                              <input type="checkbox" value="${company}" class="form-checkbox h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
-                              <span class="text-sm text-gray-700">${company}</span>
-                          </label>
-                      </li>
-                  `).join('');
+                selector.innerHTML = '<option value="">-- 请选择 --</option>' + companies.map(name => `<option value="${name}">${name}</option>`).join('');
+                selector.disabled = false;
+                console.log("[Timeline] 企业选择器填充成功。");
               } else {
-                  list.innerHTML = '<li class="px-4 py-2 text-sm text-gray-500">无可用企业</li>';
+                selector.innerHTML = '<option>未找到活跃的标杆企业</option>';
               }
-              this.updateFilterToggleText(); // 填充后更新一次文本
-          } catch (error) {
-              console.error("加载企业筛选列表失败:", error);
-              list.innerHTML = '<li class="px-4 py-2 text-sm text-red-500">加载失败，请检查后端服务。</li>';
-          }
-      },
-
-      // ✅ 【新增函数】更新筛选按钮的文本
-      updateFilterToggleText: function() {
-          const textSpan = document.getElementById('company-filter-text');
-          const list = document.getElementById('company-filter-list');
-          if (!textSpan || !list) return;
-
-          const checkedCheckboxes = list.querySelectorAll('input[type="checkbox"]:checked');
-          const checkedCount = checkedCheckboxes.length;
-
-          if (checkedCount === 0) {
-              textSpan.textContent = '选择要分析的标杆企业...';
-              textSpan.classList.add('text-gray-500');
-              textSpan.classList.remove('text-gray-900');
-          } else {
-              // 如果选择的企业不多，直接显示名称
-              if (checkedCount <= 2) {
-                  textSpan.textContent = Array.from(checkedCheckboxes).map(cb => cb.value).join(', ');
-              } else {
-                  textSpan.textContent = `${checkedCount} 个企业已选择`;
-              }
-              textSpan.classList.remove('text-gray-500');
-              textSpan.classList.add('text-gray-900');
-          }
-      },
-
-      // ✅ 【新增函数】加载和渲染标杆图谱
-      renderBenchmarkGraph: async function(selectedCompanies = null) {
-    const chartContainer = document.getElementById('benchmark-graph-chart');
-    if (!chartContainer) {
-        console.error("图谱容器 'benchmark-graph-chart' 未找到。");
-        return;
-    }
-
-    // ✅ 核心修复：不再直接修改 chartContainer.innerHTML 来显示加载文字。
-    // 我们将完全依赖 ECharts 自己的加载动画。
-
-    // 获取或创建 ECharts 实例。
-    // getOrCreateChart 函数会确保 ECharts 实例被正确初始化在容器上。
-    const chart = this.getOrCreateChart('benchmarkGraph', 'benchmark-graph-chart');
-    if (!chart) {
-        // 如果 ECharts 实例创建失败，显示一个错误消息
-        chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-red-500">图表初始化失败，容器不可用。</div>';
-        return;
-    }
-
-    // ✅ 显示 ECharts 自己的加载动画
-    chart.showLoading({
-        text: '正在构建关系图谱...',
-        color: '#0000ff', // 使用您定义的 primary 颜色
-        textColor: '#0000ff',
-        maskColor: 'rgba(255, 255, 255, 0.8)', // 半透明遮罩
-        zlevel: 0 // 确保在最底层
-    });
-
-    try {
-        const graphData = await App.callApi('InsightsService', 'getBenchmarkGraphData', [selectedCompanies]);
-
-        if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
-            chart.clear(); // 清空图表内容
-            // ✅ 如果没有数据，显示一个友好的提示
-            chartContainer.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">没有找到符合条件的数据来生成图谱。</div>';
-            chart.hideLoading(); // 隐藏加载动画
-            return;
-        }
-        
-        // 动态生成图例类别
-        const categories = Array.from(new Set(graphData.nodes.map(n => n.category))).map(name => ({ name }));
-
-        const option = {
-            backgroundColor: 'transparent', // 确保背景透明，以便容器的背景色可见
-            tooltip: {
-                formatter: function (params) {
-                    if (params.dataType === 'node') {
-                        return `<strong>${params.data.name}</strong><br>类型: ${params.data.category}`;
-                    }
-                    if (params.dataType === 'edge') {
-                        // 确保 source 和 target 属性存在，并提供 fallback
-                        const sourceNode = graphData.nodes.find(n => n.id === params.data.source);
-                        const targetNode = graphData.nodes.find(n => n.id === params.data.target);
-                        return `${sourceNode ? sourceNode.name : params.data.source} &rarr; ${targetNode ? targetNode.name : params.data.target}<br>关系: ${params.data.label ? params.data.label.formatter : '关联'}`;
-                    }
-                    return '';
-                }
-            },
-            legend: [{
-                data: categories.map(c => c.name),
-                bottom: 10, // 将图例放在底部
-                itemGap: 15,
-                textStyle: { color: '#333' }
-            }],
-            series: [{
-                type: 'graph',
-                layout: 'force',
-                data: graphData.nodes.map(node => ({
-                    ...node,
-                    // 节点大小根据value（提及次数）动态调整
-                    symbolSize: 15 + (node.value || 1) * 3, // 基础大小 + 提及次数 * 缩放因子
-                    // 为节点添加默认颜色，方便区分
-                    itemStyle: {
-                        color: (() => {
-                            switch (node.category) {
-                                case '标杆企业': return '#007bff'; // 蓝色
-                                case '产品/服务': return '#28a745'; // 绿色
-                                case '技术': return '#ffc107'; // 黄色
-                                case '人物': return '#dc3545'; // 红色
-                                case '相关公司': return '#6c757d'; // 灰色
-                                case '会议/事件': return '#6f42c1'; // 紫色
-                                case '技术/专利': return '#fd7e14'; // 橙色
-                                case '开源项目': return '#20c997'; // 青色
-                                default: return '#a6a6a6'; // 默认
-                            }
-                        })()
-                    }
-                })),
-                links: graphData.edges,
-                categories: categories,
-                roam: true, // 允许缩放和平移
-                label: {
-                    show: true,
-                    position: 'right',
-                    formatter: '{b}', // 显示节点名称
-                    color: '#333',
-                    fontSize: 10
-                },
-                lineStyle: {
-                    color: 'source', // 边的颜色与源节点颜色一致
-                    curveness: 0.3, // 边的弯曲度
-                    opacity: 0.6,
-                    width: 1
-                },
-                emphasis: {
-                    focus: 'adjacency', // 鼠标悬停时突出显示邻接节点和边
-                    lineStyle: {
-                        width: 3, // 突出时加粗
-                        opacity: 1
-                    },
-                    label: {
-                        fontWeight: 'bold',
-                        fontSize: 12
-                    }
-                },
-                force: {
-                    repulsion: 150, // 节点之间的斥力
-                    edgeLength: [50, 150], // 边的理想长度范围
-                    gravity: 0.05 // 整体引力
-                }
-            }]
-        };
-
-        chart.setOption(option, true);
-        chart.hideLoading(); // ✅ 成功渲染后隐藏加载动画
-    } catch (error) {
-        console.error("加载标杆图谱失败:", error);
-        chart.hideLoading(); // ✅ 发生错误时也要隐藏加载动画
-        // ✅ 错误时，清空 ECharts 容器并显示自定义错误信息
-        chartContainer.innerHTML = `<div class="flex items-center justify-center h-full text-red-500">加载图谱失败: ${error.message}</div>`;
-        // handleFailure(error); // 避免重复弹窗
-    }
-},
-        
-            loadLatestInsightsTable: async function() {
-                const tableBody = document.querySelector('#page-insights table tbody');
-                const paginationInfoSpan = document.getElementById('insightsPaginationInfo');
-                const prevPageBtn = document.getElementById('insightsPrevPageBtn');
-                const nextPageBtn = document.getElementById('insightsNextPageBtn');
-                if (!tableBody || !paginationInfoSpan || !prevPageBtn || !nextPageBtn) { console.error("洞察线索表格或分页控件未找到。"); return; }
-                
-                tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8">正在加载最新线索...</td></tr>`;
-                prevPageBtn.disabled = true;
-                nextPageBtn.disabled = true;
-        
-                try {
-                    const { records, totalRecords } = await App.callApi('InsightsService', 'getLatestInsightsPaged', [App.insightsCurrentPage, App.insightsItemsPerPage]);
-                    App.insightsTotalRecords = totalRecords;
-                    App.insightsTotalPages = Math.ceil(totalRecords / App.insightsItemsPerPage) || 1;
-        
-                    if (!records || records.length === 0) {
-                        tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-500">暂无最新洞察线索。</td></tr>`;
-                    } else {
-                        const statusMap = { 'decision_completed': { text: '已完成', classes: 'bg-green-100 text-green-800' }, 'analyzing': { text: '分析中', classes: 'bg-blue-100 text-blue-800' }, 'signal_identified': { text: '待处理', classes: 'bg-yellow-100 text-yellow-800' }, 'published': { text: '已发布', classes: 'bg-purple-100 text-purple-800' }, 'default': { text: '未知', classes: 'bg-gray-100 text-gray-800' } };
-                        tableBody.innerHTML = records.map(item => {
-                            const statusKey = (item.status || 'default').toLowerCase();
-                            const statusInfo = statusMap[statusKey] || statusMap['default'];
-                            const statusText = statusInfo.text === '未知' ? item.status : statusInfo.text;
-                            return `
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4"><div class="font-medium text-gray-900" title="${item.title || ''}">${truncate(item.title, 60)}</div></td>
-                                    <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${item.source || 'N/A'}</div></td>
-                                    <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm text-gray-500">${item.date || 'N/A'}</div></td>
-                                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusInfo.classes}">${statusText}</span></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm"><button class="text-primary hover:text-primary-dark" data-insight-id="${item.id}">查看详情</button></td>
-                                </tr>`;
-                        }).join('');
-                        
-                        tableBody.querySelectorAll('button[data-insight-id]').forEach(button => {
-                            button.onclick = async (e) => {
-                                const insightId = e.target.dataset.insightId;
-                                App.ui.showDetailListModal(`洞察详情: 正在加载...`, 'all');
-                                document.getElementById('detailTable').innerHTML = '<tbody><tr><td colspan="2" class="text-center p-4">正在加载详情...</td></tr></tbody>';
-                                try {
-                                    const insightDetail = await App.callApi('InsightsService', 'getInsightDetail', [insightId]);
-                                    if (insightDetail && !insightDetail.error) {
-                                        App.currentDetailType = 'historyDetail';
-                                        App.allModalData = Object.entries(insightDetail).map(([key, value]) => ({ key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), value: value }));
-                                        App.ui.showDetailListModal(`洞察详情: ${truncate(insightDetail.title, 30)}`, 'all');
-                                    } else {
-                                        alert(`未找到该洞察的详细信息: ${insightDetail.error || '未知错误'}`);
-                                        App.ui.hideDetailModal();
-                                    }
-                                } catch (error) {
-                                    alert(`获取洞察详情时发生错误: ${error.message}`);
-                                    App.ui.hideDetailModal();
-                                }
-                            };
-                        });
-                    }
-                    paginationInfoSpan.textContent = `第 ${App.insightsCurrentPage} / ${App.insightsTotalPages} 页 (共 ${App.insightsTotalRecords} 条)`;
-                    prevPageBtn.disabled = App.insightsCurrentPage === 1;
-                    nextPageBtn.disabled = App.insightsCurrentPage >= App.insightsTotalPages;
-                } catch (e) {
-                    handleFailure(e);
-                    tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-red-500">加载失败: ${e.message}</td></tr>`;
-                }
+            } catch (e) {
+              console.error("[Timeline] 加载标杆企业列表失败:", e);
+              selector.innerHTML = `<option>加载失败</option>`; // 显示加载失败提示
+              handleFailure(e); // 触发全局错误处理
             }
+            
+            // 绑定按钮点击事件，确保只绑定一次
+            generateBtn.addEventListener('click', this.generateTimeline.bind(this));
+            console.log("[Timeline] “生成时间轴”按钮事件绑定成功。");
+            
+            this.tabInitialized.benchmarkTimeline = true; // 标记为已初始化
         },
+  
+          /**
+           * ✅ 最终修正版: 生成并渲染时间轴
+           */
+          generateTimeline: async function() {
+              const selector = document.getElementById('benchmark-timeline-selector');
+              const container = document.getElementById('timeline-container');
+              const placeholder = document.getElementById('timeline-placeholder'); // 获取占位符
+              const loader = document.getElementById('timeline-loader'); // 获取加载器
+              const generateBtn = document.getElementById('generate-timeline-btn'); // 获取按钮引用
+              const selectedCompany = selector.value;
+    
+              if (!selectedCompany) {
+                uiUtils.showToast('请先选择一个标杆企业。', 'error');
+                return;
+              }
+    
+              // 1. 显示加载状态，禁用按钮
+              // ✅ 修正：先操作子元素的样式，再清空或替换父元素的内容
+              if (placeholder) placeholder.style.display = 'none'; // 隐藏占位符
+              if (loader) loader.style.display = 'block';     // 显示加载器
+              
+              generateBtn.disabled = true; // 禁用按钮
+              generateBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>生成中...'; // 更改按钮文本和图标
+              
+              console.log(`[Timeline] 开始为 "${selectedCompany}" 生成时间轴...`);
+
+              try {
+                const timelineData = await App.callApi('InsightsService', 'getBenchmarkTimelineData', [selectedCompany]);
+                console.log(`[Timeline] 成功从后端获取到 ${Object.keys(timelineData).length} 个月的数据。`);
+                
+                if (Object.keys(timelineData).length === 0) {
+                    container.innerHTML = `<div class="text-center py-12 bg-gray-50 rounded-lg"><i class="fa fa-box-open fa-3x text-gray-400 mb-4"></i><p class="text-gray-600">未找到关于 "${selectedCompany}" 的任何大事件记录。</p></div>`;
+                    return;
+                }
+                
+                let timelineHtml = '<div class="space-y-12">';
+                // 对月份键进行排序，以确保时间轴顺序正确（通常是倒序，最新月份在前）
+                const sortedMonthKeys = Object.keys(timelineData).sort((a, b) => b.localeCompare(a));
+                
+                for (const monthKey of sortedMonthKeys) {
+                  const monthData = timelineData[monthKey];
+                  const aiSummary = monthData.aiMonthlySummary;
+                  
+                  timelineHtml += `
+                    <div class="relative">
+                      <!-- 月份标记 (sticky 定位，保持在顶部) -->
+                      <div class="sticky top-[var(--header-height)] bg-gray-100 py-2 px-4 z-10 rounded-t-lg border-b">
+                         <h2 class="text-xl font-bold text-gray-800">${monthData.monthLabel}</h2>
+                      </div>
+                      <!-- AI 月度总结 -->
+                      <div class="bg-blue-50 border-l-4 border-blue-500 p-4 my-4 rounded-r-lg shadow">
+                        <h3 class="font-bold text-blue-800 mb-2"><i class="fa fa-brain mr-2"></i>AI 月度分析</h3>
+                        <p class="text-sm text-blue-900 mb-3">${aiSummary.monthly_summary || '无总结信息。'}</p>
+                        <div class="text-xs"><strong class="text-blue-700">关键主题:</strong><span class="text-blue-800">${(aiSummary.key_themes || []).join(' / ') || '未提取'}</span></div>
+                        <div class="text-xs mt-1"><strong class="text-blue-700">最重要事件:</strong><span class="text-blue-800">${aiSummary.most_significant_event?.title || '未提取'}</span><em class="text-blue-600 ml-2">(${aiSummary.most_significant_event?.impact || ''})</em></div>
+                      </div>
+                      <!-- 事件列表 -->
+                      <div class="space-y-4 mt-4">
+                      ${monthData.events.map(event => `
+                        <div class="pl-8 relative border-l-2 border-gray-200">
+                           <div class="absolute w-4 h-4 bg-primary rounded-full -left-2 top-1 border-2 border-white shadow"></div>
+                           <p class="text-xs text-gray-500">${new Date(event.date).toLocaleDateString()}</p>
+                           <h4 class="font-semibold text-gray-800"><a href="${event.source_url || '#'}" target="_blank" class="hover:underline">${event.title}</a><span class="ml-2 text-xs font-normal text-white bg-secondary px-2 py-0.5 rounded-full">${event.type}</span></h4>
+                           <p class="text-sm text-gray-600 mt-1">${truncate(event.summary, 150)}</p>
+                        </div>
+                      `).join('')}
+                      </div>
+                    </div>`;
+                }
+                timelineHtml += '</div>';
+                container.innerHTML = timelineHtml; // ✅ 仅在此处设置最终内容
+                console.log("[Timeline] 时间轴渲染完成。");
+    
+              } catch (e) {
+                console.error("[Timeline] 生成时间轴失败:", e);
+                handleFailure(e);
+                container.innerHTML = `<div class="text-center py-12 bg-red-50 text-red-700 rounded-lg">错误: ${e.message}</div>`;
+              } finally {
+                // 2. 隐藏加载状态，恢复按钮
+                if (loader) loader.style.display = 'none'; // 确保加载器隐藏
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fa fa-search mr-2"></i>生成时间轴'; // 恢复按钮原始文本和图标
+              }
+          }
+      },
 
       actions: {
         isInitialized: false,
@@ -3321,7 +3544,7 @@ const uiUtils = {
 
               form.innerHTML += `
                   <div class="mt-4 pt-3 border-t border-gray-200">
-                      <label class="block text-sm font-medium text-gray-700 mb-2">监控选项</label>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">关注选项</label>
                       <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
                           ${checkboxesHtml}
                       </div>
@@ -3736,11 +3959,11 @@ const uiUtils = {
                 { name: 'tech_name', label: '技术名称', type: 'text', required: true },
                 { name: 'tech_category', label: '技术类别', type: 'text', required: true },
                 { name: 'tech_keywords', label: '技术关键词 (逗号分隔)', type: 'textarea' },
-                { name: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'], required: true },
-                { name: 'data_source_academic', label: '监控学术论文', type: 'checkbox' },
-                { name: 'data_source_patent', label: '监控专利', type: 'checkbox' },
-                { name: 'data_source_opensource', label: '监控开源项目', type: 'checkbox' },
-                { name: 'data_source_news', label: '监控技术新闻', type: 'checkbox' },
+                { name: 'monitoring_status', label: '关注状态', type: 'select', options: ['active', 'inactive'], required: true },
+                { name: 'data_source_academic', label: '关注学术论文', type: 'checkbox' },
+                { name: 'data_source_patent', label: '关注专利', type: 'checkbox' },
+                { name: 'data_source_opensource', label: '关注开源项目', type: 'checkbox' },
+                { name: 'data_source_news', label: '关注技术新闻', type: 'checkbox' },
               ]
             },   
             {
@@ -3753,16 +3976,16 @@ const uiUtils = {
                   { name: 'stock_symbol', label: '股票代码', type: 'text' },
                   { name: 'website_url', label: '官方网站', type: 'url' },
                   { name: 'tech_focus_areas', label: '技术焦点 (逗号分隔)', type: 'textarea' },
-                  { name: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'], required: true },
-                  { name: 'monitoring_priority', label: '监控优先级', type: 'select', options: ['high', 'medium', 'low'] },
+                  { name: 'monitoring_status', label: '关注状态', type: 'select', options: ['active', 'inactive'], required: true },
+                  { name: 'monitoring_priority', label: '关注优先级', type: 'select', options: ['high', 'medium', 'low'] },
                   { name: 'threat_level', label: '威胁等级', type: 'select', options: ['high', 'medium', 'low'] },
                   { name: 'employee_count', label: '员工数', type: 'number' },
                   { name: 'annual_revenue', label: '年收入(美元)', type: 'number' },
                   { name: 'notes', label: '备注', type: 'textarea' },
                   { name: 'rss_url', label: '新闻RSS链接', type: 'url' },
-                  { name: 'news_monitoring', label: '监控新闻', type: 'checkbox' },
-                  { name: 'patent_monitoring', label: '监控专利', type: 'checkbox' },
-                  { name: 'social_monitoring', label: '监控社交媒体', type: 'checkbox' },
+                  { name: 'news_monitoring', label: '关注新闻', type: 'checkbox' },
+                  { name: 'patent_monitoring', label: '关注专利', type: 'checkbox' },
+                  { name: 'social_monitoring', label: '关注社交媒体', type: 'checkbox' },
                 ]
               },
             {
@@ -3770,7 +3993,7 @@ const uiUtils = {
               fields: [
                 { name: 'conference_name', label: '会议名称', type: 'text', required: true },
                 { name: 'industry_focus', label: '行业焦点', type: 'text' },
-                { name: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
+                { name: 'monitoring_status', label: '关注状态', type: 'select', options: ['active', 'inactive'] },
                 { name: 'official_website', label: '官方网站', type: 'url' },
               ]
             },

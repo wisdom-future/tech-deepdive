@@ -96,6 +96,29 @@
       .sort-icon.active {
         @apply text-primary;
       }
+      .loader-dots {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 30px; /* 调整高度以适应布局 */
+      }
+
+      .loader-dots .dot {
+        width: 10px;
+        height: 10px;
+        background-color: #0000ff; /* 使用 primary 颜色，您可以根据需要调整 */
+        border-radius: 50%;
+        margin: 0 5px;
+        animation: bounce 1s infinite ease-in-out;
+      }
+
+      .loader-dots .dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      .loader-dots .dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
     }
   </style>
   
@@ -599,25 +622,55 @@
     <div id="page-insights" class="page-container hidden">
       <div class="p-6 bg-white rounded-xl shadow-lg">
         <!-- 标签页导航 -->
-        <div class="border-b border-gray-200 mb-6">
-          <nav id="analyzation-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
-            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="trends">
-              <i class="fa fa-area-chart mr-2"></i>关键技术线索
+                <div class="border-b border-gray-200 mb-6">
+          <nav id="analyzation-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">            
+            <!-- 技术成熟度 -->
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="hype-cycle">
+              <i class="fa fa-line-chart"></i>
+              <div class="flex flex-col items-center">
+                <span class="text-xs text-gray-500">看趋势</span>
+                <span>技术成熟度</span>
+              </div>
             </a>
-            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="hype-cycle">
-              <i class="fa fa-line-chart mr-2"></i>技术成熟度
+            <!-- 技术知识图谱 -->
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="knowledge-graph">
+              <i class="fa fa-sitemap"></i> <!-- Font Awesome 4.7.0 兼容图标 -->
+              <div class="flex flex-col items-center">
+                <span class="text-xs text-gray-500">看趋势</span>
+                <span>技术知识图谱</span>
+              </div>
             </a>
-            <!-- ✅ 恢复：技术知识图谱标签页 -->
-            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="knowledge-graph">
-              <i class="fa fa-sitemap mr-2"></i>技术知识图谱
+            <!-- 标杆动态图谱 -->
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="benchmark-network">
+              <i class="fa fa-sitemap"></i> <!-- 假设您的 FA 4.7.0 版本支持此图标，如果不行请替换为 fa-sitemap -->
+              <div class="flex flex-col items-center">
+                <span class="text-xs text-gray-500">看友商</span>
+                <span>标杆动态图谱</span>
+              </div>
             </a>
-            <!-- ✅ 新增：专家网络标签页 -->
-            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="expert-network">
-              <i class="fa fa-users mr-2"></i>领域专家网络
+             <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="benchmark-timeline">
+              <i class="fa fa-history"></i> <!-- 假设您的 FA 4.7.0 版本支持此图标，如果不行请替换为 fa-history -->
+              <div class="flex flex-col items-center">
+                <span class="text-xs text-gray-500">看友商</span>
+                <span>标杆大事记</span>
+              </div>
             </a>
-            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="benchmark-network">
-              <i class="fa fa-users mr-2"></i>标杆动态图谱
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="trends">
+              <i class="fa fa-area-chart"></i>
+              <div class="flex flex-col items-center">
+                <span class="text-xs text-gray-500">看机会</span>
+                <span>关键技术线索</span>
+              </div>
             </a>
+             <!-- 领域专家网络 -->
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="expert-network">
+              <i class="fa fa-users"></i>
+              <div class="flex flex-col items-center">
+                <span class="text-xs text-gray-500">看人才</span>
+                <span>领域专家网络</span>
+              </div>
+            </a>
+            <!-- 标杆时间轴 -->
           </nav>
         </div>
 
@@ -626,13 +679,9 @@
         <!-- "趋势与关键词" 内容 -->
         <div id="tab-content-trends" class="analyzation-tab-content">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 hidden">
               <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-area-chart text-primary mr-2"></i>趋势分析</h3>
               <div id="trend-chart-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
-            </div>
-            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-              <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-tags text-primary mr-2"></i>热点关键词</h3>
-              <div id="keyword-cloud-container" class="h-80 bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
             </div>
           </div>
           <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
@@ -665,6 +714,10 @@
           <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
             <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-line-chart text-primary mr-2"></i>技术成熟度曲线</h3>
             <div id="hype-cycle-chart-container" class="h-[600px] bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
+          </div>
+           <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mb-8">
+            <h3 class="text-xl font-semibold mb-4 flex items-center"><i class="fa fa-tags text-primary mr-2"></i>热点关键词</h3>
+            <div id="keyword-cloud-container" class="h-[400px] bg-white p-4 rounded-lg shadow-sm border border-gray-200"></div>
           </div>
         </div>
 
@@ -731,6 +784,41 @@
             <div id="benchmark-graph-chart" style="width: 100%; height: 700px;"></div>
           </div>
         </div>
+
+        <!-- ✅ 核心修正：标杆时间轴的内容容器 -->
+        <div id="tab-content-benchmark-timeline" class="analyzation-tab-content hidden">
+            <!-- 控制区域 -->
+            <div class="bg-white p-4 rounded-lg shadow-md mb-6 flex items-center space-x-4">
+              <label for="benchmark-timeline-selector" class="text-sm font-medium text-gray-700 whitespace-nowrap">选择一个标杆企业</label>
+              <select id="benchmark-timeline-selector" class="flex-grow pl-3 pr-10 py-2 border-gray-300 focus:outline-none focus:ring-primary focus:border-primary text-base sm:text-sm rounded-md">
+                  <option>正在加载企业列表...</option>
+              </select>
+              <button id="generate-timeline-btn" class="flex-shrink-0 bg-primary text-white px-4 py-2 rounded-md hover:bg-primary-dark transition-colors duration-200 flex items-center justify-center shadow-sm">
+                  <i class="fa fa-search mr-2"></i> <!-- 按钮图标保持 fa-search -->
+                  生成时间轴
+              </button>
+          </div>
+
+            <!-- 时间轴结果容器 -->
+            <!-- ✅ 确保这个ID是 timeline-container -->
+            <div id="timeline-container" class="mt-6">
+                <!-- 初始提示或加载状态 -->
+                <!-- ✅ 确保这个ID是 timeline-placeholder -->
+                <div id="timeline-placeholder" class="text-center py-12 bg-gray-50 rounded-lg">
+                    <i class="fa fa-history fa-3x text-gray-400 mb-4"></i>
+                    <p class="text-gray-600">请选择一个标杆企业并点击“生成时间轴”以查看其大事记。</p>
+                </div>
+                 <!-- 加载动画 -->
+                <!-- ✅ 确保这个ID是 timeline-loader -->
+                <div id="timeline-loader" class="hidden text-center py-12">
+                    <div class="loader-dots" style="/* 您可以为此添加CSS样式 */">
+                        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                    </div>
+                    <p class="text-gray-600 mt-4">正在从数据库聚合数据并请求AI分析，请稍候...</p>
+                </div>
+            </div>
+        </div>
+        <!-- 修正后的标杆时间轴内容容器结束 -->
 
       </div>
     </div>

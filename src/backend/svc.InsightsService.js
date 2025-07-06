@@ -593,7 +593,7 @@ const InsightsService = {
    * ✅ 核心函数：获取标杆图谱数据
    * 融合了竞争情报和产业动态（会议）两大来源
    */
-     getBenchmarkGraphData: function(targetCompetitors = null) {
+  getBenchmarkGraphData: function(targetCompetitors = null) {
     // 调试日志：确保参数被正确接收，并处理 null/非数组情况
     const logCompetitors = Array.isArray(targetCompetitors) && targetCompetitors.length > 0
                            ? targetCompetitors.join(', ')
@@ -833,5 +833,141 @@ const InsightsService = {
     }
 
     return { nodes: finalNodes, edges: finalEdges };
+  },
+   /**
+   * ✅ 新增: 获取指定标杆企业的大事记时间轴数据
+   * @param {string} benchmarkName - 要查询的标杆企业名称.
+   * @returns {Object} 按 'YYYY-MM' 格式组织的月度数据对象.
+   */
+  getBenchmarkTimelineData: function(benchmarkName) {
+    if (!benchmarkName) {
+      throw new Error("必须提供一个标杆企业名称。");
+    }
+    Logger.log(`[Timeline] 开始为企业 "${benchmarkName}" 构建大事记时间轴...`);
+
+    // --- 1. 获取所有相关数据源 ---
+    const competitorIntel = DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE') || [];
+    const industryDynamics = DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS') || [];
+    const techNews = DataService.getDataAsObjects('RAW_TECH_NEWS') || [];
+    Logger.log(`[Timeline] 获取到 ${competitorIntel.length} 条竞情, ${industryDynamics.length} 条产业动态, ${techNews.length} 条技术新闻。`);
+
+    // --- 2. 筛选与该标杆企业相关的所有事件 ---
+    const allEvents = [];
+    const nameLower = benchmarkName.toLowerCase();
+
+    // 从竞争情报中筛选
+    competitorIntel.forEach(item => {
+      if (String(item.competitor_name || '').toLowerCase() === nameLower) {
+        allEvents.push({
+          date: item.publication_date,
+          title: item.intelligence_title,
+          type: item.intelligence_type || '竞品情报',
+          summary: item.ai_summary || item.intelligence_summary,
+          source_url: item.source_url
+        });
+      }
+    });
+
+    // 从产业动态中筛选
+    industryDynamics.forEach(item => {
+      if (Array.isArray(item.related_companies) && item.related_companies.some(c => String(c || '').toLowerCase() === nameLower)) {
+        allEvents.push({
+          date: item.publication_date,
+          title: item.event_title,
+          type: item.event_type || '产业动态',
+          summary: item.ai_summary || item.event_summary,
+          source_url: item.source_url
+        });
+      }
+    });
+    
+    // 从技术新闻中筛选
+    techNews.forEach(item => {
+      if (Array.isArray(item.related_companies) && item.related_companies.some(c => String(c || '').toLowerCase() === nameLower)) {
+          allEvents.push({
+              date: item.publication_date,
+              title: item.news_title,
+              type: '技术新闻',
+              summary: item.ai_summary || item.news_summary,
+              source_url: item.source_url
+          });
+      }
+    });
+    
+    Logger.log(`[Timeline] 共筛选出 ${allEvents.length} 条与 "${benchmarkName}" 相关的事件。`);
+
+    // --- 3. 按月份对事件进行分组 ---
+    const monthlyData = {};
+    allEvents.forEach(event => {
+      if (!event.date) return;
+      try {
+        const eventDate = new Date(event.date);
+        if (isNaN(eventDate.getTime())) return;
+        
+        const monthKey = eventDate.toISOString().substring(0, 7); // 'YYYY-MM'
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = {
+            monthLabel: `${eventDate.getFullYear()}年${eventDate.getMonth() + 1}月`,
+            events: [],
+            aiMonthlySummary: '' // 稍后填充
+          };
+        }
+        monthlyData[monthKey].events.push(event);
+      } catch(e) { /* 忽略无效日期 */ }
+    });
+
+    // --- 4. 对每个月的事件进行排序并生成AI总结 ---
+    const sortedMonths = Object.keys(monthlyData).sort().reverse(); // 按时间倒序排列月份
+    const finalTimeline = {};
+
+    for (const monthKey of sortedMonths) {
+      const month = monthlyData[monthKey];
+      // 对当月事件按日期倒序
+      month.events.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // 准备AI prompt的上下文
+      let contextForAI = `以下是公司 "${benchmarkName}" 在 ${month.monthLabel} 发生的一系列事件：\n\n`;
+      month.events.forEach(event => {
+        contextForAI += `- [${event.type}] ${event.title}: ${event.summary}\n`;
+      });
+      
+      const prompt = `
+        你是一名顶级的商业战略分析师。请基于以下 ${month.monthLabel} 关于 "${benchmarkName}" 的事件列表，完成以下任务：
+        1.  **月度总结**: 生成一段约100-150字的精炼中文总结。总结应提炼出当月的主要战略动向、技术焦点或市场活动。
+        2.  **关键主题**: 识别并列出当月最重要的1-3个主题（例如：AI芯片发布、战略合作、市场扩张）。
+        3.  **最重要事件**: 指出当月最值得关注的一件大事及其潜在影响。
+
+        严格按照以下JSON格式返回，所有内容必须是中文:
+        {
+          "monthly_summary": "<你的月度总结>",
+          "key_themes": ["主题1", "主题2"],
+          "most_significant_event": {
+            "title": "<最重要事件的标题>",
+            "impact": "<该事件的潜在影响分析>"
+          }
+        }
+
+        事件列表如下:
+        ---
+        ${contextForAI.substring(0, 15000)}
+        ---
+      `;
+      
+      try {
+        // 复用 ReportsService 中的 AI 调用函数
+        const aiResultJson = ReportsService._callAIForTextGeneration(prompt, { model: 'gpt-4o', max_tokens: 1000 });
+        const cleanedJsonString = aiResultJson.replace(/```json/g, '').replace(/```/g, '').trim();
+        const aiResult = JSON.parse(cleanedJsonString);
+        month.aiMonthlySummary = aiResult; // 将整个AI分析结果对象存入
+      } catch (e) {
+        Logger.log(`[Timeline] 为 ${monthKey} 生成AI总结失败: ${e.message}`);
+        month.aiMonthlySummary = { monthly_summary: "AI月度总结生成失败。", key_themes: [], most_significant_event: {} };
+      }
+      
+      finalTimeline[monthKey] = month;
+    }
+
+    Logger.log(`[Timeline] 成功为 "${benchmarkName}" 构建了 ${Object.keys(finalTimeline).length} 个月的时间轴数据。`);
+    return finalTimeline;
   }
 };
