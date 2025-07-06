@@ -21,6 +21,15 @@ const ReportsService = {
     let recipientEmails = [];
 
     try {
+        const currentGasUrl = ScriptApp.getService().getUrl();
+        Logger.log(`成功获取到currentGasUrl: ${currentGasUrl}`);
+        this._updateGitHubRedirect(currentGasUrl);
+    } catch (e) {
+        Logger.log(`警告：更新 GitHub 重定向 URL 失败: ${e.message}`);
+        // 即使更新失败，也继续生成报告，不中断主流程
+    }
+
+    try {
         const parentFolderId = '1lLe47xY5MCuQQGlvmnUBwYyiMTt0qql_';
         reportFolder = DriveApp.getFolderById(parentFolderId);
         Logger.log("成功获取到Google Drive目标文件夹。");
@@ -408,7 +417,84 @@ _aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, us
     }
 },
 
-  // ====================================================================================
+_updateGitHubRedirect: function(gasUrl) {
+    const scriptProps = PropertiesService.getScriptProperties();
+    const GITHUB_TOKEN = scriptProps.getProperty('GITHUB_TOKEN');
+    const GITHUB_OWNER = scriptProps.getProperty('GITHUB_OWNER');
+    const GITHUB_REPO = scriptProps.getProperty('GITHUB_REPO');
+    const GITHUB_BRANCH = 'main';
+
+    if (!GITHUB_TOKEN || !GITHUB_OWNER || !GITHUB_REPO) {
+        Logger.log("警告：GitHub 配置不完整，无法更新重定向 URL。");
+        return { success: false, message: "GitHub配置不完整" };
+    }
+
+    const filePath = 'index.html';
+    const apiUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${filePath}`;
+    const headers = {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "Accept": "application/vnd.github.v3+json"
+    };
+
+    // 1. 获取现有文件的 SHA
+    let sha = null;
+    try {
+        const checkResponse = UrlFetchApp.fetch(apiUrl, { headers: headers, muteHttpExceptions: true });
+        if (checkResponse.getResponseCode() === 200) {
+            sha = JSON.parse(checkResponse.getContentText()).sha;
+        } else if (checkResponse.getResponseCode() !== 404) {
+            // 如果不是 "Not Found" 错误，则说明有问题
+            throw new Error(`获取 index.html 的 SHA 失败: ${checkResponse.getContentText()}`);
+        }
+    } catch (e) {
+        Logger.log(`获取 GitHub 文件 SHA 失败: ${e.message}`);
+        return { success: false, message: `获取 GitHub 文件 SHA 失败: ${e.message}` };
+    }
+
+    // 2. 创建新的文件内容
+    const newContent = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Redirecting to Deepdive Engine...</title>
+        <meta http-equiv="refresh" content="0; url=${gasUrl}">
+    </head>
+    <body>
+        <p>Redirecting... If you are not redirected automatically, please <a href="${gasUrl}">click here</a>.</p>
+        <script>window.location.href = "${gasUrl}";</script>
+    </body>
+    </html>`;
+
+    // 3. 准备 Payload 并发送 PUT 请求
+    const payload = {
+        message: `[Automated] Update GAS redirect URL to ${gasUrl.slice(-10)}`,
+        content: Utilities.base64Encode(newContent, Utilities.Charset.UTF_8),
+        sha: sha, // 提供 sha 来更新文件
+        branch: GITHUB_BRANCH
+    };
+
+    const options = {
+        method: 'put',
+        headers: headers,
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+    };
+
+    const putResponse = UrlFetchApp.fetch(apiUrl, options);
+    const responseCode = putResponse.getResponseCode();
+
+    if (responseCode === 200 || responseCode === 201) {
+        Logger.log(`成功更新 GitHub 上的 index.html，使其指向: ${gasUrl}`);
+        return { success: true };
+    } else {
+        const errorResult = putResponse.getContentText();
+        Logger.log(`更新 GitHub 上的 index.html 失败。状态码: ${responseCode}, 响应: ${errorResult}`);
+        return { success: false, message: `更新 GitHub 失败: ${errorResult}` };
+    }
+},
+
+// ====================================================================================
 //  ✅ 图表生成函数 (最终版 - 增加延时与重试)
 // ====================================================================================
 _generateChartImage: function(chartConfig, fileName) {

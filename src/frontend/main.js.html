@@ -206,6 +206,41 @@
     conference: item => ({ id: item.conference_id, title: item.conference_name, date: formatDateForDisplay(item.next_event_date), infoA: item.industry_focus, infoB: item.monitoring_status, sourceUrl: item.official_website })
 };
 
+
+const uiUtils = {
+  /**
+   * 显示一个短暂的 Toast 通知
+   * @param {string} message - 要显示的消息
+   * @param {string} [type='success'] - 通知的类型 ('success' 或 'error')
+   */
+  showToast: function(message, type = 'success') {
+      const toastElement = document.getElementById('toast-notification');
+      const messageElement = document.getElementById('toast-message');
+
+      if (!toastElement || !messageElement) return;
+
+      // 设置消息和样式
+      messageElement.textContent = message;
+      toastElement.classList.remove('bg-green-500', 'bg-red-500');
+      if (type === 'success') {
+          toastElement.classList.add('bg-green-500');
+      } else {
+          toastElement.classList.add('bg-red-500');
+      }
+
+      // 显示动画
+      toastElement.classList.remove('translate-x-full');
+      toastElement.classList.add('translate-x-0');
+
+      // 设定延时后自动隐藏
+      setTimeout(() => {
+          toastElement.classList.remove('translate-x-0');
+          toastElement.classList.add('translate-x-full');
+      }, 3000); // 3秒后自动消失
+  }
+};
+
+
   // ==================================================================
   //  SECTION 2: UTILITY FUNCTIONS
   // ==================================================================
@@ -2320,7 +2355,7 @@ renderExpertNetwork: function(data) {
             const query = queryInput.value.trim();
 
             if (!query) {
-                alert('请输入您的研究查询！');
+                uiUtils.showToast('请输入您的研究查询！');
                 return;
             }
 
@@ -3330,7 +3365,7 @@ renderExpertNetwork: function(data) {
               
               App.callApi('SystemAdminService', 'deleteRegistryEntry', [this.activeRegistryKey, docId])
                 .then(() => {
-                  alert('删除成功！');
+                  uiUtils.showToast('删除成功！');
                   this.loadRegistryData(this.activeRegistryKey); // 刷新表格
                 })
                 .catch(handleFailure);
@@ -3370,7 +3405,7 @@ renderExpertNetwork: function(data) {
 
           App.callApi('SystemAdminService', apiMethod, apiArgs)
             .then(() => {
-              alert('保存成功！');
+              uiUtils.showToast('保存成功！');
               this.hideRegistryFormModal();
               this.loadRegistryData(this.activeRegistryKey); // 刷新表格
             })

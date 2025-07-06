@@ -37,8 +37,11 @@ function scheduleAllReports() {
       let shouldRunToday = false;
       const frequency = String(config.schedule_frequency || '').toUpperCase();
 
+      Logger.log(`✅ 读取配置文件，执行频率: ${frequency}`);
+
       switch (frequency) {
         case 'DAILY':
+        case 'DAILY_ROLLING_7_DAYS':
           shouldRunToday = true;
           break;
         case 'WEEKLY_MONDAY': // 每周一执行
