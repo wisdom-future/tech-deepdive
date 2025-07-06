@@ -249,4 +249,131 @@ function test_WF6_Benchmark_Integration() {
   }
 }
 
+function run_UTIL_ResetAllPendingStatuses() {
+  console.log("==================================================");
+  console.log("--- 开始重置所有RAW数据表的处理状态 ---");
+  
+  // 我们要重置这两个表，为图谱构建做准备
+  const collectionsToReset = [
+    'RAW_COMPETITOR_INTELLIGENCE',
+    'RAW_INDUSTRY_DYNAMICS'
+  ];
 
+  collectionsToReset.forEach(key => {
+    try {
+      const result = WorkflowsService.resetRawDataStatus(key);
+      console.log(`✅ 集合 ${key} 重置结果: ${result.message}`);
+    } catch(e) {
+      console.error(`❌ 集合 ${key} 重置失败: ${e.message}`);
+    }
+  });
+
+  console.log("--- 所有状态重置操作已执行完毕 ---");
+  console.log("==================================================");
+}
+
+/**
+ * [全局诊断工具] 扫描整个数据处理链路的健康状况。
+ * 轮询所有原始数据表，检查处理状态，并抽样验证图谱所需字段是否已回写。
+ */
+async function debug_scanDataPipelineHealth() {
+  const startTime = new Date();
+  Logger.log("==============================================================");
+  Logger.log(`--- [全局数据链路健康度扫描] 开始执行 @ ${startTime.toLocaleString()} ---`);
+  Logger.log("==============================================================");
+
+  // 定义我们要扫描的所有原始数据集合及其关键检查字段
+  const PIPELINE_CONFIG = [
+    {
+      key: 'RAW_COMPETITOR_INTELLIGENCE',
+      displayName: '竞争情报',
+      // 图谱构建依赖这些字段
+      fieldsToCheck: ['intelligence_type', 'ai_extracted_products', 'ai_extracted_tech', 'ai_extracted_persons', 'ai_extracted_companies']
+    },
+    {
+      key: 'RAW_INDUSTRY_DYNAMICS',
+      displayName: '产业动态',
+      // 图谱构建依赖这个字段
+      fieldsToCheck: ['related_companies']
+    },
+    {
+      key: 'RAW_ACADEMIC_PAPERS',
+      displayName: '学术论文',
+      // 专家网络图谱可能依赖这些字段
+      fieldsToCheck: ['authors'] 
+    },
+    {
+      key: 'RAW_PATENT_DATA',
+      displayName: '专利数据',
+      // 专家网络图谱可能依赖这些字段
+      fieldsToCheck: ['inventors']
+    }
+    // 可以根据需要添加更多集合
+  ];
+
+  for (const config of PIPELINE_CONFIG) {
+    Logger.log(`\n\n--- 正在扫描集合: [${config.displayName}] ---`);
+    try {
+      const allItems = DataService.getDataAsObjects(config.key);
+
+      if (!allItems || allItems.length === 0) {
+        Logger.log("  -> 结果: 集合为空，无需分析。");
+        continue;
+      }
+
+      const total = allItems.length;
+      const pendingCount = allItems.filter(item => item.processing_status === 'pending').length;
+      const processedCount = allItems.filter(item => item.processing_status === 'processed').length;
+      const failedCount = total - pendingCount - processedCount;
+
+      // 打印状态统计
+      Logger.log(`  -> 状态统计: 共 ${total} 条 | 待处理(pending): ${pendingCount} | 已处理(processed): ${processedCount} | 其他(failed/etc): ${failedCount}`);
+
+      // 如果有已处理的数据，进行深度抽样检查
+      if (processedCount > 0) {
+        Logger.log(`  -> 开始对 ${processedCount} 条“已处理”记录进行抽样检查...`);
+        
+        const processedItems = allItems.filter(item => item.processing_status === 'processed');
+        // 随机抽取最多3条进行检查
+        const samples = processedItems.sort(() => 0.5 - Math.random()).slice(0, 3);
+        
+        let allSamplesOk = true;
+        for (let i = 0; i < samples.length; i++) {
+          const sample = samples[i];
+          Logger.log(`    [样本 ${i+1}/${samples.length}] 检查文档 ID: ${sample.id}`);
+          
+          let sampleOk = true;
+          for (const field of config.fieldsToCheck) {
+            if (sample.hasOwnProperty(field) && sample[field] !== null && (Array.isArray(sample[field]) ? sample[field].length > 0 : true)) {
+              Logger.log(`      [✓] 字段 '${field}' 存在且有值。`);
+            } else {
+              Logger.log(`      [❌] 关键字段 '${field}' 缺失或为空！`);
+              sampleOk = false;
+              allSamplesOk = false;
+            }
+          }
+          if (!sampleOk) {
+             Logger.log(`      -> 样本检查不通过。该文档内容: ${JSON.stringify(sample)}`);
+          }
+        }
+
+        if (allSamplesOk) {
+          Logger.log("  -> ✅ 抽样检查通过: “已处理”记录中包含了图谱所需的关键字段。");
+        } else {
+          Logger.log("  -> ❗️ 抽样检查失败: “已处理”记录中缺失了关键的AI抽取字段！问题锁定在对应的WF7-X工作流的数据回写步骤。");
+        }
+
+      } else {
+        Logger.log("  -> 注意: 没有“已处理”状态的记录可供检查。请先运行对应的WF7-X信号识别工作流。");
+      }
+    } catch (e) {
+      Logger.log(`  -> ❌ 扫描集合 ${config.key} 时发生严重错误: ${e.message}`);
+    }
+  }
+  
+  const endTime = new Date();
+  const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+  Logger.log("\n==============================================================");
+  Logger.log(`--- [全局数据链路健康度扫描] 结束，耗时: ${duration.toFixed(2)} 秒 ---`);
+  Logger.log("==============================================================");
+}

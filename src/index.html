@@ -615,6 +615,9 @@
             <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="expert-network">
               <i class="fa fa-users mr-2"></i>领域专家网络
             </a>
+            <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="benchmark-network">
+              <i class="fa fa-users mr-2"></i>标杆动态图谱
+            </a>
           </nav>
         </div>
 
@@ -689,6 +692,43 @@
                 <p>点击图谱中的节点查看详情。</p>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- ✅ 找到这个容器：tab-content-benchmark-network -->
+        <div id="tab-content-benchmark-network" class="analyzation-tab-content hidden">
+          <!-- 外层容器：保持原有的背景、圆角、阴影和边框，但移除内部冗余的p-4 -->
+          <div class="bg-white rounded-lg shadow-md border">
+
+            <!-- ✅ 核心修改：将筛选器和按钮放在一个 Flex 容器中 -->
+            <!-- 移除原有的 h3 标题。
+                添加 p-4 到这个 flex 容器上，以保留原有的内边距。
+                mb-4 用于和图谱容器之间留出间距。 -->
+            <div class="flex items-center space-x-3 p-4 mb-4">
+                <!-- Label 标签，保持其文本和样式 -->
+                <label class="text-sm font-medium text-gray-700 whitespace-nowrap">选择要分析的标杆企业 (可多选):</label>
+
+                <!-- 自定义下拉框容器 (原“搜索框”) -->
+                <div class="relative flex-grow">
+                    <button id="company-filter-toggle" class="w-full bg-white border border-gray-300 rounded-md shadow-sm px-4 py-2 text-left cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+                        <span id="company-filter-text" class="block truncate text-gray-500">选择要分析的标杆企业...</span>
+                    </button>
+                    <div id="company-filter-options" class="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md border border-gray-200 hidden">
+                        <ul id="company-filter-list" class="max-h-60 overflow-auto py-1">
+                            <li class="px-4 py-2 text-sm text-gray-500">正在加载企业列表...</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 应用筛选按钮 -->
+                <button id="apply-benchmark-filter-btn" class="flex-shrink-0 bg-primary hover:bg-primary-dark text-white font-bold py-2 px-6 rounded-md shadow-sm transition-colors duration-200">
+                    应用筛选并刷新图谱
+                </button>
+            </div>
+
+            <!-- ECharts 图表容器，高度保持不变，但因为上方空间减少，实际图谱可用空间会增加 -->
+            <!-- 移除原有的 p-4，因为外层容器已经有了 -->
+            <div id="benchmark-graph-chart" style="width: 100%; height: 700px;"></div>
           </div>
         </div>
 

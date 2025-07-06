@@ -62,62 +62,140 @@ const WorkflowsService = {
     }
   },
   
+   /**
+   * ✅ 【新增私有辅助函数】通用的AI生成关键词和实体清洗函数
+   * 该函数将负责过滤掉不希望出现在图谱或数据中的“脏”词汇和格式。
+   * @param {Array<string>} termsArray - 待清洗的字符串数组。
+   * @returns {Array<string>} 清洗后的字符串数组。
+   */
+  _cleanAIKeywordsAndEntities: function(termsArray) {
+    if (!Array.isArray(termsArray)) {
+      return []; 
+    }
+
+    const blacklist = new Set([
+      '反中共', '政治宣传', '反渗透', '反间谍', '审查', '宣传', '主权', '国际关系', '国家安全',
+      '政府', '政策', '法律', '军事', '冲突', '危机', '制裁', '贸易战', '地缘政治',
+      '公司', '企业', '行业', '发展', '研究', '技术', '创新', '领域', '新', '产品', '服务',
+      '解决方案', '系统', '平台', '应用', '报告', '分析', '数据', '市场', '全球', '国际',
+      'ai', 'api', 'model', 'llm', 'gpt', 'openai', 
+      'null', 'n/a', 'unknown', 'undefined', 'none', 'none mentioned', 'not applicable', 'no information', 'not provided', 
+      'and', 'or', 'with', 'for', 'in', 'on', 'at', 'to', 'of', 'the', 'a', 'an', 'is', 'are', 'was', 'were',
+    ]);
+
+    const regexBlacklist = [
+      /r\/w\d{6,}/i, 
+      /cihna-dictatorship-\d{1,}/i, 
+      /[^a-z0-9\u4e00-\u9fa5]{3,}/i, 
+    ];
+
+    return termsArray
+      .filter(term => typeof term === 'string' && term.trim() !== '')
+      .map(term => term.trim().toLowerCase())
+      .filter(term => term.length > 1 && term.length < 50)
+      .filter(term => !/^\d+$/.test(term))
+      .filter(term => {
+        if (blacklist.has(term)) return false;
+        for (const regex of regexBlacklist) {
+          if (regex.test(term)) return false;
+        }
+        if (term.includes('http') || term.includes('www') || term.includes('.com') || term.includes('.org') || term.includes('.cn')) {
+          return false;
+        }
+        if (term.includes('error') || term.includes('failed') || term.includes('no result') || term.includes('not found')) {
+          return false;
+        }
+        return true;
+      });
+  },
+
   /**
- * ✅ 重构版: 统一的AI评分调用函数
- */
-_callAIForScoring: function(prompt, logContext) {
-  const { wfName, logMessages } = logContext;
-  try {
-    const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
-    const payload = {
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: 500
-    };
-    
-    const responseJson = DataConnector.fetchExternalData(llmConfig, 'chat_completions', payload);
+   * ✅ 重构版: 统一的AI评分调用函数
+   */
+  _callAIForScoring: function(prompt, logContext) {
+    const { wfName, logMessages } = logContext;
+    try {
+      const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
+      const payload = {
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+        max_tokens: 500
+      };
+      
+      const responseJson = DataConnector.fetchExternalData(llmConfig, 'chat_completions', payload);
 
-    if (responseJson.choices && responseJson.choices.length > 0) {
-      return JSON.parse(responseJson.choices[0].message.content);
-    } else {
-      throw new Error("AI响应格式不正确，缺少choices或message。");
+      if (responseJson.choices && responseJson.choices.length > 0) {
+        let aiAssessment = JSON.parse(responseJson.choices[0].message.content);
+
+        // ✅ 核心修改：对 AI 评估结果中所有可能包含关键词/实体列表的数组字段进行清洗
+        for (const key in aiAssessment) {
+          if (aiAssessment.hasOwnProperty(key)) {
+            if (Array.isArray(aiAssessment[key])) {
+              // 明确列出需要清洗的数组字段
+              if (key === 'key_innovations' || 
+                  key === 'target_industries' || 
+                  key === 'key_claims' || 
+                  key === 'target_applications' ||
+                  key === 'products' || 
+                  key === 'technologies' || 
+                  key === 'persons' || 
+                  key === 'other_companies' ||
+                  key === 'related_companies') { 
+                  
+                  aiAssessment[key] = this._cleanAIKeywordsAndEntities(aiAssessment[key]); // ✅ 调用私有方法
+              }
+            }
+          }
+        }
+
+        return aiAssessment;
+      } else {
+        throw new Error("AI响应格式不正确，缺少choices或message。");
+      }
+    } catch (e) {
+      Logger.log(`[${wfName}] AI评分调用失败: ${e.message}`);
+      if (logMessages) logMessages.push(`警告: AI评估失败 - ${e.message}`);
+      return null;
     }
-  } catch (e) {
-    Logger.log(`[${wfName}] AI评分调用失败: ${e.message}`);
-    if (logMessages) logMessages.push(`警告: AI评估失败 - ${e.message}`);
-    return null;
-  }
-},
+  },
 
- /**
- * ✅ 重构版: 调用 AI 进行文本生成 (摘要、关键词等)
- */
-_callAIForTextGeneration: function(prompt, options = {}) {
-  Logger.log(`[AI-TextGen] Calling AI. Prompt snippet: ${prompt.substring(0, 100)}...`);
-  try {
-    const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
-    const payload = {
-      model: options.model || "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: options.max_tokens || 300,
-      temperature: options.temperature || 0.5
-    };
-    
-    const responseJson = DataConnector.fetchExternalData(llmConfig, 'chat_completions', payload);
+  /**
+   * ✅ 重构版: 调用 AI 进行文本生成 (摘要、关键词等)
+   */
+  _callAIForTextGeneration: function(prompt, options = {}) {
+    Logger.log(`[AI-TextGen] Calling AI. Prompt snippet: ${prompt.substring(0, 100)}...`);
+    try {
+      const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
+      const payload = {
+        model: options.model || "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: options.max_tokens || 300,
+        temperature: options.temperature || 0.5
+      };
+      
+      const responseJson = DataConnector.fetchExternalData(llmConfig, 'chat_completions', payload);
 
-    if (responseJson.choices && responseJson.choices.length > 0) {
-      return responseJson.choices[0].message.content.trim();
-    } else {
-      Logger.log(`[AI-TextGen] API Error: ${responseJson.error || JSON.stringify(responseJson)}`);
-      return `AI生成失败：API错误。`;
+      if (responseJson.choices && responseJson.choices.length > 0) {
+        let generatedText = responseJson.choices[0].message.content.trim();
+
+        // ✅ 如果 prompt 提示这是关键词抽取，则进行清洗
+        if (prompt.includes("Extract the") && prompt.includes("keywords")) {
+            let keywordsArray = generatedText.split(',').map(s => s.trim()).filter(Boolean);
+            keywordsArray = this._cleanAIKeywordsAndEntities(keywordsArray); // ✅ 调用私有方法
+            return keywordsArray.join(', ');
+        }
+        return generatedText;
+      } else {
+        Logger.log(`[AI-TextGen] API Error: ${responseJson.error || JSON.stringify(responseJson)}`);
+        return `AI生成失败：API错误。`;
+      }
+    } catch (e) {
+      Logger.log(`[AI-TextGen] API调用失败: ${e.message}\\n${e.stack}`);
+      return `AI生成失败：连接或解析错误 (${e.message})。`;
     }
-  } catch (e) {
-    Logger.log(`[AI-TextGen] API调用失败: ${e.message}\n${e.stack}`);
-    return `AI生成失败：连接或解析错误 (${e.message})。`;
-  }
-},
+  },
 
   /**
  * ✅ 重构版: 调用 AI 生成文本向量 (Embedding)
@@ -208,8 +286,8 @@ _callAIForEmbedding: function(text, options = {}) {
                 existingHashes.add(duplicateHash);
 
                 const textForAI = `标题: ${paper.title}\n摘要: ${paper.summary || ''}`;
-                const ai_summary = this._callAIForTextGeneration(`请为以下论文生成一个不超过100字的精炼摘要。\n\n${textForAI}`);
-                const ai_keywords = this._callAIForTextGeneration(`请为以下论文提炼3-5个最核心的技术关键词（以逗号分隔）。\n\n${textForAI}`);
+                const ai_summary = this._callAIForTextGeneration(`Generate a concise summary of no more than 100 words for the following academic paper. Output in English.\n\n${textForAI}`);
+                const ai_keywords = this._callAIForTextGeneration(`Extract the 3-5 most critical technical keywords from the following academic paper, separated by commas. Output in English.\n\n${textForAI}`);
                 const embeddingVector = this._callAIForEmbedding(`${paper.title} ${ai_summary} ${ai_keywords}`);
 
                 allNewPaperObjects.push({
@@ -254,7 +332,7 @@ _callAIForEmbedding: function(text, options = {}) {
     if (activeTechs.length === 0) {
       const msg = "没有需要监控专利的活跃技术项。";
       this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-      return { success: true, message: msg };
+      return { success: true, message: msg, log: logMessages.join('\n') };
     }
     
     const existingHashes = new Set((DataService.getDataAsObjects('RAW_PATENT_DATA') || []).map(item => item.duplicate_check_hash).filter(Boolean));
@@ -262,21 +340,17 @@ _callAIForEmbedding: function(text, options = {}) {
     if (patentSources.length === 0) throw new Error("系统中没有配置任何活跃的专利数据源。");
     logMessages.push(`发现 ${activeTechs.length} 个技术项 和 ${patentSources.length} 个专利源需要处理。`);
 
-    // ✅ =================================================================
-    // ✅ 核心修正：引入批处理机制
-    // ✅ =================================================================
-    const BATCH_SIZE = 20; // 定义批处理大小，每次最多写入20条记录
-    let patentBatch = []; // 用于暂存待写入的对象
+    const BATCH_SIZE = 20;
+    let patentBatch = [];
 
     const writeBatchToFirestore = () => {
         if (patentBatch.length > 0) {
             logMessages.push(`  -> 正在写入一批 ${patentBatch.length} 条专利数据到 Firestore...`);
             DataService.batchUpsert('RAW_PATENT_DATA', patentBatch, 'raw_id');
             logMessages.push(`  -> 写入成功。`);
-            patentBatch = []; // 清空批次，准备下一批
+            patentBatch = [];
         }
     };
-    // =================================================================
 
     for (const tech of activeTechs) {
       const searchTerms = (tech.patent_search_terms || tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
@@ -298,25 +372,35 @@ _callAIForEmbedding: function(text, options = {}) {
               if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
               existingHashes.add(duplicateHash);
 
-              const textForAI = `专利标题: ${patent.title}\n摘要: ${patent.summary || ''}`;
-              const ai_summary = this._callAIForTextGeneration(`...`); // 省略prompt以保持简洁
-              const ai_keywords = this._callAIForTextGeneration(`...`);
+              // ✅ 使用映射后的标准字段名
+              const textForAI = `专利标题: ${patent.title}\n摘要: ${patent.summary || ''}\n发明人: ${patent.authors || ''}`;
+              const ai_summary = this._callAIForTextGeneration(`Generate a concise summary of no more than 80 words for the following patent. Output in English.\n\n${textForAI}`);
+              const ai_keywords = this._callAIForTextGeneration(`Extract the 3-5 most critical technical keywords from the following patent, separated by commas. Output in English.\n\n${textForAI}`);
               const embeddingVector = this._callAIForEmbedding(`${patent.title} ${ai_summary} ${ai_keywords}`);
 
-              // ✅ 不再直接push到大数组，而是push到批处理数组
               patentBatch.push({
-                  raw_id: `RAW_PT_${Utilities.getUuid()}`, id: `RAW_PT_${Utilities.getUuid()}`,
-                  patent_number: patent.id, title: patent.title, abstract: patent.summary, 
-                  inventors: patent.authors, application_date: new Date(patent.publication_date),
-                  source_url: patent.url, source_platform: sourceConfig.display_name, 
-                  source_type: 'patent_data', tech_keywords: tech.tech_keywords, 
-                  ai_summary, ai_keywords, embedding: embeddingVector, processing_status: 'pending', 
-                  workflow_execution_id: executionId, created_timestamp: new Date(), 
-                  last_update_timestamp: new Date(), duplicate_check_hash: duplicateHash
+                  raw_id: `RAW_PT_${Utilities.getUuid()}`,
+                  id: `RAW_PT_${Utilities.getUuid()}`,
+                  patent_number: patent.id,
+                  title: patent.title, 
+                  abstract: patent.summary, 
+                  inventors: patent.authors, // ✅ 确保使用映射后的 'authors'
+                  application_date: patent.publication_date ? new Date(patent.publication_date) : null,
+                  source_url: patent.url, 
+                  source_platform: sourceConfig.display_name, 
+                  source_type: 'patent_data',
+                  tech_keywords: tech.tech_keywords, 
+                  ai_summary, 
+                  ai_keywords, 
+                  embedding: embeddingVector, 
+                  processing_status: 'pending', 
+                  workflow_execution_id: executionId, 
+                  created_timestamp: new Date(), 
+                  last_update_timestamp: new Date(), 
+                  duplicate_check_hash: duplicateHash
               });
               successCount++;
 
-              // ✅ 如果批处理数组满了，就立即写入
               if (patentBatch.length >= BATCH_SIZE) {
                 writeBatchToFirestore();
               }
@@ -326,7 +410,6 @@ _callAIForEmbedding: function(text, options = {}) {
       }
     }
     
-    // ✅ 在所有循环结束后，写入最后一批不足BATCH_SIZE的数据
     writeBatchToFirestore();
 
     const finalMessage = `处理 ${processedCount} 个技术项，发现 ${successCount} 篇新专利，跳过 ${duplicateCount} 条重复。`;
@@ -383,8 +466,8 @@ _callAIForEmbedding: function(text, options = {}) {
                           existingHashes.add(duplicateHash);
 
                           const textForAI = `项目名称: ${project.title}\n描述: ${project.summary || ''}`;
-                          const ai_summary = this._callAIForTextGeneration(`请为以下开源项目生成一个不超过80字的精炼摘要。\n\n${textForAI}`);
-                          const ai_keywords = this._callAIForTextGeneration(`请为以下开源项目提炼3-5个最核心的技术关键词（以逗号分隔）。\n\n${textForAI}`);
+                          const ai_summary = this._callAIForTextGeneration(`Generate a concise summary of no more than 80 words for the following open source project. Output in English.\n\n${textForAI}`);
+                          const ai_keywords = this._callAIForTextGeneration(`Extract the 3-5 most critical technical keywords from the following open source project, separated by commas. Output in English.\n\n${textForAI}`);
                           const embeddingVector = this._callAIForEmbedding(`${project.title} ${ai_summary} ${ai_keywords}`);
 
                           allNewProjects.push({
@@ -463,8 +546,8 @@ _callAIForEmbedding: function(text, options = {}) {
               existingHashes.add(duplicateHash);
 
               const textForAI = `标题: ${article.title}\n摘要: ${article.summary || ''}`;
-              const ai_summary = this._callAIForTextGeneration(`请为以下新闻生成一个不超过60字的精炼摘要。\n\n${textForAI}`);
-              const ai_keywords = this._callAIForTextGeneration(`请为以下新闻提炼3-5个最核心的关键词（以逗号分隔）。\n\n${textForAI}`);
+              const ai_summary = this._callAIForTextGeneration(`Generate a concise summary of no more than 60 words for the following news article. Output in English.\n\n${textForAI}`);
+              const ai_keywords = this._callAIForTextGeneration(`Extract the 3-5 most critical keywords from the following news article, separated by commas. Output in English.\n\n${textForAI}`);
               const embeddingVector = this._callAIForEmbedding(`${article.title} ${ai_summary} ${ai_keywords}`);
 
               allNewArticles.push({
@@ -535,8 +618,8 @@ _callAIForEmbedding: function(text, options = {}) {
                         existingHashes.add(duplicateHash);
 
                         const textForAI = `标题: ${news.title}\n摘要: ${news.summary || ''}`;
-                        const ai_summary = this._callAIForTextGeneration(`请为以下产业动态新闻生成一个不超过80字的精炼摘要。\n\n${textForAI}`);
-                        const ai_keywords = this._callAIForTextGeneration(`请为以下产业动态新闻提炼3-5个最核心的关键词（以逗号分隔）。\n\n${textForAI}`);
+                        const ai_summary = this._callAIForTextGeneration(`Generate a concise summary of no more than 80 words for the following industry news. Output in English.\n\n${textForAI}`);
+                        const ai_keywords = this._callAIForTextGeneration(`Extract the 3-5 most critical keywords from the following industry news, separated by commas. Output in English.\n\n${textForAI}`);
                         const embeddingVector = this._callAIForEmbedding(`${news.title} ${ai_summary} ${ai_keywords}`);
 
                         allNewDynamics.push({
@@ -607,8 +690,8 @@ _callAIForEmbedding: function(text, options = {}) {
                         existingHashes.add(duplicateHash);
 
                         const textForAI = `标题: ${news.title}\n摘要: ${news.summary || ''}`;
-                        const ai_summary = this._callAIForTextGeneration(`请为以下关于竞争对手的新闻情报生成一个不超过80字的精炼摘要。\n\n${textForAI}`);
-                        const ai_keywords = this._callAIForTextGeneration(`请为以下关于竞争对手的新闻情报提炼3-5个最核心的关键词（以逗号分隔）。\n\n${textForAI}`);
+                        const ai_summary = this._callAIForTextGeneration(`Generate a concise summary of no more than 80 words for the following competitor intelligence. Output in English.\n\n${textForAI}`);
+                        const ai_keywords = this._callAIForTextGeneration(`Extract the 3-5 most critical keywords from the following competitor intelligence, separated by commas. Output in English.\n\n${textForAI}`);
                         const embeddingVector = this._callAIForEmbedding(`${news.title} ${ai_summary} ${ai_keywords}`);
 
                         allNewIntel.push({
@@ -1271,6 +1354,7 @@ _callAIForEmbedding: function(text, options = {}) {
         processedCount++;
         logMessages.push(`正在处理产业动态: ${dynamic.event_title.substring(0, 50)}...`);
 
+        // ✅ 核心修改：在你的Prompt基础上，增加一项任务
         const prompt = `
           请作为一名资深的市场与技术战略分析师，深入分析以下产业动态信息，并严格以JSON格式返回。
           
@@ -1281,34 +1365,35 @@ _callAIForEmbedding: function(text, options = {}) {
           AI摘要: ${dynamic.ai_summary || ''}
           AI关键词: ${dynamic.ai_keywords || ''}
 
-          你需要完成以下任务:
-          1. 评估此动态对相关技术领域的潜在商业价值 (commercial_value_score)，评分1-10。
-          2. 评估此动态所揭示的技术突破性或应用创新性 (breakthrough_score)，评分1-10。
-          3. 评估此动态对我们可能产生的战略机遇或威胁 (strategic_impact_score)，评分1-10。
-          4. 总结其核心的价值主张 (value_proposition)，描述它解决了什么问题或带来了什么新机会。
-          5. 列出1-3个关键创新点或新闻要点 (key_innovations)，以数组形式表示。
-          6. 预测其可能影响的目标行业 (target_industries)，以数组形式表示。
+          你需要完成以下所有任务:
+          1. 评估此动态的商业价值 (commercial_value_score)，评分1-10。
+          2. 评估此动态的技术突破性 (breakthrough_score)，评分1-10。
+          3. 评估此动态的战略影响 (strategic_impact_score)，评分1-10。
+          4. 总结其核心价值主张 (value_proposition)。
+          5. 列出1-3个关键创新点或新闻要点 (key_innovations)，作为字符串数组。
+          6. 预测其可能影响的目标行业 (target_industries)，作为字符串数组。
+          7. 从文本中抽取出所有提及的【公司或机构名】，放在 "related_companies" 数组中。
 
           返回的 JSON 格式必须是:
           {
-            "commercial_value_score": <商业价值评分>,
-            "breakthrough_score": <技术突破性评分>,
-            "strategic_impact_score": <战略影响评分>,
+            "commercial_value_score": <评分>,
+            "breakthrough_score": <评分>,
+            "strategic_impact_score": <评分>,
             "value_proposition": "<价值主张的详细描述>",
             "key_innovations": ["关键点1", "关键点2"],
-            "target_industries": ["行业1", "行业2"]
+            "target_industries": ["行业1", "行业2"],
+            "related_companies": ["公司A", "公司B"]
           }
         `;
 
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
-
-        // ✅ 修正：nowTimestamp 和 intelligenceIdToLink 的声明提升到 for 循环内部，if 块外部
         const nowTimestamp = new Date(); 
         let intelligenceIdToLink = ''; 
 
         if (!aiAssessment || typeof aiAssessment.commercial_value_score === 'undefined') {
           logMessages.push(`  -> AI评估失败，跳过此动态。`);
           errorCount++;
+          // 你的失败处理逻辑保持不变
           DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, {
             processing_status: 'failed_ai_assessment',
             linked_intelligence_id: '',
@@ -1323,18 +1408,15 @@ _callAIForEmbedding: function(text, options = {}) {
           continue;
         }
 
+        // 你的信号强度计算和线索生成逻辑，完全保持不变
         const commercialValue = parseFloat(aiAssessment.commercial_value_score) || 0;
         const breakthroughScore = parseFloat(aiAssessment.breakthrough_score) || 0;
         const strategicImpact = parseFloat(aiAssessment.strategic_impact_score) || 0;
-        
         const signalStrength = (commercialValue * 0.4) + (strategicImpact * 0.4) + (breakthroughScore * 0.2);
-        
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-        
         if (signalStrength >= 7.5) {
           newSignalsCount++;
           intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
-          
           const intelligenceObject = {
             id: intelligenceIdToLink,
             intelligence_id: intelligenceIdToLink,
@@ -1361,19 +1443,15 @@ _callAIForEmbedding: function(text, options = {}) {
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Industry_Dynamics',
             source_record_id: dynamic.id,
-            evidence_chain: [{
-                id: dynamic.id,
-                title: dynamic.event_title,
-                source_type: 'industry_dynamics',
-                source_url: dynamic.source_url,
-                publication_date: dynamic.publication_date
-            }]
+            evidence_chain: [{ id: dynamic.id, title: dynamic.event_title, source_type: 'industry_dynamics', source_url: dynamic.source_url, publication_date: dynamic.publication_date }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
             logMessages.push(`  -> 信号强度 (${signalStrength.toFixed(2)}) 未达阈值，跳过。`);
         }
+        
+        // ✅ 核心修改：在回写数据时，增加我们为图谱新抽取的 `related_companies` 字段
         DataService.updateObject('RAW_INDUSTRY_DYNAMICS', dynamic.id, {
             processing_status: 'processed',
             linked_intelligence_id: intelligenceIdToLink,
@@ -1383,6 +1461,8 @@ _callAIForEmbedding: function(text, options = {}) {
             value_proposition_ai: aiAssessment.value_proposition || '',
             key_innovations_ai: (aiAssessment.key_innovations || []).join(', '),
             target_industries_ai: (aiAssessment.target_industries || []).join(', '),
+            // ✅ 在这里添加新字段
+            related_companies: aiAssessment.related_companies || [],
             updated_timestamp: nowTimestamp
           });
       }
@@ -1396,7 +1476,7 @@ _callAIForEmbedding: function(text, options = {}) {
       this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
-  },
+},
 
   runWf7_6Benchmark: function() {
     const wfName = 'WF7-6: 竞争对手信号识别';
@@ -1422,8 +1502,9 @@ _callAIForEmbedding: function(text, options = {}) {
         processedCount++;
         logMessages.push(`正在处理竞情: ${intel.intelligence_title.substring(0, 50)}...`);
 
+        // ✅ 核心修改：在你的Prompt基础上，增加实体抽取要求
         const prompt = `
-          请作为一名资深的行业与竞争战略分析师，深入分析以下关于竞争对手的新闻情报，并严格以JSON格式返回。
+          请作为一名资深的行业与竞争战略分析师，深入分析以下关于竞争对手“${intel.competitor_name}”的新闻情报，并严格以JSON格式返回。
           
           新闻标题: ${intel.intelligence_title}
           新闻摘要: ${intel.intelligence_summary}
@@ -1431,32 +1512,37 @@ _callAIForEmbedding: function(text, options = {}) {
           AI摘要: ${intel.ai_summary || ''}
           AI关键词: ${intel.ai_keywords || ''}
 
-          你需要完成以下任务:
-          1. 评估此情报对我们的威胁等级 (threat_level_score)，评分1-10。
-          2. 评估此情报对我们业务的潜在影响 (business_impact_score)，评分1-10。
-          3. 总结此情报的核心价值主张 (value_proposition)，即它揭示了对手的何种战略意图、技术突破或市场动向。
-          4. 提炼出这项情报中涉及的关键技术关键词 (tech_keywords)，以数组形式表示。
-          5. 将此情报分类为以下类型之一：'Product Release', 'Tech Innovation', 'Talent Flow', 'Financial Report', 'Strategic Partnership', 'General News'。将结果放在 intelligence_type 字段。
+          你需要完成以下所有任务:
+          1.  将此情报分类为以下最相关的类型之一：'Product Release', 'Tech Innovation', 'Talent Flow', 'Financial Report', 'Strategic Partnership', 'M&A', 'General News'。将结果放在 "intelligence_type" 字段。
+          2.  评估此情报对我们的威胁等级 (threat_level_score)，评分1-10。
+          3.  评估此情报对我们业务的潜在影响 (business_impact_score)，评分1-10。
+          4.  总结此情报的核心价值主张 (value_proposition)。
+          5.  从文本中抽取出所有提及的【产品或服务名】，放在 "products" 数组中。
+          6.  从文本中抽取出所有提及的【关键技术关键词】，放在 "technologies" 数组中。
+          7.  从文本中抽取出所有提及的【人名】，放在 "persons" 数组中。
+          8.  从文本中抽取出除“${intel.competitor_name}”以外的【其他公司或机构名】，放在 "other_companies" 数组中。
 
           返回的 JSON 格式必须是:
           {
+            "intelligence_type": "<情报分类>",
             "threat_level_score": <威胁等级评分>,
             "business_impact_score": <业务影响评分>,
             "value_proposition": "<对情报核心价值的精炼总结>",
-            "tech_keywords": ["关键词1", "关键词2"],
-            "intelligence_type": "<情报分类>"
+            "technologies": ["技术A", "技术B"],
+            "products": ["产品A", "产品B"],
+            "persons": ["人名A"],
+            "other_companies": ["公司A"]
           }
         `;
 
         const aiAssessment = this._callAIForScoring(prompt, { wfName, logMessages });
-
-        // ✅ 修正：nowTimestamp 和 intelligenceIdToLink 的声明提升到 for 循环内部，if 块外部
         const nowTimestamp = new Date(); 
         let intelligenceIdToLink = ''; 
 
         if (!aiAssessment || typeof aiAssessment.threat_level_score === 'undefined') {
           logMessages.push(`  -> AI评估失败，跳过此情报。`);
           errorCount++;
+          // 你的失败处理逻辑保持不变
           DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, {
               processing_status: 'failed_ai_assessment',
               linked_intelligence_id: '',
@@ -1470,36 +1556,33 @@ _callAIForEmbedding: function(text, options = {}) {
           continue;
         }
 
+        // 你的信号强度计算和线索生成逻辑，完全保持不变
         const threatLevel = parseFloat(aiAssessment.threat_level_score) || 0;
         const businessImpact = parseFloat(aiAssessment.business_impact_score) || 0;
-        
         const signalStrength = (threatLevel * 0.5) + (businessImpact * 0.5);
-        
         logMessages.push(`  -> 信号强度计算完成: ${signalStrength.toFixed(2)}`);
-        
         if (signalStrength >= 7.0) {
           newSignalsCount++;
           intelligenceIdToLink = `TI${Utilities.formatDate(nowTimestamp, 'UTC', "yyyyMMddHHmmssSSS")}${Math.floor(Math.random()*100)}`;
-          
           const intelligenceObject = {
             id: intelligenceIdToLink,
             intelligence_id: intelligenceIdToLink,
-            tech_id: '', // tech_id 留空，因为这是竞情，不直接关联技术
-            tech_keywords: (aiAssessment.tech_keywords || []).join(', '),
+            tech_id: '',
+            tech_keywords: (aiAssessment.technologies || []).join(', '),
             title: intel.intelligence_title,
             content_summary: intel.ai_summary || String(intel.intelligence_summary).substring(0, 500),
             trigger_source: 'competitor_intelligence',
             source_url: intel.source_url,
             trigger_workflow: wfName,
             signal_strength: parseFloat(signalStrength.toFixed(2)),
-            breakthrough_score: 0, // 设为0，或根据需要由AI评估
+            breakthrough_score: 0,
             commercial_value_score: parseFloat(businessImpact.toFixed(2)),
             confidence_level: 'medium',
             priority: 'high',
             processing_status: 'signal_identified',
             breakthrough_reason: `威胁等级评分: ${threatLevel.toFixed(1)}.`,
             value_proposition: aiAssessment.value_proposition || "N/A",
-            key_innovations: (aiAssessment.key_innovations || ["N/A"]).join(', '), // key_innovations 可能不存在，提供默认值
+            key_innovations: (aiAssessment.key_innovations || ["N/A"]).join(', '),
             target_industries: aiAssessment.target_industries ? (aiAssessment.target_industries || []).join(', ') : '',
             version: 1,
             is_deleted: 0,
@@ -1507,27 +1590,28 @@ _callAIForEmbedding: function(text, options = {}) {
             updated_timestamp: nowTimestamp,
             source_table: 'Raw_Competitor_Intelligence',
             source_record_id: intel.id,
-            evidence_chain: [{
-                id: intel.id,
-                title: intel.intelligence_title,
-                source_type: 'competitor_intelligence',
-                source_url: intel.source_url,
-                publication_date: intel.publication_date
-            }]
+            evidence_chain: [{ id: intel.id, title: intel.intelligence_title, source_type: 'competitor_intelligence', source_url: intel.source_url, publication_date: intel.publication_date }]
           };
           DataService.batchUpsert('TECH_INSIGHTS_MASTER', [intelligenceObject], 'id');
           logMessages.push(`  -> 高价值信号！已生成线索ID: ${intelligenceIdToLink}`);
         } else {
             logMessages.push(`  -> 低价值信号 (强度: ${signalStrength.toFixed(2)})，已归档。`);
         }
+        
+        // ✅ 核心修改：在回写数据时，增加我们为图谱新抽取的实体字段
         DataService.updateObject('RAW_COMPETITOR_INTELLIGENCE', intel.id, {
             processing_status: 'processed',
             linked_intelligence_id: intelligenceIdToLink,
             intelligence_type: aiAssessment.intelligence_type || 'General News',
-            threat_level_score: parseFloat(aiAssessment.threat_level_score) || 0,
-            business_impact_score: parseFloat(aiAssessment.business_impact_score) || 0,
+            threat_level_score: threatLevel,
+            business_impact_score: businessImpact,
             value_proposition_ai: aiAssessment.value_proposition || '',
-            tech_keywords_ai: (aiAssessment.tech_keywords || []).join(', '),
+            tech_keywords_ai: (aiAssessment.technologies || []).join(', '),
+            // ✅ 在这里添加为图谱准备的新字段
+            ai_extracted_products: aiAssessment.products || [], 
+            ai_extracted_tech: aiAssessment.technologies || [],
+            ai_extracted_persons: aiAssessment.persons || [],
+            ai_extracted_companies: aiAssessment.other_companies || [],
             updated_timestamp: nowTimestamp
         });
       }
@@ -1541,7 +1625,7 @@ _callAIForEmbedding: function(text, options = {}) {
       this._logExecution(wfName, executionId, startTime, 'failed', processedCount, newSignalsCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
-  },
+},
 
   // ====================================================================================================================
   //  第三层：统一证据验证 (WF8)
@@ -1794,6 +1878,64 @@ runWf_AuthorGraphBuilder: function() {
         this._logExecution(wfName, executionId, startTime, 'failed', processedDocsCount, 0, 1, errorMessage);
         return { success: false, message: errorMessage, log: logMessages.join('\n') };
     }
+  },
+  
+  /**
+   * [DEBUG TOOL] 重置指定原始数据集合的处理状态。
+   * 将所有记录的 processing_status 重置为 'pending'，以便重新处理。
+   * @param {string} collectionKey - 在 CONFIG 中定义的原始数据集合的键名。
+   */
+  resetRawDataStatus: function(collectionKey) {
+      Logger.log(`--- [DEBUG] 开始重置集合 '${collectionKey}' 的处理状态... ---`);
+      try {
+          if (!collectionKey.startsWith('RAW_')) {
+              throw new Error("为了安全，此函数只能用于重置 'RAW_' 开头的集合。");
+          }
+
+          const allItems = DataService.getDataAsObjects(collectionKey);
+          if (!allItems || allItems.length === 0) {
+              Logger.log("集合中没有数据，无需重置。");
+              return { success: true, message: `集合 '${collectionKey}' 为空，无需操作。` };
+          }
+
+          const itemsToReset = allItems.filter(item => item.processing_status !== 'pending');
+          if (itemsToReset.length === 0) {
+              Logger.log("所有记录都已是 'pending' 状态，无需重置。");
+              return { success: true, message: `所有记录都已是 'pending' 状态。` };
+          }
+          
+          Logger.log(`发现 ${itemsToReset.length} 条记录需要重置状态...`);
+
+          // Firestore 的 batchWrite 最多500个操作，我们需要分批
+          const BATCH_SIZE = 400;
+          for (let i = 0; i < itemsToReset.length; i += BATCH_SIZE) {
+              const batch = itemsToReset.slice(i, i + BATCH_SIZE);
+              const updates = batch.map(item => {
+                  return DataService.updateObject(collectionKey, item.id, { 
+                      processing_status: 'pending',
+                      // 清空之前可能存在的AI字段，以进行全新的处理
+                      ai_extracted_products: null,
+                      ai_extracted_tech: null,
+                      ai_extracted_persons: null,
+                      ai_extracted_companies: null,
+                      related_companies: null,
+                      intelligence_type: null
+                  });
+              });
+              // 由于 updateObject 是单个操作，我们这里用 Promise.all 来并行执行
+              // 注意：这可能会很快达到执行时间限制，但对于调试是可行的
+              Promise.all(updates);
+              Logger.log(`已提交 ${batch.length} 条记录的状态重置请求...`);
+          }
+
+          const message = `成功将 ${itemsToReset.length} 条记录的状态重置为 'pending'。`;
+          Logger.log(`--- [DEBUG] 重置完成 ---`);
+          return { success: true, message: message };
+
+      } catch (e) {
+          Logger.log(`!!! [DEBUG] 重置状态时发生错误: ${e.message}`);
+          return { success: false, message: `重置失败: ${e.message}` };
+      }
   }
 };
 

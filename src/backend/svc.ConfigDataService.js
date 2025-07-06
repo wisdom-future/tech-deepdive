@@ -110,6 +110,23 @@ const ConfigDataService = {
     }
   },
 
+  getIndustryBenchmarkDetails: function() {
+    try {
+      const rawData = DataService.getDataAsObjects('COMPETITOR_REGISTRY');
+      if (!rawData) return [];
+
+      // 直接返回从数据库获取的、包含所有字段的对象数组
+      // 前端将根据需要选择字段进行显示
+      return rawData;
+
+    } catch (e) {
+      const errorMessage = `获取业界标杆详情时发生服务器错误: ${e.message}`;
+      Logger.log(errorMessage + `\n${e.stack}`);
+      // 抛出一个错误，让前端的 .catch() 能够捕获到
+      throw new Error(errorMessage);
+    }
+  },
+
   /**
    * ✅ 修正版：返回英文键名，并正确抛出错误
    */

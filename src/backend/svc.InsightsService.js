@@ -549,5 +549,289 @@ const InsightsService = {
       Logger.log(`CRITICAL ERROR: AI生成专家简介 API调用失败: ${e.message}\\n${e.stack}`);
       return `AI简介生成失败：连接或解析错误 (${e.message})。`;
     }
+  },
+
+  /**
+   * ✅ 新增：AI辅助的实体抽取函数
+   * @param {string} text - 要分析的文本 (标题 + 摘要)
+   * @param {string} primaryCompanyName - 主要的公司名，用于从抽取结果中排除
+   * @returns {Promise<Object>} - 返回一个包含抽取实体的对象
+   */
+  _extractEntitiesFromText: async function(text, primaryCompanyName) {
+      const prompt = `
+          你是一名情报分析师。请从以下文本中，抽取出所有提及的【产品/服务名】、【关键技术关键词】、【人名】和【其他公司/机构名】。
+          - 【其他公司/机构名】不要包含“${primaryCompanyName}”。
+          - 严格按照 {"products": [...], "technologies": [...], "persons": [...], "other_companies": [...]} 的JSON格式返回。
+          - 如果某类实体不存在，则返回空数组。
+
+          文本如下:
+          ---
+          ${text}
+          ---
+      `;
+      // 使用一个简化的logContext
+      const aiResult = await this._callAIForScoring(prompt, { wfName: 'GraphBuilder' });
+      return aiResult || { products: [], technologies: [], persons: [], other_companies: [] };
+  },
+
+  getBenchmarkCompanyList: function() {
+    try {
+      Logger.log("--- [InsightsService] 开始获取标杆企业列表 ---");
+      const allCompetitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY') || [];
+      const activeCompanyNames = allCompetitors
+        .filter(c => c.monitoring_status === 'active')
+        .map(c => c.company_name)
+        .sort();
+      Logger.log(`--- [InsightsService] 成功获取 ${activeCompanyNames.length} 个活跃标杆企业 ---`);
+      return activeCompanyNames;
+    } catch (e) {
+      Logger.log(`!!! 在 getBenchmarkCompanyList 中发生严重错误: ${e.message}\\n${e.stack}`);
+      return []; 
+    }
+  },
+  /**
+   * ✅ 核心函数：获取标杆图谱数据
+   * 融合了竞争情报和产业动态（会议）两大来源
+   */
+     getBenchmarkGraphData: function(targetCompetitors = null) {
+    // 调试日志：确保参数被正确接收，并处理 null/非数组情况
+    const logCompetitors = Array.isArray(targetCompetitors) && targetCompetitors.length > 0
+                           ? targetCompetitors.join(', ')
+                           : '所有标杆';
+    Logger.log(`--- [标杆图谱 V4] 开始构建图谱数据。筛选目标: ${logCompetitors} ---`);
+
+    // 1. 数据获取 (加载所有相关数据)
+    // 确保 DataService.getDataAsObjects 返回的是数组，如果为空则为 []
+    let competitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY') || [];
+    const competitorIntel = DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE') || [];
+    const industryDynamics = DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS') || [];
+    const patentData = DataService.getDataAsObjects('RAW_PATENT_DATA') || [];
+    const openSourceData = DataService.getDataAsObjects('RAW_OPENSOURCE_DATA') || [];
+    const techNews = DataService.getDataAsObjects('RAW_TECH_NEWS') || [];
+
+    // 初始化用于构建图谱的 Map
+    const nodes = new Map(); // 存储节点，键为节点ID
+    const edges = new Map(); // 存储边，键为唯一的边Key (source-target-label)
+
+    // --- 辅助函数：添加节点和边到 Map 中 ---
+    const addNode = (id, name, type, data = {}) => {
+        if (!id || !name) {
+            // Logger.log(`DEBUG: 尝试添加无效节点: ID=${id}, Name=${name}`);
+            return;
+        }
+        const cleanId = String(id).trim(); // 清理ID的空白符
+        if (!nodes.has(cleanId)) {
+            // 如果节点不存在，则创建新节点，并初始化其提及次数为1
+            nodes.set(cleanId, { id: cleanId, name: String(name).trim(), category: type, value: 0, ...data });
+        }
+        // 每次提及，节点的权重（value）增加1
+        nodes.get(cleanId).value += 1;
+    };
+
+    const addEdge = (source, target, label, weight = 1) => {
+        if (!source || !target || source === target) {
+            // Logger.log(`DEBUG: 尝试添加无效边: Source=${source}, Target=${target}`);
+            return; // 忽略无效的边或自环
+        }
+        // 为了确保边的唯一性，我们创建一个规范化的 edgeKey
+        // 例如：'公司A-技术B-提及' 或 '人物C-公司D-聘用'
+        // 对于无向边，确保 source 和 target 排序一致，例如 'A-B' 而不是 'B-A'
+        const normalizedSource = String(source).trim();
+        const normalizedTarget = String(target).trim();
+        const edgeKey = [normalizedSource, normalizedTarget].sort().join('-') + `-${label}`;
+
+        if (!edges.has(edgeKey)) {
+            // 如果边不存在，则创建新边
+            edges.set(edgeKey, { source: normalizedSource, target: normalizedTarget, label: { show: true, formatter: label }, value: 0 });
+        }
+        // 每次共现，边的权重（value）增加传入的 weight
+        edges.get(edgeKey).value += weight;
+    };
+    
+    // 2. 根据筛选条件，确定核心标杆企业
+    // 如果 targetCompetitors 存在且非空，则只处理这些企业
+    if (Array.isArray(targetCompetitors) && targetCompetitors.length > 0) {
+        const targetSet = new Set(targetCompetitors.map(c => c.toLowerCase())); // 将目标企业名转为小写集合
+        competitors = competitors.filter(c => targetSet.has(c.company_name.toLowerCase()));
+        Logger.log(`DEBUG: 筛选后，匹配到 ${competitors.length} 个标杆企业。`);
+    } else {
+        Logger.log(`DEBUG: 未指定筛选企业，处理所有 ${competitors.length} 个标杆企业。`);
+    }
+
+    // 构建一个活跃的标杆企业名称集合，用于快速查找
+    const competitorNameSet = new Set();
+    competitors.forEach(c => {
+        if(c.monitoring_status === 'active') { // 只考虑活跃的标杆企业
+            addNode(c.company_name, c.company_name, '标杆企业'); // 将标杆企业作为节点添加
+            competitorNameSet.add(c.company_name.toLowerCase()); // 记录其小写名称
+        }
+    });
+    
+    // 如果经过筛选后，没有找到任何活跃的标杆企业，则返回空图谱
+    if (competitorNameSet.size === 0) {
+        Logger.log("没有找到符合条件的活跃标杆企业，返回空图谱。");
+        return { nodes: [], edges: [] };
+    }
+
+    // --- 3. 遍历所有数据源，构建与这些核心标杆相关的图谱 ---
+    
+    // 3.1 处理竞争情报 (RAW_COMPETITOR_INTELLIGENCE)
+    // 从竞争情报中提取产品、技术、人物、其他公司等信息，并与标杆企业建立关系
+    competitorIntel.forEach(intel => {
+        const companyName = intel.competitor_name;
+        // 只有当情报关联的公司是我们要监控的标杆企业时才处理
+        if (!companyName || !competitorNameSet.has(String(companyName).toLowerCase())) return;
+
+        const relationType = intel.intelligence_type || '关联'; // 情报类型作为关系标签
+        
+        // 提取并添加产品/服务节点及关系
+        (intel.ai_extracted_products || []).forEach(p => { 
+            addNode(p, p, '产品/服务'); 
+            addEdge(companyName, p, relationType === 'Product Release' ? '发布' : '提及'); 
+        });
+        // 提取并添加技术节点及关系
+        (intel.ai_extracted_tech || []).forEach(t => { 
+            addNode(t, t, '技术'); 
+            addEdge(companyName, t, relationType === 'Tech Innovation' ? '创新' : '研究'); 
+        });
+        // 提取并添加人物节点及关系
+        (intel.ai_extracted_persons || []).forEach(p => { 
+            addNode(p, p, '人物'); 
+            addEdge(companyName, p, relationType === 'Talent Flow' ? '聘用' : '关联'); 
+        });
+        // 提取并添加其他公司节点及关系
+        (intel.ai_extracted_companies || []).forEach(c => { 
+            // 避免与标杆企业自身重复
+            if (String(c).toLowerCase() !== String(companyName).toLowerCase()) {
+                addNode(c, c, '相关公司'); 
+                addEdge(companyName, c, relationType); 
+            }
+        });
+    });
+
+    // 3.2 处理产业动态 (RAW_INDUSTRY_DYNAMICS)
+    // 主要从会议信息中提取与标杆企业相关的事件
+    industryDynamics.forEach(dynamic => {
+        const mentionedCompanies = new Set(dynamic.related_companies || []); // 获取事件中提及的公司
+        // 判断这个事件是否与任何一个标杆企业相关
+        let hasBenchmarkCompany = Array.from(mentionedCompanies).some(c => competitorNameSet.has(String(c).toLowerCase()));
+        
+        if (hasBenchmarkCompany) {
+            const eventTitle = dynamic.event_title;
+            addNode(eventTitle, eventTitle, '会议/事件'); // 将事件作为节点
+            Array.from(mentionedCompanies).forEach(company => {
+                // 如果是标杆企业，则标记为“标杆企业”类别，否则为“相关公司”
+                addNode(company, company, competitorNameSet.has(String(company).toLowerCase()) ? '标杆企业' : '相关公司');
+                addEdge(company, eventTitle, '参与'); // 建立公司与事件的参与关系
+            });
+        }
+    });
+
+    // 3.3 处理专利数据 (RAW_PATENT_DATA)
+    // 提取专利中的发明人和关键词，并与标杆企业建立关系
+    patentData.forEach(patent => {
+        const inventors = (patent.inventors || '').toLowerCase();
+        let applicant = null;
+        // 查找专利的发明人是否包含任何一个标杆企业名称
+        for (const competitorName of competitorNameSet) {
+            if (inventors.includes(competitorName)) {
+                // 如果找到了，将该标杆企业作为申请人
+                applicant = Array.from(nodes.keys()).find(key => String(key).toLowerCase() === competitorName);
+                if (applicant) break; // 找到第一个匹配的就退出
+            }
+        }
+        
+        if (applicant) { // 如果专利与某个标杆企业相关
+            const patentNodeId = patent.patent_number || patent.id;
+            addNode(patentNodeId, patent.title, '技术/专利', { url: patent.source_url }); // 添加专利节点
+            addEdge(applicant, patentNodeId, '申请了'); // 建立企业与专利的关系
+            
+            const keywords = (patent.ai_keywords || '').split(',').map(k => k.trim()).filter(Boolean);
+            keywords.forEach(kw => {
+                addNode(kw, kw, '技术'); // 添加技术关键词节点
+                addEdge(patentNodeId, kw, '关于'); // 专利与关键词的关系
+                addEdge(applicant, kw, '研究'); // 企业与关键词的研究关系
+            });
+        }
+    });
+
+    // 3.4 处理开源项目 (RAW_OPENSOURCE_DATA)
+    // 提取项目名称、描述和关键词，并与标杆企业建立关系
+    openSourceData.forEach(project => {
+        let relatedBenchmark = null;
+        // 检查项目名称或描述是否提及任何一个标杆企业
+        for (const competitorName of competitorNameSet) {
+            if ((String(project.project_name || '') + String(project.description || '')).toLowerCase().includes(competitorName)) {
+                relatedBenchmark = Array.from(nodes.keys()).find(key => String(key).toLowerCase() === competitorName);
+                if (relatedBenchmark) break;
+            }
+        }
+
+        if (relatedBenchmark) { // 如果项目与某个标杆企业相关
+            const projectNodeId = project.project_name;
+            addNode(projectNodeId, project.project_name, '开源项目', { url: project.source_url }); // 添加开源项目节点
+            addEdge(relatedBenchmark, projectNodeId, '发布/主导'); // 建立企业与项目的关系
+            
+            const keywords = (project.ai_keywords || project.tech_keywords || '').split(',').map(k => k.trim()).filter(Boolean);
+            keywords.forEach(kw => {
+                addNode(kw, kw, '技术'); // 添加技术关键词节点
+                addEdge(projectNodeId, kw, '关于'); // 项目与关键词的关系
+            });
+        }
+    });
+
+    // 3.5 处理技术新闻 (RAW_TECH_NEWS)
+    // 提取新闻中提及的公司和关键词，并与标杆企业建立关系
+    techNews.forEach(news => {
+         const companyName = news.related_companies; // 新闻中提及的公司
+         // 只有当新闻提及的公司是我们要监控的标杆企业时才处理
+         if (companyName && competitorNameSet.has(String(companyName).toLowerCase())) {
+             const keywords = (news.ai_keywords || news.tech_keywords || '').split(',').map(k => k.trim()).filter(Boolean);
+             keywords.forEach(kw => {
+                 addNode(kw, kw, '技术'); // 添加技术关键词节点
+                 addEdge(companyName, kw, '新闻提及', 0.8); // 建立企业与关键词的关系，权重可以调整
+             });
+         }
+    });
+
+    // --- 4. 后处理与返回：将 Map 转换为数组，并调整节点和边的样式属性 ---
+    const finalNodes = Array.from(nodes.values());
+    const finalEdges = Array.from(edges.values());
+    
+    // 根据权重动态调整节点大小 (value 代表提及次数)
+    if (finalNodes.length > 0) {
+        const maxNodeValue = Math.max(...finalNodes.map(node => node.value), 1); // 确保除数不为0
+        finalNodes.forEach(node => {
+            // 节点大小：基础大小15 + (提及次数/最大提及次数) * 缩放因子35
+            node.symbolSize = 15 + (node.value / maxNodeValue) * 35;
+        });
+    }
+    
+    // 根据权重动态调整边的粗细和透明度 (value 代表共现次数)
+    if (finalEdges.length > 0) {
+        const maxEdgeValue = Math.max(...finalEdges.map(edge => edge.value), 1);
+        finalEdges.forEach(edge => {
+            // 边的宽度：基础宽度0.5 + (共现次数/最大共现次数) * 缩放因子5.5
+            const width = 0.5 + (edge.value / maxEdgeValue) * 5.5;
+            // 边的透明度：基础透明度0.3 + (共现次数/最大共现次数) * 缩放因子0.6
+            const opacity = 0.3 + (edge.value / maxEdgeValue) * 0.6;
+            
+            edge.lineStyle = {
+                width: width, 
+                opacity: opacity
+            };
+        });
+    }
+
+    Logger.log(`--- [标杆图谱 V4] 构建完成: ${finalNodes.length} 个节点, ${finalEdges.length} 条边。`);
+    Logger.log(`DEBUG: 最终返回的节点数: ${finalNodes.length}, 边数: ${finalEdges.length}`);
+    // 打印最终返回的边，用于调试
+    if (finalEdges.length === 0) {
+        Logger.log("DEBUG: 警告！最终的 edges 数组为空。请检查原始数据和筛选条件。");
+    } else {
+        // Logger.log("DEBUG: 最终返回的 edges 数组: " + JSON.stringify(finalEdges.slice(0, 5))); // 只打印前5条
+    }
+
+    return { nodes: finalNodes, edges: finalEdges };
   }
 };
