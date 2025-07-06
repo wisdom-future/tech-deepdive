@@ -1,182 +1,190 @@
-// 文件名: backend/migration_utils.gs (版本 2.0 - 自动生成ID并回填)
+// 文件名: backend/tools.migration.gs
 
 /**
- * 辅助函数：从指定的 Google Sheet 中读取数据。
- * 假定工作表的第一行包含英文标头（用作对象键），第二行包含中文标签。
- * @param {string} spreadsheetId Google Spreadsheet 的 ID。
- * @param {string} sheetName Google Spreadsheet 中工作表的名称。
- * @returns {Array<Object>} 包含数据行的对象数组。
- * @throws {Error} 如果找不到电子表格或工作表。
+ * @fileoverview 包含一次性的数据迁移和初始化脚本。
+ * 这些函数不应被前端调用，仅供开发者在Apps Script编辑器中手动运行。
  */
-function _readDataFromSpecificSheet(spreadsheetId, sheetName) {
-  Logger.log(`尝试从 Spreadsheet ID: ${spreadsheetId}, Sheet Name: ${sheetName} 读取数据`);
-  const ss = SpreadsheetApp.openById(spreadsheetId);
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    throw new Error(`在 Spreadsheet ID '${spreadsheetId}' 中找不到名为 '${sheetName}' 的工作表。请确保工作表存在且命名正确。`);
-  }
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-
-  if (values.length < 2) {
-    Logger.log(`工作表 '${sheetName}' 中除了标题行外没有找到数据行。`);
-    return [];
-  }
-
-  const headers = values[0];
-  const dataRows = values.slice(2);
-
-  const objects = dataRows.map(row => {
-    const obj = {};
-    headers.forEach((header, index) => {
-      let value = row[index];
-      if (header.includes('date') || header.includes('timestamp')) {
-        obj[header] = (value && !isNaN(new Date(value).getTime())) ? new Date(value) : null;
-      } else if (typeof value === 'string' && (value.toLowerCase() === 'true' || value.toLowerCase() === 'false')) {
-        obj[header] = value.toLowerCase() === 'true';
-      } else if (['founded_year', 'employee_count', 'annual_revenue', 'monitoring_priority'].includes(header)) {
-          if (typeof value === 'number') {
-              obj[header] = value;
-          } else if (typeof value === 'string' && value.trim() !== '') {
-              const numValue = Number(value);
-              obj[header] = isNaN(numValue) ? null : numValue;
-          } else {
-              obj[header] = null;
-          }
-      } else if (value === "") {
-        obj[header] = null;
-      } else {
-        obj[header] = value;
-      }
-    });
-    return obj;
-  });
-  Logger.log(`成功从工作表 '${sheetName}' 读取了 ${objects.length} 行数据。`);
-  return objects;
-}
 
 /**
- * 从 Google Sheet 中的数据重新生成指定的 Firestore 集合。
- * 此函数首先清空 Firestore 中的目标集合以确保幂等性，
- * 然后从指定的工作表中读取数据并进行批量更新（upsert）。
- * @param {string} spreadsheetId 包含源数据的 Google Spreadsheet 的 ID。
- * @param {string} sheetName Google Spreadsheet 中工作表的名称（例如，“业界标杆”）。
- * @param {string} firestoreCollectionKey Firestore 集合的键（例如，“COMPETITOR_REGISTRY”），在 CONFIG.FIRESTORE_COLLECTIONS 中定义。
- * @param {string} idField 用作 Firestore 中文档 ID 的字段名（例如，“competitor_id”）。
- * @param {string|null} [idPrefix=null] - 结构化ID的前缀，如 'COMP'。如果提供，将启用ID自动生成。
- * @returns {Object} 包含成功状态和消息的结果对象。
+ * [MIGRATION] 初始化或重置 external_data_sources 集合。
+ * 运行此函数将使用下面定义的最新、最完整的配置来覆盖 Firestore 中的数据。
+ * ✅ V5版：修正并使用 dynamic_param_names 实现完全的参数自适应。
  */
-function _regenerateFirestoreCollectionFromSheet(spreadsheetId, sheetName, firestoreCollectionKey, idField, idPrefix = null) {
-  Logger.log(`--- 开始为 Firestore 集合: ${firestoreCollectionKey} 从工作表: ${sheetName} 进行数据再生 ---`);
+function populateInitialDataSourceConfigs() {
+  Logger.log("=========================================================");
+  Logger.log("--- 开始执行：填充/刷新外部数据源配置 (V5 - 完全自适应版) ---");
+  Logger.log("=========================================================");
+
   try {
-    const collectionName = CONFIG.FIRESTORE_COLLECTIONS[firestoreCollectionKey];
-    if (!collectionName) {
-      throw new Error(`在 CONFIG.FIRESTORE_COLLECTIONS 中找不到 Firestore 集合键 '${firestoreCollectionKey}'。`);
-    }
-
-    // 步骤 1: 清空 Firestore 中现有数据
-    Logger.log(`正在清空 Firestore 集合: ${collectionName}...`);
-    FirestoreService.deleteCollection(collectionName);
-    Utilities.sleep(2000);
-
-    // 步骤 2: 从 Google Sheet 读取数据
-    const allObjects = _readDataFromSpecificSheet(spreadsheetId, sheetName);
-    if (!allObjects || allObjects.length === 0) {
-      Logger.log(`在工作表 '${sheetName}' 中未找到数据，跳过导入 Firestore。`);
-      return { success: true, message: `集合 '${collectionName}' 已清空。工作表中没有数据可导入。` };
-    }
-
-    // <<-- 新增逻辑：如果需要，为缺少ID的行生成ID -->>
-    if (idPrefix) {
-      let idCounter = 0;
-      // 找到当前最大的ID后缀数字，以避免冲突
-      const maxIdNum = allObjects.reduce((max, obj) => {
-        const id = obj[idField];
-        if (id && String(id).startsWith(idPrefix)) {
-          const num = parseInt(String(id).replace(idPrefix, ''), 10);
-          if (!isNaN(num) && num > max) {
-            return num;
+    const dataSourceConfigs = [
+      { // ----- 1. arXiv API -----
+        source_id: "ARXIV_API",
+        display_name: "arXiv 学术论文 API",
+        source_type: "academic_paper_source",
+        base_url: "http://export.arxiv.org",
+        endpoint_paths: { "query": "/api/query" },
+        request_method: "GET",
+        payload_type: "none",
+        response_type: "xml",
+        auth_method: "none",
+        api_key_name: null,
+        request_headers: { "User-Agent": "DeepdiveEngine/1.0" },
+        fixed_query_params: { "sortBy": "submittedDate", "sortOrder": "descending" },
+        is_active: true,
+        priority: 100,
+        notes: "获取物理、数学、计算机科学等领域的预印本论文。",
+        pagination_param_names: { "pageSize": "max_results", "pageNumber": "start" },
+        dynamic_param_names: { "q": "search_query" },
+        response_mapping_rules: {
+          "items_path": "entry",
+          "fields": { "url": "id", "title": "title", "summary": "summary", "authors": "author.name,join", "publication_date": "published" }
+        }
+      },
+      { // ----- 2. NewsAPI -----
+        source_id: "NEWSAPI_ORG",
+        display_name: "NewsAPI 全球新闻",
+        source_type: "news_source",
+        base_url: "https://newsapi.org",
+        endpoint_paths: { "everything": "/v2/everything" },
+        request_method: "GET",
+        payload_type: "none",
+        response_type: "json",
+        auth_method: "header_key",
+        api_key_name: "NEWS_API_KEY",
+        api_key_header_name: "X-Api-Key",
+        request_headers: { "User-Agent": "DeepdiveEngine/1.0" },
+        fixed_query_params: { "language": "en" },
+        is_active: true,
+        priority: 100,
+        notes: "提供全球主流媒体新闻数据。",
+        pagination_param_names: { "pageSize": "pageSize", "pageNumber": "page" },
+        dynamic_param_names: { "q": "q" },
+        response_mapping_rules: {
+          "items_path": "articles",
+          "fields": { "url": "url", "title": "title", "summary": "description", "publication_date": "publishedAt", "source_platform": "source.name", "author": "author" }
+        }
+      },
+      { // ----- 3. Hacker News API -----
+        source_id: "HACKERNEWS_API",
+        display_name: "Hacker News (Algolia Search)",
+        source_type: "news_source",
+        base_url: "http://hn.algolia.com",
+        endpoint_paths: { "everything": "/api/v1/search" },
+        request_method: "GET",
+        payload_type: "none",
+        response_type: "json",
+        auth_method: "none",
+        api_key_name: null,
+        request_headers: null,
+        fixed_query_params: { "tags": "story" },
+        is_active: true,
+        priority: 90,
+        notes: "通过Algolia提供的Hacker News搜索API，获取高质量技术社区讨论。",
+        pagination_param_names: { "pageSize": "hitsPerPage", "pageNumber": "page" },
+        dynamic_param_names: { "q": "query" }, // ✅ 修正：通用查询'q'映射到此API的'query'
+        response_mapping_rules: {
+          "items_path": "hits",
+          "fields": { "url": "url", "title": "title", "summary": "story_text", "publication_date": "created_at", "source_platform": "author", "author": "author" }
+        }
+      },
+      { // ----- 4. OpenAI API -----
+        source_id: "OPENAI_API",
+        display_name: "OpenAI LLM 服务",
+        source_type: "llm_service",
+        base_url: "https://api.openai.com",
+        endpoint_paths: { "chat_completions": "/v1/chat/completions", "embeddings": "/v1/embeddings" },
+        request_method: "POST",
+        payload_type: "json",
+        response_type: "json",
+        auth_method: "bearer_token",
+        api_key_name: "OPENAI_API_KEY",
+        api_key_header_name: "Authorization",
+        is_active: true,
+        priority: 100,
+        notes: "用于文本生成、评分和向量嵌入。",
+        pagination_param_names: null,
+        dynamic_param_names: null,
+        response_mapping_rules: null
+      },
+      { // ----- 5. GitHub API -----
+        source_id: "GITHUB_API",
+        display_name: "GitHub API",
+        source_type: "opensource_data_source",
+        base_url: "https://api.github.com",
+        endpoint_paths: { "search_repositories": "/search/repositories" },
+        request_method: "GET",
+        payload_type: "none",
+        response_type: "json",
+        auth_method: "bearer_token",
+        api_key_name: "GITHUB_API_KEY",
+        api_key_header_name: "Authorization",
+        request_headers: { "Accept": "application/vnd.github.v3+json" },
+        fixed_query_params: { "sort": "updated", "order": "desc" },
+        is_active: true,
+        priority: 100,
+        notes: "用于搜索GitHub上的开源项目。",
+        pagination_param_names: { "pageSize": "per_page", "pageNumber": "page" },
+        dynamic_param_names: { "q": "q" },
+        response_mapping_rules: {
+          "items_path": "items",
+          "fields": { "url": "html_url", "title": "full_name", "summary": "description", "language": "language", "stars": "stargazers_count", "forks": "forks_count", "last_updated": "updated_at" }
+        }
+      },
+      { // ----- 7. SerpApi Google Patents (稳定、可靠的最终方案) -----
+        source_id: "SERPAPI_PATENTS",
+        display_name: "SerpApi Google Patents",
+        source_type: "patent_data_source",
+        base_url: "https://serpapi.com",
+        endpoint_paths: { "query": "/search.json" },
+        request_method: "GET",
+        payload_type: "none",
+        response_type: "json",
+        auth_method: "query_param_key", // ✅ 它的认证方式是URL参数
+        api_key_name: "SERPAPI_KEY",      // ✅ 使用我们新配置的Key
+        api_key_query_param_name: "api_key", // ✅ 参数名叫 api_key
+        request_headers: null,
+        fixed_query_params: { "engine": "google_patents" }, // ✅ 固定参数：告诉SerpApi我们要用Google Patents引擎
+        is_active: true,
+        priority: 100,
+        notes: "通过专业的第三方代理SerpApi查询Google Patents数据。",
+        pagination_param_names: { "pageSize": "num", "pageNumber": "start" }, // SerpApi用start来翻页
+        dynamic_param_names: { "q": "q" },
+        response_mapping_rules: {
+          "items_path": "organic_results", // ✅ 它的结果在 organic_results 数组里
+          "fields": {
+            "id": "publication_number",
+            "url": "link",
+            "title": "title",
+            "summary": "snippet",
+            "authors": "inventors,join",
+            "publication_date": "publication_date"
           }
         }
-        return max;
-      }, 0);
-      idCounter = maxIdNum;
-      Logger.log(`  - ID生成器初始化：前缀 '${idPrefix}', 起始计数器为 ${idCounter}.`);
+      }
+    ];
 
-      // 遍历并填充缺失的ID
-      allObjects.forEach(obj => {
-        // 关键检查：如果 idField 对应的单元格为空或未定义
-        if (!obj[idField]) {
-          idCounter++;
-          const newId = `${idPrefix}${String(idCounter).padStart(3, '0')}`;
-          obj[idField] = newId; // 关键：将新ID赋值回对象
-          Logger.log(`  - 为记录 '${obj.company_name || obj.conference_name || '未知记录'}' 生成了新ID: ${newId}`);
-        }
-      });
-    }
+    // 为所有配置添加时间戳
+    dataSourceConfigs.forEach(config => {
+        config.created_timestamp = new Date();
+        config.last_updated_timestamp = new Date();
+    });
 
-    // 步骤 3: 批量更新数据到 Firestore
-    Logger.log(`正在将 ${allObjects.length} 条记录批量更新到 Firestore 集合: ${collectionName}...`);
-    DataService.batchUpsert(firestoreCollectionKey, allObjects, idField);
+    const collectionKey = 'EXTERNAL_DATA_SOURCES';
+    const idField = 'source_id';
+    
+    Logger.log(`准备使用最新的定义刷新 ${dataSourceConfigs.length} 条数据源配置...`);
+    
+    // 直接使用 batchUpsert 会覆盖已存在的同名文档，达到刷新效果
+    const count = DataService.batchUpsert(collectionKey, dataSourceConfigs, idField);
 
-    Logger.log(`--- 成功再生 Firestore 集合: ${firestoreCollectionKey} ---`);
-    return { success: true, message: `成功为 ${collectionName} 再生了 ${allObjects.length} 条记录。` };
+    Logger.log(`✅ 成功刷新/写入了 ${count} 条数据源配置。`);
+    Logger.log("\n🎉🎉🎉 外部数据源配置刷新成功！🎉🎉🎉");
 
   } catch (e) {
-    Logger.log(`再生 ${firestoreCollectionKey} 期间发生错误: ${e.message}\n${e.stack}`);
-    return { success: false, message: `未能再生 ${firestoreCollectionKey}: ${e.message}` };
+    Logger.log(`❌ 刷新外部数据源时发生严重错误: ${e.message}\n${e.stack}`);
+  } finally {
+    Logger.log("=========================================================");
+    Logger.log("--- 脚本执行结束 ---");
+    Logger.log("=========================================================");
   }
-}
-
-/**
- * 主函数：再生关键的 Firestore 注册表。
- * 包括：
- * - COMPETITOR_REGISTRY (业界标杆)
- * - CONFERENCE_REGISTRY (学术顶会)
- *
- * 在运行此函数之前，请务必：
- * 1. 确保 'TechInsight_Config_DB.xlsx' 文件已上传到 Google Drive，并已转换为 Google Sheets 格式。
- * 2. 从 Google Sheet 的 URL 中获取其 Spreadsheet ID。
- * 3. 确保该电子表格中的工作表名称与代码中指定的名称完全一致。
- * 4. 将 'YOUR_GOOGLE_SHEET_ID_HERE' 替换为您的实际 Spreadsheet ID。
- */
-function regenerateCriticalRegistries() {
-  Logger.log("======== 开始再生关键注册表数据 ========");
-
-  const GOOGLE_SHEET_ID = '14jCzQclmFaHRH8iHrYt9v2Tk-bZ8TVrvbhXUZyFITNE'; // 替换为您的实际 ID
-
-  if (GOOGLE_SHEET_ID === 'YOUR_GOOGLE_SHEET_ID_HERE' || !GOOGLE_SHEET_ID) {
-    Logger.log("错误：Google Sheet ID 未配置。请在脚本中更新 'GOOGLE_SHEET_ID'。");
-    return { success: false, message: "Google Sheet ID 未配置。" };
-  }
-
-  let results = [];
-
-  // 再生 COMPETITOR_REGISTRY (业界标杆)
-  Logger.log("\n尝试再生 COMPETITOR_REGISTRY (业界标杆)...");
-  const competitorResult = _regenerateFirestoreCollectionFromSheet(
-    GOOGLE_SHEET_ID,
-    "Competitor_Registry",
-    "COMPETITOR_REGISTRY",
-    "competitor_id",
-    "COMP" // <<-- 传递ID前缀
-  );
-  results.push(competitorResult);
-  Logger.log(`COMPETITOR_REGISTRY 结果: ${competitorResult.message}`);
-
-  // 再生 CONFERENCE_REGISTRY (学术顶会)
-  Logger.log("\n尝试再生 CONFERENCE_REGISTRY (学术顶会)...");
-  const conferenceResult = _regenerateFirestoreCollectionFromSheet(
-    GOOGLE_SHEET_ID,
-    "Conference_Registry",
-    "CONFERENCE_REGISTRY",
-    "conference_id",
-    "CONF" // <<-- 传递ID前缀
-  );
-  results.push(conferenceResult);
-  Logger.log(`CONFERENCE_REGISTRY 结果: ${conferenceResult.message}`);
-
-  Logger.log("\n======== 关键注册表数据再生完成 ========");
-  results.forEach(res => Logger.log(res.message));
-  return results;
 }

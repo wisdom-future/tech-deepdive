@@ -10,6 +10,7 @@ const CONFIG = {
     TECH_REGISTRY: 'technology_registry',
     COMPETITOR_REGISTRY: 'competitor_registry',
     CONFERENCE_REGISTRY: 'conference_registry',
+    EXTERNAL_DATA_SOURCES: 'external_data_sources', // 新增：外部数据源注册表
     REPORT_RECIPIENTS: 'report_recipients',
     SCHEDULED_REPORTS_CONFIG: 'scheduled_reports_config',
 

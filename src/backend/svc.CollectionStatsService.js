@@ -1,4 +1,4 @@
-// 文件名: backend/svc.CollectionStats.gs (最终 Firestore 适配版)
+// 文件名: backend/svc.CollectionStats.gs (最终诊断增强版 - 基于你的代码)
 
 /**
  * @file 数据采集页面相关服务
@@ -57,12 +57,17 @@ const CollectionStatsService = {
   
   /**
    * ✅ 最终修正: 确保返回的数据结构总是完整的
+   * ✅ 诊断增强: 增加了详细的日志来追踪数据获取过程。
    */
   getCollectionPageData: function() {
+    // ======================= 诊断日志开始 =======================
+    Logger.log("=========================================================");
+    Logger.log("--- [DIAGNOSIS] getCollectionPageData 开始执行 ---");
+    Logger.log(`--- 执行时间: ${new Date().toISOString()} ---`);
+    Logger.log("=========================================================");
+    // ==========================================================
+
     try {
-      Logger.log("DEBUG: getCollectionPageData - 开始获取数据...");
-      
-      // ✅ 为每个数据块提供默认的空值
       const pageData = {
         techData: {
           academicPapers: [],
@@ -79,52 +84,74 @@ const CollectionStatsService = {
         overallStats: {}
       };
 
-      // 使用 try-catch 包裹每一个数据获取，防止一个失败导致全部失败
-      try { pageData.techData.academicPapers = DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS'); } catch (e) { Logger.log(`获取 RAW_ACADEMIC_PAPERS 失败: ${e.message}`); }
-      try { pageData.techData.patentData = DataService.getDataAsObjects('RAW_PATENT_DATA'); } catch (e) { Logger.log(`获取 RAW_PATENT_DATA 失败: ${e.message}`); }
-      try { pageData.techData.openSourceData = DataService.getDataAsObjects('RAW_OPENSOURCE_DATA'); } catch (e) { Logger.log(`获取 RAW_OPENSOURCE_DATA 失败: ${e.message}`); }
-      try { pageData.techData.techNews = DataService.getDataAsObjects('RAW_TECH_NEWS'); } catch (e) { Logger.log(`获取 RAW_TECH_NEWS 失败: ${e.message}`); }
-      
-      try { pageData.benchmarkData.industryDynamics = DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS'); } catch (e) { Logger.log(`获取 RAW_INDUSTRY_DYNAMICS 失败: ${e.message}`); }
-      try { pageData.benchmarkData.competitorIntelligence = DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE'); } catch (e) { Logger.log(`获取 RAW_COMPETITOR_INTELLIGENCE 失败: ${e.message}`); }
+      // 辅助函数，用于包装数据获取并添加日志
+      const logAndGetData = (key) => {
+        try {
+          const data = DataService.getDataAsObjects(key);
+          // ======================= 诊断日志 =======================
+          Logger.log(`[DIAGNOSIS] 从 Firestore 集合 '${key}' 读取了 ${data ? data.length : 0} 条记录。`);
+          // ======================================================
+          return data || [];
+        } catch (e) {
+          Logger.log(`[DIAGNOSIS] ❌ 读取集合 '${key}' 时发生错误: ${e.message}`);
+          return [];
+        }
+      };
 
-      try { pageData.competitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY').map(c => ({ id: c.competitor_id, name: c.company_name })); } catch (e) { Logger.log(`获取 COMPETITOR_REGISTRY 失败: ${e.message}`); }
+      // 使用 try-catch 包裹每一个数据获取，防止一个失败导致全部失败
+      try { pageData.techData.academicPapers = logAndGetData('RAW_ACADEMIC_PAPERS'); } catch (e) { Logger.log(`获取 RAW_ACADEMIC_PAPERS 失败: ${e.message}`); }
+      try { pageData.techData.patentData = logAndGetData('RAW_PATENT_DATA'); } catch (e) { Logger.log(`获取 RAW_PATENT_DATA 失败: ${e.message}`); }
+      try { pageData.techData.openSourceData = logAndGetData('RAW_OPENSOURCE_DATA'); } catch (e) { Logger.log(`获取 RAW_OPENSOURCE_DATA 失败: ${e.message}`); }
+      try { pageData.techData.techNews = logAndGetData('RAW_TECH_NEWS'); } catch (e) { Logger.log(`获取 RAW_TECH_NEWS 失败: ${e.message}`); }
       
-      try { pageData.history = this._formatHistoryLogs(DataService.getDataAsObjects('WORKFLOW_LOG')); } catch (e) { Logger.log(`获取 WORKFLOW_LOG 失败: ${e.message}`); }
+      try { pageData.benchmarkData.industryDynamics = logAndGetData('RAW_INDUSTRY_DYNAMICS'); } catch (e) { Logger.log(`获取 RAW_INDUSTRY_DYNAMICS 失败: ${e.message}`); }
+      try { pageData.benchmarkData.competitorIntelligence = logAndGetData('RAW_COMPETITOR_INTELLIGENCE'); } catch (e) { Logger.log(`获取 RAW_COMPETITOR_INTELLIGENCE 失败: ${e.message}`); }
+
+      try { pageData.competitors = logAndGetData('COMPETITOR_REGISTRY').map(c => ({ id: c.competitor_id, name: c.company_name })); } catch (e) { Logger.log(`获取 COMPETITOR_REGISTRY 失败: ${e.message}`); }
       
-      try { pageData.overallStats = computeCollectionStats(); } catch (e) { Logger.log(`计算 overallStats 失败: ${e.message}`); }
+      try { pageData.history = this._formatHistoryLogs(logAndGetData('WORKFLOW_LOG')); } catch (e) { Logger.log(`获取 WORKFLOW_LOG 失败: ${e.message}`); }
+      
+      try { 
+        Logger.log("[DIAGNOSIS] 正在计算 overallStats...");
+        pageData.overallStats = computeCollectionStats(); 
+        Logger.log(`[DIAGNOSIS] overallStats 计算完成: ${JSON.stringify(pageData.overallStats)}`);
+      } catch (e) { 
+        Logger.log(`计算 overallStats 失败: ${e.message}`); 
+      }
       
       Logger.log("DEBUG: getCollectionPageData - 所有数据获取尝试完成，准备返回。");
 
-       // *** 改为以下更精简的日志，只查看 academicPapers 的前几条和后几条 ***
+      // ======================= 诊断日志开始 =======================
+      Logger.log("\n--- [DIAGNOSIS] 最终返回给前端的数据摘要 ---");
+      Logger.log(`技术新闻 (techNews) 数组长度: ${pageData.techData.techNews.length}`);
+      Logger.log(`学术论文 (academicPapers) 数组长度: ${pageData.techData.academicPapers.length}`);
+      // 打印 techNews 的前几条记录，检查内容
+      if (pageData.techData.techNews.length > 0) {
+        Logger.log("--- [DIAGNOSIS] 技术新闻 (techNews) 前3条记录预览 ---");
+        Logger.log(JSON.stringify(pageData.techData.techNews.slice(0, 3), null, 2));
+      }
+      Logger.log("-------------------------------------------------");
+      // ==========================================================
+
+      // *** 你原来的日志逻辑保持不变 ***
       Logger.log("DEBUG: 检查 RAW_ACADEMIC_PAPERS 解包后的关键字段:");
       const academicPapers = pageData.techData.academicPapers || [];
-      const numToLog = 5; // 只打印前5条和后5条
+      const numToLog = 5;
 
-      // 打印前几条
       for (let i = 0; i < Math.min(academicPapers.length, numToLog); i++) {
           const doc = academicPapers[i];
           Logger.log(`  [学术论文-${i}] ID: ${doc.id}`);
-          Logger.log(`    Title: "${doc.title}"`);
-          Logger.log(`    Authors: "${doc.authors}"`);
-          Logger.log(`    Publication Date: "${doc.publication_date}"`);
-          Logger.log(`    AI Innovation Score: "${doc.innovation_score_ai}"`);
       }
-
-      // 如果总数超过需要打印的数量的两倍，则打印中间省略号和后几条
       if (academicPapers.length > numToLog * 2) {
-          Logger.log("  ..."); // 表示中间有省略
+          Logger.log("  ...");
           for (let i = academicPapers.length - numToLog; i < academicPapers.length; i++) {
               const doc = academicPapers[i];
               Logger.log(`  [学术论文-${i}] ID: ${doc.id}`);
-              Logger.log(`    Title: "${doc.title}"`);
-              Logger.log(`    Authors: "${doc.authors}"`);
-              Logger.log(`    Publication Date: "${doc.publication_date}"`);
-              Logger.log(`    AI Innovation Score: "${doc.innovation_score_ai}"`);
           }
       }
       // *******************************************************************
 
+      Logger.log("--- [DIAGNOSIS] getCollectionPageData 即将返回数据 ---");
       return pageData;
 
     } catch(e) {
@@ -170,12 +197,10 @@ const CollectionStatsService = {
    */
   getWorkflowExecutionDetail: function(executionId) {
     try {
-      // 在 Firestore 中，我们可以直接通过 ID 获取文档，效率极高
       const doc = FirestoreService.getDocument(`workflow_execution_log/${executionId}`);
       if (!doc) {
         return { error: "未找到该执行记录", execution_id: executionId };
       }
-      // 将可能的 Date 对象转为字符串（如果需要）
       const detail = {};
       for (var k in doc) {
         detail[k] = (doc[k] instanceof Date) ? doc[k].toISOString() : doc[k];

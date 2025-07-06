@@ -84,6 +84,76 @@ const DateUtils = {
   }
 };
 
+const DataMapper = {
+  /**
+   * 根据映射规则，将从API获取的原始数据数组，转换为系统内部的标准对象数组。
+   * @param {Array<Object>} rawItems - 从API响应中提取的原始条目数组。
+   * @param {Object} mappingRules - 来自数据源配置的 response_mapping_rules 对象。
+   * @returns {Array<Object>} - 转换后的、符合系统内部标准格式的对象数组。
+   */
+  map: function(rawItems, mappingRules) {
+    if (!rawItems || !Array.isArray(rawItems) || !mappingRules || !mappingRules.fields) {
+      Logger.log("[DataMapper] 映射失败：输入数据或映射规则无效。");
+      return [];
+    }
+
+    const standardItems = [];
+
+    for (const rawItem of rawItems) {
+      const standardItem = {};
+      
+      for (const standardField in mappingRules.fields) {
+        const rule = mappingRules.fields[standardField];
+        let [sourcePath, ...modifiers] = rule.split(',');
+
+        // 使用点表示法安全地获取嵌套属性的值
+        let value = sourcePath.split('.').reduce((obj, key) => (obj && obj[key] !== undefined) ? obj[key] : null, rawItem);
+
+        // 应用修饰符
+        if (value !== null && modifiers.length > 0) {
+          for (const modifier of modifiers) {
+            if (modifier === 'join' && Array.isArray(value)) {
+              value = value.join(', ');
+            }
+            if (modifier.startsWith('prefix:')) {
+              value = modifier.substring(7) + value;
+            }
+          }
+        }
+        
+        standardItem[standardField] = value;
+      }
+      standardItems.push(standardItem);
+    }
+    
+    return standardItems;
+  },
+
+  /**
+   * 从原始API响应中，根据路径提取出条目数组。
+   * @param {Object|Array} responseData - API返回的原始数据。
+   * @param {string} itemsPath - 指向条目数组的路径。
+   * @returns {Array<Object>} - 原始条目数组。
+   */
+  getRawItems: function(responseData, itemsPath) {
+    if (!responseData) return [];
+    if (itemsPath === '.' || !itemsPath) {
+      return Array.isArray(responseData) ? responseData : [];
+    }
+    
+    const pathParts = itemsPath.split('.');
+    let items = responseData;
+    for (const part of pathParts) {
+      if (items && items[part] !== undefined) {
+        items = items[part];
+      } else {
+        return [];
+      }
+    }
+    return Array.isArray(items) ? items : [];
+  }
+};
+
 /**
  * 后端日志函数 - 调试级别。
  * 仅当 CONFIG.LOG_LEVEL 为 'DEBUG' 时输出。

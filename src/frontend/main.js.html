@@ -1556,41 +1556,74 @@ const uiUtils = {
         },
 
         handleWorkflowRunClick: async function(button) {
-            if (!button || button.disabled) return;
-            const wfId = button.dataset.wfid;
-            const wfName = button.dataset.wffunction;
-            if (!wfId || !wfName) return;
+          if (!button || button.disabled) return;
+          
+          const wfId = button.dataset.wfid;
+          const wfName = button.dataset.wffunction;
+          if (!wfId || !wfName) {
+              console.error("工作流按钮缺少 'data-wfid' 或 'data-wffunction' 属性。");
+              return;
+          }
 
-            const statusBadge = document.getElementById(`${wfId}-status-badge`);
-            const lastRunSpan = document.getElementById(`${wfId}-last-run`);
-            const lastResultSpan = document.getElementById(`${wfId}-last-result`);
-            const logOutput = document.getElementById(`${wfId}-log-output`);
+          // --- 1. 精确获取与此卡片关联的所有UI元素 ---
+          const statusBadge = document.getElementById(`${wfId}-status-badge`);
+          const lastRunSpan = document.getElementById(`${wfId}-last-run`);
+          const lastResultSpan = document.getElementById(`${wfId}-last-result`);
+          const logContainer = document.getElementById(`${wfId}-log-output`); // 直接获取日志容器
 
-            button.disabled = true;
-            button.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>执行中...';
-            statusBadge.textContent = '运行中';
-            logOutput.textContent = '任务已发送，请耐心等待后端返回结果...';
-            lastResultSpan.textContent = 'N/A';
-            logOutput.classList.remove('hidden');
+          // 安全检查，确保所有元素都存在
+          if (!statusBadge || !lastRunSpan || !lastResultSpan || !logContainer) {
+              console.error(`UI元素缺失，无法更新工作流 '${wfId}' 的状态。`);
+              return;
+          }
 
-            try {
-                const result = await App.callApi('WorkflowsService', wfName);
-                const isSuccess = result.success;
-                statusBadge.textContent = isSuccess ? '成功' : '失败';
-                statusBadge.className = `px-2 py-1 text-xs font-semibold rounded-full ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-                lastRunSpan.textContent = new Date().toLocaleString();
-                lastResultSpan.textContent = result.message || (isSuccess ? '执行完毕' : '未知错误');
-                logOutput.textContent = result.log || '无详细日志。';
-            } catch (e) {
-                statusBadge.textContent = '失败';
-                lastResultSpan.textContent = e.message;
-                logOutput.textContent = e.stack;
-                handleFailure(e);
-            } finally {
-                button.disabled = false;
-                button.innerHTML = '<i class="fa fa-play-circle mr-2"></i>再次执行';
-            }
-        },
+          // --- 2. 更新UI为“执行中”状态 ---
+          button.disabled = true;
+          button.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>执行中...';
+          
+          statusBadge.textContent = '运行中';
+          statusBadge.className = 'px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800'; // 黄色表示运行中
+          
+          lastResultSpan.textContent = '任务已发送，等待后端响应...';
+          
+          logContainer.textContent = '...'; // 清空旧日志，显示等待状态
+          logContainer.classList.remove('hidden'); // 显示日志区域
+
+          try {
+              // --- 3. 调用后端API ---
+              const result = await App.callApi('WorkflowsService', wfName);
+              const isSuccess = result.success;
+
+              // --- 4. 根据成功或失败结果，更新UI ---
+              statusBadge.textContent = isSuccess ? '成功' : '失败';
+              statusBadge.className = `px-2 py-1 text-xs font-semibold rounded-full ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+              
+              lastRunSpan.textContent = new Date().toLocaleString();
+              lastResultSpan.textContent = result.message || (isSuccess ? '执行完毕，无消息返回。' : '发生未知错误。');
+              
+              // ✅ 核心修正：正确显示日志
+              const logText = result.log || '后端未返回详细日志。';
+              logContainer.textContent = logText; // textContent 会保留换行符
+              logContainer.scrollTop = logContainer.scrollHeight; // 自动滚动到底部
+
+          } catch (e) {
+              // --- 5. 处理API调用本身的异常 ---
+              statusBadge.textContent = '失败';
+              statusBadge.className = 'px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800';
+              
+              lastResultSpan.textContent = `前端错误: ${e.message}`;
+              
+              // 在日志区显示详细的错误堆栈
+              const errorText = `[FATAL FRONTEND ERROR]\n${e.message}\n\n[STACK TRACE]\n${e.stack || 'No stack trace available.'}`;
+              logContainer.textContent = errorText;
+
+              handleFailure(e); // 调用全局错误处理器
+          } finally {
+              // --- 6. 无论成功失败，都恢复按钮状态 ---
+              button.disabled = false;
+              button.innerHTML = '<i class="fa fa-play-circle mr-2"></i>再次执行';
+          }
+      },
         
         setupScrollObserver: function() {
           if (this.scrollObserver) this.scrollObserver.disconnect();
@@ -3002,46 +3035,51 @@ renderExpertNetwork: function(data) {
         // --- UI渲染与模态框逻辑 ---
 
         // 动态构建并显示用于添加或编辑条目的表单模态框
-        showRegistryFormModal: async function(action, docId = null) {
-            this.currentEditDocId = docId;
-            const config = this.getRegistryConfig(this.activeRegistryKey);
-            if (!config) return;
+        showRegistryFormModal: function(action, docId = null) {
+          this.currentEditDocId = docId;
+          const config = this.getRegistryConfig(this.activeRegistryKey);
+          if (!config) return;
 
-            const modalTitle = document.getElementById('registryModalTitle');
-            const form = document.getElementById('registryEntryForm');
-            form.innerHTML = ''; // 清空旧表单
+          const modalTitle = document.getElementById('registryModalTitle');
+          const form = document.getElementById('registryEntryForm');
+          form.innerHTML = '';
 
-            modalTitle.textContent = `${action === 'add' ? '添加新' : '编辑'}${config.title}`;
+          modalTitle.textContent = `${action === 'add' ? '添加新' : '编辑'}${config.title}`;
 
-            let currentData = {};
-            if (action === 'edit' && docId) {
-                try {
-                    const allData = await App.callApi('SystemAdminService', 'getRegistry', [this.activeRegistryKey]);
-                    currentData = allData.find(item => (item[config.idField] || item.id) === docId);
-                    if (!currentData) {
-                        alert('错误：找不到要编辑的记录。');
-                        return;
-                    }
-                } catch(e) {
-                    handleFailure(e);
-                    return;
-                }
-            }
+          let currentData = {};
+          if (action === 'edit' && docId) {
+              // ✅ 核心修改：直接从已加载的 fullDataset 中查找数据，避免再次API调用
+              currentData = this.fullDataset.find(item => (item[config.idField] || item.id) === docId);
+              if (!currentData) {
+                  alert('错误：在当前数据集中找不到要编辑的记录。');
+                  return;
+              }
+          }
 
-            // ✅ 核心优化：将字段分为常规字段和复选框字段
-            const regularFields = config.fields.filter(f => f.type !== 'checkbox');
-            const checkboxFields = config.fields.filter(f => f.type === 'checkbox');
+          // ✅ 核心优化：将字段分为常规字段和复选框字段
+          const regularFields = config.fields.filter(f => f.type !== 'checkbox');
+          const checkboxFields = config.fields.filter(f => f.type === 'checkbox');
 
-            // 1. 渲染常规字段
-            regularFields.forEach(field => {
-              const value = currentData[field.name] || '';
+          // 1. 渲染常规字段
+          regularFields.forEach(field => {
+              // ✅ 修正：确保 value 在 null 或 undefined 时显示为空字符串
+              const rawValue = currentData[field.name];
+              let value = (rawValue === null || rawValue === undefined) ? '' : rawValue;
+
+              // ✅ 修正：为 JSON 字段提供更健壮的字符串化处理
+              if (field.type === 'textarea' && field.notes && field.notes.includes('JSON')) {
+                  try {
+                      value = (typeof value === 'object' && value !== null) ? JSON.stringify(value, null, 2) : value;
+                  } catch (e) { value = '无效的JSON数据'; }
+              }
+
               let fieldHtml = '';
               const inputId = `form-field-${field.name}`;
               const isRequired = field.required ? '<span class="text-red-500">*</span>' : '';
 
               switch (field.type) {
                 case 'textarea':
-                  fieldHtml = `<textarea id="${inputId}" name="${field.name}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-sm" rows="3">${value}</textarea>`;
+                  fieldHtml = `<textarea id="${inputId}" name="${field.name}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-sm font-mono" rows="4">${value}</textarea>`;
                   break;
                 case 'select':
                   const optionsHtml = field.options.map(opt => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('');
@@ -3051,39 +3089,38 @@ renderExpertNetwork: function(data) {
                   fieldHtml = `<input type="${field.type}" id="${inputId}" name="${field.name}" value="${value}" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-primary focus:border-primary text-sm" placeholder="${field.placeholder || ''}">`;
                   break;
               }
-              // ✅ 优化：减小了 mb-4 到 mb-3
               form.innerHTML += `
                 <div class="mb-3">
                   <label for="${inputId}" class="block text-sm font-medium text-gray-700">${field.label} ${isRequired}</label>
+                  ${field.notes ? `<p class="text-xs text-gray-500 mt-1">${field.notes}</p>` : ''}
                   ${fieldHtml}
                 </div>`;
-            });
+          });
 
-            // 2. 如果存在复选框字段，则渲染为一个分组
-            if (checkboxFields.length > 0) {
-                const checkboxesHtml = checkboxFields.map(field => {
-                    const value = currentData[field.name] || false;
-                    const inputId = `form-field-${field.name}`;
-                    return `
-                        <div class="flex items-center">
-                            <input type="checkbox" id="${inputId}" name="${field.name}" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" ${value ? 'checked' : ''}>
-                            <label for="${inputId}" class="ml-2 block text-sm text-gray-800">${field.label}</label>
-                        </div>
-                    `;
-                }).join('');
+          // 2. 如果存在复选框字段，则渲染为一个分组
+          if (checkboxFields.length > 0) {
+              const checkboxesHtml = checkboxFields.map(field => {
+                  const value = currentData[field.name] || false;
+                  const inputId = `form-field-${field.name}`;
+                  return `
+                      <div class="flex items-center">
+                          <input type="checkbox" id="${inputId}" name="${field.name}" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" ${value ? 'checked' : ''}>
+                          <label for="${inputId}" class="ml-2 block text-sm text-gray-800">${field.label}</label>
+                      </div>
+                  `;
+              }).join('');
 
-                // ✅ 优化：使用网格布局来展示复选框
-                form.innerHTML += `
-                    <div class="mt-4 pt-3 border-t border-gray-200">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">数据源监控选项</label>
-                        <div class="grid grid-cols-2 gap-x-4 gap-y-2">
-                            ${checkboxesHtml}
-                        </div>
-                    </div>
-                `;
-            }
+              form.innerHTML += `
+                  <div class="mt-4 pt-3 border-t border-gray-200">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">监控选项</label>
+                      <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                          ${checkboxesHtml}
+                      </div>
+                  </div>
+              `;
+          }
 
-            document.getElementById('registryEntryModal').style.display = 'flex';
+          document.getElementById('registryEntryModal').style.display = 'flex';
         },
 
         // 隐藏表单模态框
@@ -3150,7 +3187,15 @@ renderExpertNetwork: function(data) {
                     renderHeader('行业焦点', 'industry_focus', 'center') + // 左对齐
                     renderHeader('状态', 'monitoring_status', 'center') + // 居中
                     renderHeader('官方网站', null, 'center') + // 左对齐 (不可排序)
-                    renderHeader('操作', null, 'center') // 右对齐 (不可排序)
+                    renderHeader('操作', null, 'center'), // 右对齐 (不可排序)
+                'EXTERNAL_DATA_SOURCES':
+                    renderHeader('源 ID', 'source_id', 'center') +
+                    renderHeader('显示名称', 'display_name', 'center') +
+                    renderHeader('源类型', 'source_type', 'center') +
+                    renderHeader('基础 URL', 'base_url', 'center') +
+                    renderHeader('API 端点', 'endpoint_paths', 'center') + // 我们将在这里预览JSON
+                    renderHeader('状态', 'is_active', 'center') +
+                    renderHeader('操作', null, 'center')
             };
             
             if (customHeaders[config.key]) {
@@ -3238,6 +3283,45 @@ renderExpertNetwork: function(data) {
                                     <td class="px-6 py-3 text-base text-gray-600">${item.industry_focus}</td>
                                     <td class="px-6 py-3 text-center">${renderStatusBadge(item.monitoring_status)}</td>
                                     <td class="px-6 py-3">${renderClickableLink(item.official_website)}</td>
+                                    <td class="px-6 py-3 text-right">${renderActionButtons(docId)}</td>
+                                </tr>`;
+                    }).join('');
+                case 'EXTERNAL_DATA_SOURCES':
+                    return data.map(item => {
+                        const docId = item.id; // 你的代码已经正确地从 fullDataset 传递了 item，它包含了 id
+                        
+                        // --- 单元格内容美化 ---
+                        const sourceIdCell = `<div class="font-semibold text-gray-900">${item.id}</div>`;
+                        
+                        const displayNameCell = `<div class="text-base text-gray-800">${item.display_name}</div>`;
+                        
+                        const sourceTypeCell = `<span class="inline-block bg-purple-100 text-purple-800 text-sm font-medium px-3 py-1 rounded-md">${item.source_type}</span>`;
+                        
+                        const baseUrlCell = renderClickableLink(item.base_url); // 复用你的链接渲染函数
+                        
+                        // 特殊处理JSON对象字段
+                        const endpointPathsCell = () => {
+                            if (!item.endpoint_paths || typeof item.endpoint_paths !== 'object') {
+                                return '<span class="text-gray-400">N/A</span>';
+                            }
+                            const jsonString = JSON.stringify(item.endpoint_paths);
+                            // 只显示第一个键值对作为预览
+                            const firstKey = Object.keys(item.endpoint_paths)[0];
+                            const previewText = firstKey ? `{"${firstKey}": "..."}` : '{}';
+                            return `<div class="font-mono text-xs text-gray-600" title="${jsonString.replace(/"/g, '&quot;')}">${previewText}</div>`;
+                        };
+
+                        const statusCell = item.is_active 
+                            ? '<span class="badge badge-success">Active</span>' 
+                            : '<span class="badge badge-inactive">Inactive</span>';
+
+                        return `<tr class="hover:bg-gray-50/70 transition-colors duration-200">
+                                    <td class="px-6 py-3">${sourceIdCell}</td>
+                                    <td class="px-6 py-3">${displayNameCell}</td>
+                                    <td class="px-6 py-3">${sourceTypeCell}</td>
+                                    <td class="px-6 py-3">${baseUrlCell}</td>
+                                    <td class="px-6 py-3">${endpointPathsCell()}</td>
+                                    <td class="px-6 py-3 text-center">${statusCell}</td>
                                     <td class="px-6 py-3 text-right">${renderActionButtons(docId)}</td>
                                 </tr>`;
                     }).join('');
@@ -3454,7 +3538,6 @@ renderExpertNetwork: function(data) {
                 key: 'COMPETITOR_REGISTRY',
                 title: '业界标杆',
                 idField: 'competitor_id',
-                // ✅ 使用全新的、更丰富的字段配置，并优化了顺序
                 fields: [
                   { name: 'company_name', label: '公司名称', type: 'text', required: true },
                   { name: 'industry_category', label: '行业类别', type: 'text' },
@@ -3480,6 +3563,45 @@ renderExpertNetwork: function(data) {
                 { name: 'industry_focus', label: '行业焦点', type: 'text' },
                 { name: 'monitoring_status', label: '监控状态', type: 'select', options: ['active', 'inactive'] },
                 { name: 'official_website', label: '官方网站', type: 'url' },
+              ]
+            },
+            // ✅ =================================================================
+            // ✅ 在这里新增外部数据源的完整元数据定义
+            // ✅ =================================================================
+            {
+              key: 'EXTERNAL_DATA_SOURCES',
+              title: '外部数据源',
+              idField: 'source_id',
+              fields: [
+                { name: 'source_id', label: '源ID (唯一)', type: 'text', required: true, editableOnCreate: true, notes: '创建后不可修改，例如：ARXIV_API' },
+                { name: 'display_name', label: '显示名称', type: 'text', required: true, notes: '在UI上显示的友好名称' },
+                { name: 'source_type', label: '源类型', type: 'select', options: ['academic_paper_source', 'patent_data_source', 'news_source', 'opensource_data_source', 'llm_service', 'chart_service', 'image_cdn', 'other'], required: true, notes: '用于工作流按类型查找数据源' },
+                { name: 'base_url', label: '基础URL', type: 'text', required: true, notes: 'API的根地址，不包含末尾的斜杠' },
+                {
+                  name: 'endpoint_paths', 
+                  label: 'API端点路径 (JSON)', 
+                  type: 'textarea', 
+                  notes: '必须是合法的JSON。例如: {"query": "/api/query"}' 
+                },
+                { 
+                  name: 'response_mapping_rules', 
+                  label: '响应映射规则 (JSON)', 
+                  type: 'textarea', 
+                  notes: '定义如何将API响应映射到标准字段。例如: {"items_path":"articles", "fields":{"title":"headline"}}' 
+                },
+                { name: 'request_method', label: '请求方法', type: 'select', options: ['GET', 'POST', 'PUT', 'DELETE'], required: true },
+                { name: 'payload_type', label: '请求体类型', type: 'select', options: ['none', 'json', 'form_urlencoded', 'xml'], required: true },
+                { name: 'response_type', label: '响应体类型', type: 'select', options: ['json', 'xml', 'text', 'blob'], required: true },
+                { name: 'auth_method', label: '认证方式', type: 'select', options: ['none', 'header_key', 'query_param_key', 'bearer_token', 'basic_auth'], required: true },
+                { name: 'api_key_name', label: 'API Key名称 (在脚本属性中)', type: 'text', notes: '例如: NEWS_API_KEY' },
+                { name: 'api_key_header_name', label: 'API Key的HTTP头名称', type: 'text', notes: '例如: X-Api-Key' },
+                { name: 'api_key_query_param_name', label: 'API Key的URL参数名', type: 'text', notes: '例如: apiKey' },
+                { name: 'request_headers', label: '固定的请求头 (JSON)', type: 'textarea', notes: '例如: {"Accept": "application/json"}' },
+                { name: 'fixed_query_params', label: '固定的查询参数 (JSON)', type: 'textarea', notes: '例如: {"version": "1"}' },
+                { name: 'is_active', label: '是否启用', type: 'checkbox' },
+                { name: 'priority', label: '优先级 (数字越大越优先)', type: 'number' },
+                { name: 'rate_limit_per_minute', label: '每分钟请求限制', type: 'number' },
+                { name: 'notes', label: '备注', type: 'textarea' },
               ]
             }
           ];
@@ -3540,6 +3662,54 @@ renderExpertNetwork: function(data) {
                   const tabTitle = tabElement ? tabElement.textContent.trim() : subTabId;
                   container.innerHTML = `<div class="p-8 bg-gray-50 rounded-lg"><h3 class="text-2xl font-semibold">${tabTitle}</h3><p class="mt-2 text-gray-500">此功能模块正在开发中...</p></div>`;
               }
+          }
+        },
+
+        loadRegistryData: async function(registryKey) {
+          const contentContainer = document.getElementById('current-registry-content');
+          if (!contentContainer) return;
+
+          // ✅ 核心修改：直接从 this.registryConfigs 中查找元数据
+          const config = this.getRegistryConfig(registryKey);
+          if (!config) {
+              handleFailure(new Error(`未找到注册表 '${registryKey}' 的前端元数据定义。`));
+              return;
+          }
+          
+          // 将元数据存入当前上下文，供其他函数使用
+          this.currentRegistryMeta = config;
+
+          // 渲染包含操作区和表格包装器的完整骨架屏
+          const tableWrapperId = `registry-table-wrapper-${registryKey}`;
+          contentContainer.innerHTML = `
+            <div class="flex justify-between items-center">
+              <div class="relative w-1/3 max-w-xs">
+                <input type="text" id="registry-search-input" placeholder="搜索 ${config.title}..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+              </div>
+              <div>
+                <button data-action="add" class="px-5 py-2 bg-primary text-white font-semibold rounded-lg hover:bg-blue-700 shadow-sm flex items-center">
+                  <i class="fa fa-plus mr-2"></i> 添加新${config.title}
+                </button>
+              </div>
+            </div>
+            <div id="${tableWrapperId}" class="mt-3 text-center p-8">正在加载数据...</div>`;
+
+          // 为新生成的搜索框绑定事件
+          contentContainer.querySelector(`#registry-search-input`).addEventListener('input', (e) => {
+            this.currentFilter = e.target.value.trim().toLowerCase();
+            this.applyFiltersAndSort();
+          });
+
+          try {
+            const data = await App.callApi('SystemAdminService', 'getRegistry', [registryKey]);
+            this.fullDataset = data || [];
+            this.currentSort = { key: null, order: 'none' };
+            this.currentFilter = '';
+            this.applyFiltersAndSort(); // 首次渲染
+          } catch (e) {
+            document.getElementById(tableWrapperId).innerHTML = `<div class="p-8 text-red-500">加载 ${config.title} 数据失败: ${e.message}</div>`;
+            handleFailure(e);
           }
         },
 

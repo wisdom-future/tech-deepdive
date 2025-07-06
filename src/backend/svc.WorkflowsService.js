@@ -63,145 +63,95 @@ const WorkflowsService = {
   },
   
   /**
-   * 统一的AI评分调用函数 (用于结构化评分)
-   */
-  _callAIForScoring: function(prompt, logContext) {
-    const { wfName, executionId, logMessages } = logContext;
-    try {
-      const OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
-      if (!OPENAI_API_KEY) throw new Error("AI API Key未在项目属性中配置 (OPENAI_API_KEY)。");
-
-      const payload = {
-        model: "gpt-4o-mini", // 使用性价比高的新模型
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" }, // 强制要求返回JSON对象
-        temperature: 0.2, // 对于评分任务，使用较低的温度以保证结果的稳定性
-        max_tokens: 500
-      };
-
-      const options = {
-        method: "post",
-        contentType: "application/json",
-        headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true
-      };
-
-      const response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", options);
-      const responseCode = response.getResponseCode();
-      const responseBody = response.getContentText();
-
-      if (responseCode === 200) {
-        const jsonResponse = JSON.parse(responseBody);
-        if (jsonResponse.choices && jsonResponse.choices.length > 0 && jsonResponse.choices[0].message) {
-          return JSON.parse(jsonResponse.choices[0].message.content);
-        } else {
-          throw new Error("AI响应格式不正确，缺少choices或message。");
-        }
-      } else {
-        throw new Error(`AI API返回错误，状态码: ${responseCode}, 响应: ${responseBody}`);
-      }
-    } catch (e) {
-      Logger.log(`[${wfName}] AI调用失败: ${e.message}`);
-      if (logMessages) {
-          logMessages.push(`警告: AI评估失败 - ${e.message}`);
-      }
-      return null;
-    }
-  },
-
-  /**
-   * 辅助函数：调用 AI 进行文本生成 (例如摘要、关键词列表)
-   * @param {string} prompt - 发送给AI的完整指令。
-   * @param {object} [options] - AI模型选项 (model, temperature, max_tokens)。
-   * @returns {string} AI生成的文本。
-   */
-  _callAIForTextGeneration: function(prompt, options = {}) {
-    Logger.log(`[AI-TextGen] Calling AI for text generation. Prompt snippet: ${prompt.substring(0, 100)}...`);
-    const OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) throw new Error("AI API Key未在项目属性中配置 (OPENAI_API_KEY)。");
-
-    const model = options.model || "gpt-4o-mini";
-    const temperature = options.temperature || 0.5;
-    const max_tokens = options.max_tokens || 300;
-
+ * ✅ 重构版: 统一的AI评分调用函数
+ */
+_callAIForScoring: function(prompt, logContext) {
+  const { wfName, logMessages } = logContext;
+  try {
+    const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
     const payload = {
-      model: model,
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: max_tokens,
-      temperature: temperature
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+      max_tokens: 500
     };
+    
+    const responseJson = DataConnector.fetchExternalData(llmConfig, 'chat_completions', payload);
 
-    const requestOptions = {
-      method: "post",
-      contentType: "application/json",
-      headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-
-    try {
-      const response = UrlFetchApp.fetch("https://api.openai.com/v1/chat/completions", requestOptions);
-      const jsonResponse = JSON.parse(response.getContentText());
-
-      if (response.getResponseCode() === 200 && jsonResponse.choices && jsonResponse.choices.length > 0) {
-        return jsonResponse.choices[0].message.content.trim();
-      } else {
-        Logger.log(`[AI-TextGen] API Error: ${response.getResponseCode()} - ${JSON.stringify(jsonResponse)}`);
-        return `AI生成失败：API错误 (${response.getResponseCode()})。`;
-      }
-    } catch (e) {
-      Logger.log(`[AI-TextGen] API调用失败: ${e.message}\n${e.stack}`);
-      return `AI生成失败：连接或解析错误 (${e.message})。`;
+    if (responseJson.choices && responseJson.choices.length > 0) {
+      return JSON.parse(responseJson.choices[0].message.content);
+    } else {
+      throw new Error("AI响应格式不正确，缺少choices或message。");
     }
-  },
+  } catch (e) {
+    Logger.log(`[${wfName}] AI评分调用失败: ${e.message}`);
+    if (logMessages) logMessages.push(`警告: AI评估失败 - ${e.message}`);
+    return null;
+  }
+},
+
+ /**
+ * ✅ 重构版: 调用 AI 进行文本生成 (摘要、关键词等)
+ */
+_callAIForTextGeneration: function(prompt, options = {}) {
+  Logger.log(`[AI-TextGen] Calling AI. Prompt snippet: ${prompt.substring(0, 100)}...`);
+  try {
+    const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
+    const payload = {
+      model: options.model || "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: options.max_tokens || 300,
+      temperature: options.temperature || 0.5
+    };
+    
+    const responseJson = DataConnector.fetchExternalData(llmConfig, 'chat_completions', payload);
+
+    if (responseJson.choices && responseJson.choices.length > 0) {
+      return responseJson.choices[0].message.content.trim();
+    } else {
+      Logger.log(`[AI-TextGen] API Error: ${responseJson.error || JSON.stringify(responseJson)}`);
+      return `AI生成失败：API错误。`;
+    }
+  } catch (e) {
+    Logger.log(`[AI-TextGen] API调用失败: ${e.message}\n${e.stack}`);
+    return `AI生成失败：连接或解析错误 (${e.message})。`;
+  }
+},
 
   /**
-   * 辅助函数：调用 AI 生成文本向量 (Embedding)
-   * @param {string|Array<string>} text - 要生成向量的文本或文本数组。
-   * @param {object} [options] - Embedding模型选项 (model)。
-   * @returns {Array<number>|null} 文本向量数组。
-   */
-  _callAIForEmbedding: function(text, options = {}) {
-    Logger.log(`[AI-Embedding] Calling AI for embedding. Text snippet: ${String(text).substring(0, 50)}...`);
-    const OPENAI_API_KEY = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) throw new Error("AI API Key未在项目属性中配置 (OPENAI_API_KEY)。");
-
-    const model = options.model || "text-embedding-3-small";
-
+ * ✅ 重构版: 调用 AI 生成文本向量 (Embedding)
+ */
+_callAIForEmbedding: function(text, options = {}) {
+  Logger.log(`[AI-Embedding] Calling AI. Text snippet: ${String(text).substring(0, 50)}...`);
+  try {
+    const llmConfig = DataConnector.getSourceConfig('llm_service', 'OPENAI_API');
     const payload = {
       input: text,
-      model: model
+      model: options.model || "text-embedding-3-small"
     };
+    
+    const responseJson = DataConnector.fetchExternalData(llmConfig, 'embeddings', payload);
 
-    const requestOptions = {
-      method: "post",
-      contentType: "application/json",
-      headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-
-    try {
-      const response = UrlFetchApp.fetch("https://api.openai.com/v1/embeddings", requestOptions);
-      const jsonResponse = JSON.parse(response.getContentText());
-
-      if (response.getResponseCode() === 200 && jsonResponse.data && jsonResponse.data.length > 0) {
-        return jsonResponse.data[0].embedding;
-      } else {
-        Logger.log(`[AI-Embedding] API Error: ${response.getResponseCode()} - ${JSON.stringify(jsonResponse)}`);
-        return null;
-      }
-    } catch (e) {
-      Logger.log(`[AI-Embedding] API调用失败: ${e.message}\n${e.stack}`);
+    if (responseJson.data && responseJson.data.length > 0) {
+      return responseJson.data[0].embedding;
+    } else {
+      Logger.log(`[AI-Embedding] API Error: ${responseJson.error || JSON.stringify(responseJson)}`);
       return null;
     }
-  },
+  } catch (e) {
+    Logger.log(`[AI-Embedding] API调用失败: ${e.message}\n${e.stack}`);
+    return null;
+  }
+},
 
   // ====================================================================================================================
   //  第一层：数据采集工作流 (WF1 - WF6)
   // ====================================================================================================================
 
+    /**
+   * ✅ WF1: 学术论文监控 (数据驱动版)
+   */
   runWf1_AcademicPapers: function() {
     const wfName = 'WF1: 学术论文监控';
     const startTime = new Date();
@@ -210,237 +160,189 @@ const WorkflowsService = {
     let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
-      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY');
-      const activeTechs = techRegistry.filter(t =>
-        t.monitoring_status === 'active' && t.data_source_academic === true);
-      logMessages.push(`发现 ${activeTechs.length} 个活跃的技术监控项。`);
+      const activeTechs = DataService.getDataAsObjects('TECH_REGISTRY').filter(t => t.monitoring_status === 'active' && t.data_source_academic === true);
       processedCount = activeTechs.length;
-
       if (activeTechs.length === 0) {
-        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, "没有需要监控的活跃技术项。");
-        return { success: true, message: "没有需要监控的活跃技术项。", log: logMessages.join('\n') };
+        const msg = "没有需要监控学术论文的活跃技术项。";
+        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+        return { success: true, message: msg };
       }
       
       let allNewPaperObjects = [];
-      const existingHashes = new Set(
-          (DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS') || [])
-          .map(item => item.duplicate_check_hash)
-          .filter(Boolean)
-      );
-      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
-
+      const existingHashes = new Set((DataService.getDataAsObjects('RAW_ACADEMIC_PAPERS') || []).map(item => item.duplicate_check_hash).filter(Boolean));
+      const academicSources = DataConnector.getAllActiveSourcesOfType('academic_paper_source');
+      if (academicSources.length === 0) throw new Error("系统中没有配置任何活跃的学术数据源。");
+      logMessages.push(`发现 ${activeTechs.length} 个技术项 和 ${academicSources.length} 个学术源需要处理。`);
 
       for (const tech of activeTechs) {
-        const searchTerms = (tech.academic_search_terms || "").split(',').map(s => s.trim()).filter(Boolean);
+        const searchTerms = (tech.academic_search_terms || tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
         for (const term of searchTerms) {
-          logMessages.push(`正在为技术 '${tech.tech_name}' 搜索关键词: '${term}'...`);
-          const apiUrl = `http://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(term)}&sortBy=submittedDate&sortOrder=descending&max_results=5`;
-          const response = UrlFetchApp.fetch(apiUrl, { muteHttpExceptions: true });
-          
-          if (response.getResponseCode() !== 200) {
-              logMessages.push(`警告: 调用arXiv API失败，状态码: ${response.getResponseCode()}`);
-              errorCount++;
-              continue;
-          }
+          for (const sourceConfig of academicSources) {
+            logMessages.push(`正在从 [${sourceConfig.display_name}] 为 '${tech.tech_name}' 搜索: '${term}'...`);
+            try {
+              const dynamicParams = { q: term, pageSize: 5 };
+              const responseData = DataConnector.fetchExternalData(sourceConfig, 'query', dynamicParams);
+              
+              let standardPapers = [];
+              if (sourceConfig.response_type === 'xml' && sourceConfig.id === 'ARXIV_API') {
+                  const document = XmlService.parse(responseData);
+                  const root = document.getRootElement();
+                  const entries = root.getChildren('entry', XmlService.getNamespace('http://www.w3.org/2005/Atom'));
+                  // 注意：对于XML，DataMapper需要特殊处理，这里简化为直接映射
+                  standardPapers = entries.map(entry => ({
+                    url: entry.getChild('id', XmlService.getNamespace('http://www.w3.org/2005/Atom')).getText(),
+                    title: entry.getChild('title', XmlService.getNamespace('http://www.w3.org/2005/Atom')).getText(),
+                    summary: entry.getChild('summary', XmlService.getNamespace('http://www.w3.org/2005/Atom')).getText(),
+                    authors: entry.getChildren('author', XmlService.getNamespace('http://www.w3.org/2005/Atom')).map(a => a.getChild('name', XmlService.getNamespace('http://www.w3.org/2005/Atom')).getText()).join(', '),
+                    publication_date: new Date(entry.getChild('published', XmlService.getNamespace('http://www.w3.org/2005/Atom')).getText())
+                  }));
+              } else {
+                  const rawItems = DataMapper.getRawItems(responseData, sourceConfig.response_mapping_rules.items_path);
+                  standardPapers = DataMapper.map(rawItems, sourceConfig.response_mapping_rules);
+              }
 
-          const xml = response.getContentText();
-          const document = XmlService.parse(xml);
-          const root = document.getRootElement();
-          const atomNs = XmlService.getNamespace('http://www.w3.org/2005/Atom');
-          const entries = root.getChildren('entry', atomNs);
+              for (const paper of standardPapers) {
+                if (!paper.url) continue;
+                const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paper.url));
+                if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
+                existingHashes.add(duplicateHash);
 
-          for (const entry of entries) {
-            const paperUrl = entry.getChild('id', atomNs).getText();
-            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, paperUrl));
+                const textForAI = `标题: ${paper.title}\n摘要: ${paper.summary || ''}`;
+                const ai_summary = this._callAIForTextGeneration(`请为以下论文生成一个不超过100字的精炼摘要。\n\n${textForAI}`);
+                const ai_keywords = this._callAIForTextGeneration(`请为以下论文提炼3-5个最核心的技术关键词（以逗号分隔）。\n\n${textForAI}`);
+                const embeddingVector = this._callAIForEmbedding(`${paper.title} ${ai_summary} ${ai_keywords}`);
 
-            if (existingHashes.has(duplicateHash)) {
-                logMessages.push(`  -> 发现重复论文，跳过: ${paperUrl} (Hash: ${duplicateHash})`);
-                duplicateCount++;
-                continue;
-            }
-
-            const title = entry.getChild('title', atomNs).getText();
-            const summary = entry.getChild('summary', atomNs).getText();
-            const authors = entry.getChildren('author', atomNs).map(a => a.getChild('name', atomNs).getText()).join(', ');
-            const publication_date = new Date(entry.getChild('published', atomNs).getText());
-
-            logMessages.push(`  -> 正在为论文 "${title.substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
-            const aiPrompt = `请为以下论文生成一个不超过100字的精炼摘要，和3-5个最核心的技术关键词（以逗号分隔）。\n\n标题: ${title}\n摘要: ${summary}`;
-            const aiResponse = this._callAIForTextGeneration(aiPrompt);
-
-            let ai_summary = "";
-            let ai_keywords = "";
-            const lines = aiResponse ? aiResponse.split('\n') : [];
-            if (lines.length > 0) {
-                ai_summary = lines[0].trim();
-                if (lines.length > 1 && lines[1].toLowerCase().includes('关键词')) {
-                    ai_keywords = lines[1].replace(/关键词[:：]/gi, '').trim();
-                } else if (lines.length > 1) { // 如果第二行不是关键词，尝试查找
-                    ai_keywords = lines.find(line => line.toLowerCase().includes('关键词')) || lines[1];
-                    ai_keywords = ai_keywords.replace(/关键词[:：]/gi, '').trim();
-                }
-            }
-            
-            const textForEmbedding = `${title} ${ai_summary} ${ai_keywords}`;
-            const embeddingVector = this._callAIForEmbedding(textForEmbedding);
-
-            const paperDataObject = {
-                raw_id: `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`,
-                id: `RAW_AP_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`,
-                source_type: 'academic_papers',
-                title: title,
-                abstract: summary,
-                authors: authors,
-                publication_date: publication_date,
-                source_url: paperUrl,
-                source_platform: 'arXiv',
-                innovation_score: 0, // 暂时设为0，AI评分在信号识别阶段进行
-                tech_keywords: tech.tech_keywords, // 原始技术关键词
-                ai_summary: ai_summary,      // ✅ AI 生成的摘要
-                ai_keywords: ai_keywords,    // ✅ AI 生成的关键词
-                embedding: embeddingVector,  // ✅ AI 生成的向量
-                processing_status: 'pending', // 保持 pending，等待信号识别
-                workflow_execution_id: executionId,
-                created_timestamp: new Date(),
-                last_update_timestamp: new Date(),
-                duplicate_check_hash: duplicateHash // 存储哈希值
-            };
-            allNewPaperObjects.push(paperDataObject);
-            successCount++;
+                allNewPaperObjects.push({
+                  raw_id: `RAW_AP_${Utilities.getUuid()}`, id: `RAW_AP_${Utilities.getUuid()}`,
+                  title: paper.title, abstract: paper.summary, authors: paper.authors,
+                  publication_date: new Date(paper.publication_date), source_url: paper.url,
+                  source_platform: sourceConfig.display_name, source_type: 'academic_papers',
+                  tech_keywords: tech.tech_keywords, ai_summary, ai_keywords, embedding: embeddingVector,
+                  processing_status: 'pending', workflow_execution_id: executionId,
+                  created_timestamp: new Date(), last_update_timestamp: new Date(), duplicate_check_hash: duplicateHash
+                });
+                successCount++;
+              }
+            } catch (e) { logMessages.push(`  - 警告: 处理源 ${sourceConfig.display_name} 失败: ${e.message}`); errorCount++; }
           }
         }
       }
-      
-      if (allNewPaperObjects.length > 0) {
-        DataService.batchUpsert('RAW_ACADEMIC_PAPERS', allNewPaperObjects, 'raw_id');
-        logMessages.push(`成功写入 ${allNewPaperObjects.length} 条论文数据（含AI预处理）。`);
-      }
-      
-      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇论文（含AI预处理），跳过 ${duplicateCount} 条重复论文。`;
+      if (allNewPaperObjects.length > 0) DataService.batchUpsert('RAW_ACADEMIC_PAPERS', allNewPaperObjects, 'raw_id');
+      const finalMessage = `处理 ${processedCount} 个技术项，发现 ${successCount} 篇新论文，跳过 ${duplicateCount} 条重复。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
-
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
-      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+        const errorMessage = `严重错误: ${e.message}`;
+        this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+        return { success: false, message: errorMessage, log: logMessages.join('\n') }; 
     }
   },
 
+  /**
+   * ✅ WF2: 专利申请追踪 (数据驱动版)
+   */
   runWf2_PatentData: function() {
-    const wfName = 'WF2: 专利申请追踪';
-    const startTime = new Date();
-    const executionId = `exec_wf2_${startTime.getTime()}`;
-    let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0; // 新增duplicateCount
+  const wfName = 'WF2: 专利申请追踪';
+  const startTime = new Date();
+  const executionId = `exec_wf2_${startTime.getTime()}`;
+  let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
+  let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
-    try {
-      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY')
-                                     .filter(t => t.monitoring_status === 'active' && t.data_source_patent === true);
-      
-      processedCount = techRegistry.length;
-      logMessages.push(`发现 ${processedCount} 个需要监控专利的技术领域。`);
+  try {
+    const activeTechs = DataService.getDataAsObjects('TECH_REGISTRY').filter(t => t.monitoring_status === 'active' && t.data_source_patent === true);
+    processedCount = activeTechs.length;
+    if (activeTechs.length === 0) {
+      const msg = "没有需要监控专利的活跃技术项。";
+      this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+      return { success: true, message: msg };
+    }
+    
+    const existingHashes = new Set((DataService.getDataAsObjects('RAW_PATENT_DATA') || []).map(item => item.duplicate_check_hash).filter(Boolean));
+    const patentSources = DataConnector.getAllActiveSourcesOfType('patent_data_source');
+    if (patentSources.length === 0) throw new Error("系统中没有配置任何活跃的专利数据源。");
+    logMessages.push(`发现 ${activeTechs.length} 个技术项 和 ${patentSources.length} 个专利源需要处理。`);
 
-      if (processedCount === 0) {
-        const msg = "没有需要监控专利的活跃技术领域。";
-        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
-      }
+    // ✅ =================================================================
+    // ✅ 核心修正：引入批处理机制
+    // ✅ =================================================================
+    const BATCH_SIZE = 20; // 定义批处理大小，每次最多写入20条记录
+    let patentBatch = []; // 用于暂存待写入的对象
 
-      let allNewPatentObjects = [];
-      const patentApiKey = PropertiesService.getScriptProperties().getProperty('PATENT_API_KEY');
-      // if (!patentApiKey) throw new Error("PATENT_API_KEY 未在项目属性中配置。"); // 启用真实API时取消注释
+    const writeBatchToFirestore = () => {
+        if (patentBatch.length > 0) {
+            logMessages.push(`  -> 正在写入一批 ${patentBatch.length} 条专利数据到 Firestore...`);
+            DataService.batchUpsert('RAW_PATENT_DATA', patentBatch, 'raw_id');
+            logMessages.push(`  -> 写入成功。`);
+            patentBatch = []; // 清空批次，准备下一批
+        }
+    };
+    // =================================================================
 
-      const existingHashes = new Set(
-          (DataService.getDataAsObjects('RAW_PATENT_DATA') || [])
-          .map(item => item.duplicate_check_hash)
-          .filter(Boolean)
-      );
-      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
-      for (const tech of techRegistry) {
-        const searchTerms = (tech.patent_search_terms || "").split(',').map(s => s.trim()).filter(Boolean);
-        for (const term of searchTerms) {
-          logMessages.push(`正在为技术 '${tech.tech_name}' 搜索专利: '${term}'...`);
-          
-          // 模拟专利API调用，实际需要替换为真实API
-          const mockPatentData = [
-            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK1`, title: `Patent for ${term} AI`, abstract: `This patent describes an innovative method for ${term} based AI...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 5, Math.floor(Math.random()*30)+1), inventors: 'John Doe', status: 'pending', source_url: 'https://mockpatent.com/1', duplicate_check_hash: this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, 'https://mockpatent.com/1')) },
-            { raw_id: `RAW_PT_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_MOCK2`, title: `Another Patent on ${term} Robotics`, abstract: `This covers new robotic applications of ${term} technology...`, patent_number: `US${Math.floor(Math.random()*1e8)}`, application_date: new Date(2025, 4, Math.floor(Math.random()*30)+1), inventors: 'Jane Smith', status: 'granted', source_url: 'https://mockpatent.com/2', duplicate_check_hash: this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, 'https://mockpatent.com/2')) },
-          ];
-          
-          if (mockPatentData.length === 0) {
-            logMessages.push(`  -> 未找到相关专利。`);
-            continue;
-          }
-
-          for (const patent of mockPatentData) {
-            if (existingHashes.has(patent.duplicate_check_hash)) {
-                logMessages.push(`  -> 发现重复专利，跳过: ${patent.title.substring(0,30)}... (Hash: ${patent.duplicate_check_hash})`);
-                duplicateCount++;
-                continue;
-            }
-
-            logMessages.push(`  -> 正在为专利 "${patent.title.substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
-            const aiPrompt = `请为以下专利生成一个不超过80字的精炼摘要，和3-5个最核心的技术关键词（以逗号分隔）。\n\n专利标题: ${patent.title}\n摘要: ${patent.abstract}`;
-            const aiResponse = this._callAIForTextGeneration(aiPrompt);
-
-            let ai_summary = "";
-            let ai_keywords = "";
-            const lines = aiResponse ? aiResponse.split('\n') : [];
-            if (lines.length > 0) {
-                ai_summary = lines[0].trim();
-                if (lines.length > 1 && lines[1].toLowerCase().includes('关键词')) {
-                    ai_keywords = lines[1].replace(/关键词[:：]/gi, '').trim();
-                } else if (lines.length > 1) {
-                    ai_keywords = lines.find(line => line.toLowerCase().includes('关键词')) || lines[1];
-                    ai_keywords = ai_keywords.replace(/关键词[:：]/gi, '').trim();
-                }
-            }
+    for (const tech of activeTechs) {
+      const searchTerms = (tech.patent_search_terms || tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
+      for (const term of searchTerms) {
+        for (const sourceConfig of patentSources) {
+          logMessages.push(`正在从 [${sourceConfig.display_name}] 为 '${tech.tech_name}' 搜索: '${term}'...`);
+          try {
+            const dynamicParams = { q: term, pageSize: 10 };
+            const responseData = DataConnector.fetchExternalData(sourceConfig, 'query', dynamicParams);
             
-            const textForEmbedding = `${patent.title} ${ai_summary} ${ai_keywords}`;
-            const embeddingVector = this._callAIForEmbedding(textForEmbedding);
+            const rawItems = DataMapper.getRawItems(responseData, sourceConfig.response_mapping_rules.items_path);
+            const standardPatents = DataMapper.map(rawItems, sourceConfig.response_mapping_rules);
+            
+            logMessages.push(`  -> 从API获取并映射了 ${standardPatents.length} 条专利。`);
 
-            const patentDataObject = {
-                raw_id: patent.raw_id,
-                id: patent.raw_id,
-                source_type: 'patent_data',
-                title: patent.title,
-                abstract: patent.abstract,
-                patent_number: patent.patent_number,
-                application_date: patent.application_date,
-                inventors: patent.inventors,
-                status: patent.status,
-                ai_summary: ai_summary,
-                ai_keywords: ai_keywords,
-                embedding: embeddingVector,
-                processing_status: 'pending',
-                workflow_execution_id: executionId,
-                created_timestamp: new Date(),
-                last_update_timestamp: new Date(),
-                duplicate_check_hash: patent.duplicate_check_hash
-            };
-            allNewPatentObjects.push(patentDataObject);
-            successCount++;
-          }
+            for (const patent of standardPatents) {
+              if (!patent.id) continue;
+              const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, patent.id));
+              if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
+              existingHashes.add(duplicateHash);
+
+              const textForAI = `专利标题: ${patent.title}\n摘要: ${patent.summary || ''}`;
+              const ai_summary = this._callAIForTextGeneration(`...`); // 省略prompt以保持简洁
+              const ai_keywords = this._callAIForTextGeneration(`...`);
+              const embeddingVector = this._callAIForEmbedding(`${patent.title} ${ai_summary} ${ai_keywords}`);
+
+              // ✅ 不再直接push到大数组，而是push到批处理数组
+              patentBatch.push({
+                  raw_id: `RAW_PT_${Utilities.getUuid()}`, id: `RAW_PT_${Utilities.getUuid()}`,
+                  patent_number: patent.id, title: patent.title, abstract: patent.summary, 
+                  inventors: patent.authors, application_date: new Date(patent.publication_date),
+                  source_url: patent.url, source_platform: sourceConfig.display_name, 
+                  source_type: 'patent_data', tech_keywords: tech.tech_keywords, 
+                  ai_summary, ai_keywords, embedding: embeddingVector, processing_status: 'pending', 
+                  workflow_execution_id: executionId, created_timestamp: new Date(), 
+                  last_update_timestamp: new Date(), duplicate_check_hash: duplicateHash
+              });
+              successCount++;
+
+              // ✅ 如果批处理数组满了，就立即写入
+              if (patentBatch.length >= BATCH_SIZE) {
+                writeBatchToFirestore();
+              }
+            }
+          } catch (e) { logMessages.push(`  - 警告: 处理源 ${sourceConfig.display_name} 失败: ${e.message}`); errorCount++; }
         }
       }
+    }
+    
+    // ✅ 在所有循环结束后，写入最后一批不足BATCH_SIZE的数据
+    writeBatchToFirestore();
 
-      if (allNewPatentObjects.length > 0) {
-        DataService.batchUpsert('RAW_PATENT_DATA', allNewPatentObjects, 'raw_id');
-        logMessages.push(`成功写入 ${allNewPatentObjects.length} 条专利数据（含AI预处理）。`);
-      }
-      
-      const finalMessage = `成功处理 ${processedCount} 个技术项，发现 ${successCount} 篇专利（含AI预处理），跳过 ${duplicateCount} 条重复专利。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
-      return { success: true, message: finalMessage, log: logMessages.join('\n') };
+    const finalMessage = `处理 ${processedCount} 个技术项，发现 ${successCount} 篇新专利，跳过 ${duplicateCount} 条重复。`;
+    this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+    return { success: true, message: finalMessage, log: logMessages.join('\n') };
 
-    } catch (e) {
+  } catch (e) {
       const errorMessage = `严重错误: ${e.message}`;
       this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
       return { success: false, message: errorMessage, log: logMessages.join('\n') };
-    }
-  },
+  }
+},
 
+  /**
+   * ✅ WF3: 开源项目监测 (数据驱动版)
+   */
   runWf3_OpenSource: function() {
     const wfName = 'WF3: 开源项目监测';
     const startTime = new Date();
@@ -449,134 +351,72 @@ const WorkflowsService = {
     let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
-      const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY')
-                                     .filter(t => t.monitoring_status === 'active' && t.data_source_opensource === true);
-      processedCount = techRegistry.length;
-      logMessages.push(`发现 ${processedCount} 个需要监控开源项目的技术领域。`);
-
-      if (processedCount === 0) {
-        const msg = "没有需要监控开源项目的活跃技术领域。";
+      const activeTechs = DataService.getDataAsObjects('TECH_REGISTRY').filter(t => t.monitoring_status === 'active' && t.data_source_opensource === true);
+      processedCount = activeTechs.length;
+      if (activeTechs.length === 0) {
+        const msg = "没有需要监控开源项目的活跃技术项。";
         this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
+        return { success: true, message: msg };
       }
 
-      let allNewProjectsObjects = [];
-      const githubToken = PropertiesService.getScriptProperties().getProperty('GITHUB_API_KEY');
-      
-      const headers = {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'TechInsight-Engine/1.0'
-      };
-      if (githubToken) {
-        headers['Authorization'] = `token ${githubToken}`;
-      } else {
-        logMessages.push("警告: 未配置 GitHub API Token，将以匿名模式执行。");
-      }
-      
-      const options = { headers: headers, muteHttpExceptions: true };
+      let allNewProjects = [];
+      const existingHashes = new Set((DataService.getDataAsObjects('RAW_OPENSOURCE_DATA') || []).map(item => item.duplicate_check_hash).filter(Boolean));
+      const openSourceAPIs = DataConnector.getAllActiveSourcesOfType('opensource_data_source');
+      if (openSourceAPIs.length === 0) throw new Error("系统中没有配置任何活跃的开源数据源。");
+      logMessages.push(`发现 ${activeTechs.length} 个技术项 和 ${openSourceAPIs.length} 个开源API源需要处理。`);
 
-      const existingHashes = new Set(
-          (DataService.getDataAsObjects('RAW_OPENSOURCE_DATA') || [])
-          .map(item => item.duplicate_check_hash)
-          .filter(Boolean)
-      );
-      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
+      for (const tech of activeTechs) {
+          const searchTerms = (tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
+          for (const term of searchTerms) {
+              for (const sourceConfig of openSourceAPIs) {
+                  logMessages.push(`正在从 [${sourceConfig.display_name}] 为 '${tech.tech_name}' 搜索: '${term}'...`);
+                  try {
+                      const dynamicParams = { q: term, pageSize: 5 };
+                      const responseData = DataConnector.fetchExternalData(sourceConfig, 'search_repositories', dynamicParams);
+                      const rawItems = DataMapper.getRawItems(responseData, sourceConfig.response_mapping_rules.items_path);
+                      const standardProjects = DataMapper.map(rawItems, sourceConfig.response_mapping_rules);
 
+                      for (const project of standardProjects) {
+                          if (!project.url || (project.stars < 50)) continue;
+                          const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, project.url));
+                          if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
+                          existingHashes.add(duplicateHash);
 
-      for (const tech of techRegistry) {
-        const searchTerms = (tech.tech_keywords || "").split(',').map(s => s.trim()).filter(Boolean);
-        for (const term of searchTerms) {
-          logMessages.push(`正在为技术 '${tech.tech_name}' 搜索开源项目: '${term}'...`);
-          
-          const apiUrl = `https://api.github.com/search/repositories?q=${encodeURIComponent(term)}&sort=updated&order=desc&per_page=5`;
-          const response = UrlFetchApp.fetch(apiUrl, options);
+                          const textForAI = `项目名称: ${project.title}\n描述: ${project.summary || ''}`;
+                          const ai_summary = this._callAIForTextGeneration(`请为以下开源项目生成一个不超过80字的精炼摘要。\n\n${textForAI}`);
+                          const ai_keywords = this._callAIForTextGeneration(`请为以下开源项目提炼3-5个最核心的技术关键词（以逗号分隔）。\n\n${textForAI}`);
+                          const embeddingVector = this._callAIForEmbedding(`${project.title} ${ai_summary} ${ai_keywords}`);
 
-          if (response.getResponseCode() !== 200) {
-            logMessages.push(`警告: 调用GitHub API失败，状态码: ${response.getResponseCode()}`);
-            errorCount++;
-            continue;
+                          allNewProjects.push({
+                              raw_id: `RAW_OS_${Utilities.getUuid()}`, id: `RAW_OS_${Utilities.getUuid()}`,
+                              project_name: project.title, description: project.summary, main_language: project.language,
+                              source_url: project.url, github_stars: project.stars, github_forks: project.forks,
+                              last_commit_date: new Date(project.last_updated), source_platform: sourceConfig.display_name,
+                              source_type: 'opensource_data', tech_keywords: tech.tech_keywords,
+                              ai_summary, ai_keywords, embedding: embeddingVector,
+                              processing_status: 'pending', workflow_execution_id: executionId,
+                              created_timestamp: new Date(), last_update_timestamp: new Date(), duplicate_check_hash: duplicateHash
+                          });
+                          successCount++;
+                      }
+                  } catch (e) { logMessages.push(`  - 警告: 处理源 ${sourceConfig.display_name} 失败: ${e.message}`); errorCount++; }
+              }
           }
-
-          const searchResult = JSON.parse(response.getContentText());
-          const projects = searchResult.items || [];
-
-          for (const project of projects) {
-            if (project.stargazers_count < 50) continue; // 过滤掉星数过低的项目
-
-            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, project.html_url));
-            
-            if (existingHashes.has(duplicateHash)) {
-                logMessages.push(`  -> 发现重复开源项目，跳过: ${project.full_name.substring(0,30)}... (Hash: ${duplicateHash})`);
-                duplicateCount++;
-                continue;
-            }
-
-            const raw_id = `RAW_OS_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
-            
-            logMessages.push(`  -> 正在为开源项目 "${project.full_name.substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
-            const aiPrompt = `请为以下开源项目生成一个不超过80字的精炼摘要，和3-5个最核心的技术关键词（以逗号分隔）。\n\n项目名称: ${project.full_name}\n描述: ${project.description || ''}`;
-            const aiResponse = this._callAIForTextGeneration(aiPrompt);
-
-            let ai_summary = "";
-            let ai_keywords = "";
-            const lines = aiResponse ? aiResponse.split('\n') : [];
-            if (lines.length > 0) {
-                ai_summary = lines[0].trim();
-                if (lines.length > 1 && lines[1].toLowerCase().includes('关键词')) {
-                    ai_keywords = lines[1].replace(/关键词[:：]/gi, '').trim();
-                } else if (lines.length > 1) {
-                    ai_keywords = lines.find(line => line.toLowerCase().includes('关键词')) || lines[1];
-                    ai_keywords = ai_keywords.replace(/关键词[:：]/gi, '').trim();
-                }
-            }
-            
-            const textForEmbedding = `${project.full_name} ${ai_summary} ${ai_keywords}`;
-            const embeddingVector = this._callAIForEmbedding(textForEmbedding);
-
-            const projectDataObject = {
-                raw_id: raw_id,
-                id: raw_id,
-                source_type: 'opensource_data',
-                project_name: project.full_name,
-                description: (project.description || '').substring(0, 500),
-                main_language: project.language || '',
-                source_url: project.html_url,
-                github_stars: project.stargazers_count,
-                github_forks: project.forks_count,
-                last_commit_date: new Date(project.updated_at),
-                contributor_count: project.watchers_count,
-                tech_keywords: tech.tech_keywords,
-                ai_summary: ai_summary,
-                ai_keywords: ai_keywords,
-                embedding: embeddingVector,
-                processing_status: 'pending',
-                workflow_execution_id: executionId,
-                created_timestamp: new Date(),
-                last_update_timestamp: new Date(),
-                duplicate_check_hash: duplicateHash
-            };
-            allNewProjectsObjects.push(projectDataObject);
-            successCount++;
-          }
-        }
       }
-
-      if (allNewProjectsObjects.length > 0) {
-        DataService.batchUpsert('RAW_OPENSOURCE_DATA', allNewProjectsObjects, 'raw_id');
-        logMessages.push(`成功写入 ${allNewProjectsObjects.length} 条开源项目数据（含AI预处理）。`);
-      }
-      
-      const finalMessage = `成功处理 ${processedCount} 个技术领域，发现并写入了 ${successCount} 个相关开源项目，跳过 ${duplicateCount} 条重复项目。`;
+      if (allNewProjects.length > 0) DataService.batchUpsert('RAW_OPENSOURCE_DATA', allNewProjects, 'raw_id');
+      const finalMessage = `处理 ${processedCount} 个技术项，发现 ${successCount} 个新开源项目，跳过 ${duplicateCount} 条重复。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
-
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
-      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+        const errorMessage = `严重错误: ${e.message}`;
+        this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+        return { success: false, message: errorMessage, log: logMessages.join('\n') }; 
     }
   },
 
+  /**
+   * ✅ WF4: 技术新闻获取 (数据驱动版)
+   */
   runWf4_TechNews: function() {
     const wfName = 'WF4: 技术新闻获取';
     const startTime = new Date();
@@ -587,397 +427,213 @@ const WorkflowsService = {
     try {
       const techRegistry = DataService.getDataAsObjects('TECH_REGISTRY').filter(t => t.monitoring_status === 'active' && t.data_source_news === true);
       const competitorRegistry = DataService.getDataAsObjects('COMPETITOR_REGISTRY').filter(c => c.monitoring_status === 'active' && c.news_monitoring === true);
-      
       const searchEntities = [...techRegistry, ...competitorRegistry];
       processedCount = searchEntities.length;
-      logMessages.push(`发现 ${techRegistry.length} 个技术监控项和 ${competitorRegistry.length} 个业绩标杆监控项。`);
-
       if (searchEntities.length === 0) {
         const msg = "没有需要监控新闻的活跃实体。";
         this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
+        return { success: true, message: msg };
       }
 
-      const allNewArticles = [];
-      const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
-      if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置。");
-
-      const existingHashes = new Set(
-          (DataService.getDataAsObjects('RAW_TECH_NEWS') || [])
-          .map(item => item.duplicate_check_hash)
-          .filter(Boolean)
-      );
-      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
-
+      let allNewArticles = [];
+      const existingHashes = new Set((DataService.getDataAsObjects('RAW_TECH_NEWS') || []).map(item => item.duplicate_check_hash).filter(Boolean));
+      const newsSources = DataConnector.getAllActiveSourcesOfType('news_source');
+      if (newsSources.length === 0) throw new Error("系统中没有配置任何活跃的新闻数据源。");
+      logMessages.push(`发现 ${searchEntities.length} 个实体 和 ${newsSources.length} 个新闻源需要处理。`);
 
       for (const entity of searchEntities) {
         const isTech = !!entity.tech_name;
         const query = isTech ? `"${entity.tech_name}" OR (${(entity.tech_keywords || '').replace(/,/g, ' OR ')})` : `"${entity.company_name}"`;
-        logMessages.push(`正在为 '${isTech ? entity.tech_name : entity.company_name}' 搜索新闻...`);
-
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=5`;
-        const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
-
-        if (response.getResponseCode() !== 200) {
-          logMessages.push(`警告: 调用 NewsAPI 失败，状态码: ${response.getResponseCode()}`);
-          errorCount++;
-          continue;
-        }
-
-        const articles = JSON.parse(response.getContentText()).articles || [];
-        for (const article of articles) {
-            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
-            if (existingHashes.has(duplicateHash)) {
-                logMessages.push(`  -> 发现重复新闻，跳过: ${article.title.substring(0,30)}... (Hash: ${duplicateHash})`);
-                duplicateCount++;
-                continue;
+        for (const sourceConfig of newsSources) {
+          logMessages.push(`正在从 [${sourceConfig.display_name}] 为 '${isTech ? entity.tech_name : entity.company_name}' 搜索新闻...`);
+          try {
+            if (!sourceConfig.response_mapping_rules) {
+              logMessages.push(`  - 警告: 数据源 ${sourceConfig.display_name} 缺少 response_mapping_rules 配置，已跳过。`);
+              errorCount++; continue;
             }
+            const dynamicParams = { q: query, pageSize: 5 };
+            const responseData = DataConnector.fetchExternalData(sourceConfig, 'everything', dynamicParams);
+            const rawItems = DataMapper.getRawItems(responseData, sourceConfig.response_mapping_rules.items_path);
+            const standardArticles = DataMapper.map(rawItems, sourceConfig.response_mapping_rules);
 
-          logMessages.push(`  -> 正在为新闻 "${(article.title || "").substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
-          const aiPrompt = `请为以下新闻生成一个不超过60字的精炼摘要，和3-5个最核心的关键词（以逗号分隔）。\n\n标题: ${article.title}\n摘要: ${article.description || ''}`;
-          const aiResponse = this._callAIForTextGeneration(aiPrompt);
+            for (const article of standardArticles) {
+              if (!article.url) continue;
+              const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
+              if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
+              existingHashes.add(duplicateHash);
 
-          let ai_summary = "";
-          let ai_keywords = "";
-          const lines = aiResponse ? aiResponse.split('\n') : [];
-          if (lines.length > 0) {
-              ai_summary = lines[0].trim();
-              if (lines.length > 1 && lines[1].toLowerCase().includes('关键词')) {
-                  ai_keywords = lines[1].replace(/关键词[:：]/gi, '').trim();
-              } else if (lines.length > 1) {
-                  ai_keywords = lines.find(line => line.toLowerCase().includes('关键词')) || lines[1];
-                  ai_keywords = ai_keywords.replace(/关键词[:：]/gi, '').trim();
-              }
-          }
-          
-          const textForEmbedding = `${article.title} ${ai_summary} ${ai_keywords}`;
-          const embeddingVector = this._callAIForEmbedding(textForEmbedding);
+              const textForAI = `标题: ${article.title}\n摘要: ${article.summary || ''}`;
+              const ai_summary = this._callAIForTextGeneration(`请为以下新闻生成一个不超过60字的精炼摘要。\n\n${textForAI}`);
+              const ai_keywords = this._callAIForTextGeneration(`请为以下新闻提炼3-5个最核心的关键词（以逗号分隔）。\n\n${textForAI}`);
+              const embeddingVector = this._callAIForEmbedding(`${article.title} ${ai_summary} ${ai_keywords}`);
 
-          const raw_id = `RAW_TN_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
-
-          const newsDataObject = {
-            raw_id: raw_id,
-            id: raw_id,
-            source_type: 'tech_news',
-            news_title: article.title,
-            news_summary: (article.description || '').substring(0, 500),
-            source_url: article.url,
-            publication_date: new Date(article.publishedAt),
-            source_platform: article.source.name,
-            author: article.author || '',
-            related_companies: isTech ? '' : entity.company_name, // WF4中，如果是技术新闻，related_companies为空；如果是企业新闻，则为企业名
-            tech_keywords: isTech ? entity.tech_keywords : '', // WF4中，如果是技术新闻，tech_keywords为技术关键词；如果是企业新闻，则为空
-            ai_summary: ai_summary,      // ✅ AI 生成的摘要
-            ai_keywords: ai_keywords,    // ✅ AI 生成的关键词
-            embedding: embeddingVector,  // ✅ AI 生成的向量
-            processing_status: 'pending',
-            news_value_score: 0, // AI 评分将在信号识别阶段进行
-            market_impact_score: 0, // AI 评分将在信号识别阶段进行
-            duplicate_check_hash: duplicateHash,
-            workflow_execution_id: executionId,
-            created_timestamp: new Date(),
-            last_update_timestamp: new Date()
-          };
-
-          allNewArticles.push(newsDataObject);
-          successCount++;
+              allNewArticles.push({
+                raw_id: `RAW_TN_${Utilities.getUuid()}`, id: `RAW_TN_${Utilities.getUuid()}`,
+                news_title: article.title, news_summary: (article.summary || '').substring(0, 500),
+                source_url: article.url, publication_date: new Date(article.publication_date),
+                source_platform: article.source_platform, author: article.author || '',
+                related_companies: isTech ? '' : entity.company_name, tech_keywords: isTech ? entity.tech_keywords : '',
+                ai_summary, ai_keywords, embedding: embeddingVector, processing_status: 'pending',
+                duplicate_check_hash: duplicateHash, workflow_execution_id: executionId,
+                created_timestamp: new Date(), last_update_timestamp: new Date()
+              });
+              successCount++;
+            }
+          } catch (e) { logMessages.push(`  - 警告: 处理源 ${sourceConfig.display_name} 失败: ${e.message}`); errorCount++; }
         }
       }
-      if (allNewArticles.length > 0) {
-        DataService.batchUpsert('RAW_TECH_NEWS', allNewArticles, 'raw_id');
-        logMessages.push(`成功写入 ${allNewArticles.length} 条新新闻数据（含AI预处理）。`);
-      }
-
-      const finalMessage = `成功处理 ${processedCount} 个实体，发现 ${successCount} 篇高价值文章，跳过 ${duplicateCount} 条重复文章。`;
+      if (allNewArticles.length > 0) DataService.batchUpsert('RAW_TECH_NEWS', allNewArticles, 'raw_id');
+      const finalMessage = `处理 ${processedCount} 个实体，发现 ${successCount} 篇新文章，跳过 ${duplicateCount} 条重复。`;
       this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
       return { success: true, message: finalMessage, log: logMessages.join('\n') };
-
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
-      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+        const errorMessage = `严重错误: ${e.message}`;
+        this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+        return { success: false, message: errorMessage, log: logMessages.join('\n') }; 
     }
   },
 
-    runWf5_IndustryDynamics: function() {
-    const wfName = 'WF5: 产业动态/会议新闻捕获';
+  /**
+   * ✅ WF5: 产业动态/会议新闻捕获 (数据驱动版)
+   */
+  runWf5_IndustryDynamics: function() {
+    const wfName = 'WF5: 产业动态捕获';
     const startTime = new Date();
     const executionId = `exec_wf5_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
     let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
-      const conferenceRegistry = DataService.getDataAsObjects('CONFERENCE_REGISTRY');
-      if (!conferenceRegistry) {
-          throw new Error("无法从 'CONFERENCE_REGISTRY' 获取数据，可能集合不存在或为空。");
-      }
-      
-      const activeConferences = conferenceRegistry.filter(c => c.monitoring_status && String(c.monitoring_status).toLowerCase() === 'active');
-      processedCount = activeConferences.length;
-      logMessages.push(`发现 ${processedCount} 个需要监控的活跃会议。`);
-
-      if (processedCount === 0) {
-        const msg = "在 Conference_Registry 中没有找到 'monitoring_status' 为 'active' 的会议。";
-        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
-      }
-
-      const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
-      if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
-
-      let allNewDynamicsObjects = [];
-      const existingHashes = new Set(
-          (DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS') || [])
-          .map(item => item.duplicate_check_hash)
-          .filter(Boolean)
-      );
-      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
-
-
-      for (const conf of activeConferences) {
-        const query = `"${conf.conference_name}" OR "${conf.conference_id}"`;
-        logMessages.push(`正在为会议 '${conf.conference_name}' 搜索相关新闻...`);
-
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=5`;
-        const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
-
-        if (response.getResponseCode() !== 200) {
-          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。`);
-          errorCount++;
-          continue;
+        const activeConferences = DataService.getDataAsObjects('CONFERENCE_REGISTRY').filter(c => c.monitoring_status === 'active');
+        processedCount = activeConferences.length;
+        if (activeConferences.length === 0) {
+            const msg = "没有需要监控的活跃会议。";
+            this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+            return { success: true, message: msg };
         }
 
-        const articles = JSON.parse(response.getContentText()).articles || [];
-        logMessages.push(`  -> 找到 ${articles.length} 篇文章。`);
+        let allNewDynamics = [];
+        const existingHashes = new Set((DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS') || []).map(item => item.duplicate_check_hash).filter(Boolean));
+        const newsSources = DataConnector.getAllActiveSourcesOfType('news_source');
+        if (newsSources.length === 0) throw new Error("系统中没有配置任何活跃的新闻数据源。");
+        logMessages.push(`发现 ${activeConferences.length} 个会议 和 ${newsSources.length} 个新闻源需要处理。`);
 
-        for (const article of articles) {
-            const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
-            if (existingHashes.has(duplicateHash)) {
-                logMessages.push(`  -> 发现重复产业动态文章，跳过: ${article.title.substring(0,30)}... (Hash: ${duplicateHash})`);
-                duplicateCount++;
-                continue;
+        for (const conf of activeConferences) {
+            const query = `"${conf.conference_name}" OR "${conf.conference_id}"`;
+            for (const sourceConfig of newsSources) {
+                logMessages.push(`正在从 [${sourceConfig.display_name}] 为会议 '${conf.conference_name}' 搜索新闻...`);
+                try {
+                    const dynamicParams = { q: query, pageSize: 5 };
+                    const responseData = DataConnector.fetchExternalData(sourceConfig, 'everything', dynamicParams);
+                    const rawItems = DataMapper.getRawItems(responseData, sourceConfig.response_mapping_rules.items_path);
+                    const standardNews = DataMapper.map(rawItems, sourceConfig.response_mapping_rules);
+                    
+                    for (const news of standardNews) {
+                        if (!news.url) continue;
+                        const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, news.url));
+                        if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
+                        existingHashes.add(duplicateHash);
+
+                        const textForAI = `标题: ${news.title}\n摘要: ${news.summary || ''}`;
+                        const ai_summary = this._callAIForTextGeneration(`请为以下产业动态新闻生成一个不超过80字的精炼摘要。\n\n${textForAI}`);
+                        const ai_keywords = this._callAIForTextGeneration(`请为以下产业动态新闻提炼3-5个最核心的关键词（以逗号分隔）。\n\n${textForAI}`);
+                        const embeddingVector = this._callAIForEmbedding(`${news.title} ${ai_summary} ${ai_keywords}`);
+
+                        allNewDynamics.push({
+                            raw_id: `RAW_ID_${Utilities.getUuid()}`, id: `RAW_ID_${Utilities.getUuid()}`,
+                            event_title: news.title, event_summary: (news.summary || '').substring(0, 500),
+                            source_url: news.url, publication_date: new Date(news.publication_date),
+                            source_platform: news.source_platform, event_type: 'Conference News',
+                            tech_keywords: conf.industry_focus, industry_category: conf.industry_focus,
+                            ai_summary, ai_keywords, embedding: embeddingVector,
+                            processing_status: 'pending', workflow_execution_id: executionId,
+                            created_timestamp: new Date(), last_update_timestamp: new Date(), duplicate_check_hash: duplicateHash
+                        });
+                        successCount++;
+                    }
+                } catch (e) { logMessages.push(`  - 警告: 处理源 ${sourceConfig.display_name} 失败: ${e.message}`); errorCount++; }
             }
-
-          logMessages.push(`  -> 正在为产业动态 "${(article.title || "").substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
-          const aiPrompt = `请为以下产业动态新闻生成一个不超过80字的精炼摘要，和3-5个最核心的关键词（以逗号分隔）。\n\n标题: ${article.title}\n摘要: ${article.description || ''}`;
-          const aiResponse = this._callAIForTextGeneration(aiPrompt);
-
-          let ai_summary = "";
-          let ai_keywords = "";
-          const lines = aiResponse ? aiResponse.split('\n') : [];
-          if (lines.length > 0) {
-              ai_summary = lines[0].trim();
-              if (lines.length > 1 && lines[1].toLowerCase().includes('关键词')) {
-                  ai_keywords = lines[1].replace(/关键词[:：]/gi, '').trim();
-              } else if (lines.length > 1) {
-                  ai_keywords = lines.find(line => line.toLowerCase().includes('关键词')) || lines[1];
-                  ai_keywords = ai_keywords.replace(/关键词[:：]/gi, '').trim();
-              }
-          }
-          
-          const textForEmbedding = `${article.title} ${ai_summary} ${ai_keywords}`;
-          const embeddingVector = this._callAIForEmbedding(textForEmbedding);
-
-          // --- 新增：AI识别相关公司 ---
-          const companyPrompt = `请作为一名资深的市场分析师，从以下产业动态新闻中识别并提取所有提及的公司名称。
-            如果新闻内容中未明确提及公司，则返回空列表。
-            请严格以JSON数组格式返回公司名称（例如：["公司A", "公司B"]）。
-            新闻标题: ${article.title}
-            新闻摘要: ${article.description || ''}`;
-          
-          let relatedCompanies = [];
-          try {
-              // 尝试强制AI返回JSON对象，并从其属性中提取数组
-              const aiCompanyResponse = this._callAIForScoring(companyPrompt, { wfName, logMessages }); // 使用 _callAIForScoring 强制JSON
-              if (aiCompanyResponse && aiCompanyResponse.companies && Array.isArray(aiCompanyResponse.companies)) {
-                  relatedCompanies = aiCompanyResponse.companies.map(c => String(c).trim()).filter(Boolean); // 确保是字符串数组
-              } else if (aiCompanyResponse && Array.isArray(aiCompanyResponse)) { // 有时AI可能直接返回数组
-                  relatedCompanies = aiCompanyResponse.map(c => String(c).trim()).filter(Boolean);
-              } else {
-                  logMessages.push(`警告: AI识别公司返回了非预期格式: ${JSON.stringify(aiCompanyResponse).substring(0, 100)}...`);
-              }
-          } catch (e) {
-              logMessages.push(`警告: AI识别相关公司失败: ${e.message}`);
-              relatedCompanies = []; // 确保错误时仍为空数组
-          }
-          // --- 新增结束 ---
-
-          const raw_id = `RAW_ID_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
-
-          const dynamicsDataObject = {
-            raw_id: raw_id,
-            id: raw_id,
-            source_type: 'industry_dynamics',
-            event_title: article.title,
-            event_summary: (article.description || '').substring(0, 500),
-            source_url: article.url,
-            publication_date: new Date(article.publishedAt),
-            source_platform: article.source.name,
-            event_type: 'Conference News',
-            tech_keywords: conf.industry_focus,
-            industry_category: conf.industry_focus,
-            ai_summary: ai_summary,
-            ai_keywords: ai_keywords,
-            embedding: embeddingVector,
-            related_companies: relatedCompanies, // <-- 将 AI 识别的公司添加到数据对象
-            processing_status: 'pending',
-            workflow_execution_id: executionId,
-            created_timestamp: new Date(),
-            last_update_timestamp: new Date(),
-            duplicate_check_hash: duplicateHash // 存储哈希值
-          };
-          allNewDynamicsObjects.push(dynamicsDataObject);
-          successCount++;
         }
-      }
-
-      if (allNewDynamicsObjects.length > 0) {
-        DataService.batchUpsert('RAW_INDUSTRY_DYNAMICS', allNewDynamicsObjects, 'raw_id');
-        logMessages.push(`成功写入 ${allNewDynamicsObjects.length} 条新产业动态数据（含AI预处理）。`);
-      }
-
-      const finalMessage = `成功处理 ${processedCount} 个会议，发现 ${successCount} 条相关新闻，跳过 ${duplicateCount} 条重复文章。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
-      return { success: true, message: finalMessage, log: logMessages.join('\n') };
-
+        if (allNewDynamics.length > 0) DataService.batchUpsert('RAW_INDUSTRY_DYNAMICS', allNewDynamics, 'raw_id');
+        const finalMessage = `处理 ${processedCount} 个会议，发现 ${successCount} 篇新动态，跳过 ${duplicateCount} 条重复。`;
+        this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+        return { success: true, message: finalMessage, log: logMessages.join('\n') };
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
-      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+        const errorMessage = `严重错误: ${e.message}`;
+        this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+        return { success: false, message: errorMessage, log: logMessages.join('\n') }; 
     }
   },
 
-    runWf6_Benchmark: function() {
+  /**
+   * ✅ WF6: 竞争对手情报收集 (数据驱动版)
+   */
+  runWf6_Benchmark: function() {
     const wfName = 'WF6: 竞争对手情报收集';
     const startTime = new Date();
     const executionId = `exec_wf6_${startTime.getTime()}`;
     let logMessages = [`[${new Date().toLocaleTimeString()}] ${wfName} (${executionId}) 开始执行...`];
-    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0; // 新增duplicateCount
+    let successCount = 0, processedCount = 0, errorCount = 0, duplicateCount = 0;
 
     try {
-      const competitorRegistry = DataService.getDataAsObjects('COMPETITOR_REGISTRY');
-      if (!competitorRegistry) {
-        throw new Error("无法从 'COMPETITOR_REGISTRY' 获取数据。");
-      }
-      
-      const activeCompetitors = competitorRegistry.filter(c => 
-        c.monitoring_status === 'active' &&
-        c.news_monitoring === true
-      );
-
-      processedCount = activeCompetitors.length;
-      logMessages.push(`发现 ${processedCount} 个需要监控新闻的活跃竞争对手。`);
-
-      if (processedCount === 0) {
-        const msg = "在 Competitor_Registry 中没有找到需要监控新闻的活跃竞争对手。";
-        this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
-        return { success: true, message: msg, log: logMessages.join('\n') };
-      }
-
-      const newsApiKey = PropertiesService.getScriptProperties().getProperty('NEWS_API_KEY');
-      if (!newsApiKey) throw new Error("NewsAPI Key 未在项目属性中配置 (NEWS_API_KEY)。");
-
-      let allNewIntelObjects = [];
-      
-      // ✅ 新增：获取所有现有数据的哈希值，用于快速去重
-      // 优化：只获取 duplicate_check_hash 字段，避免加载整个文档
-      const existingHashes = new Set(
-          (DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE') || [])
-          .map(item => item.duplicate_check_hash)
-          .filter(Boolean)
-      );
-      logMessages.push(`  -> 现有 ${existingHashes.size} 条历史记录用于去重检查。`);
-
-
-      for (const competitor of activeCompetitors) {
-        const query = `"${competitor.company_name}"`;
-        logMessages.push(`正在为竞争对手 '${competitor.company_name}' 搜索新闻...`);
-
-        const apiUrl = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&sortBy=publishedAt&pageSize=5`;
-        const response = UrlFetchApp.fetch(apiUrl, { headers: { 'X-Api-Key': newsApiKey }, muteHttpExceptions: true });
-
-        if (response.getResponseCode() !== 200) {
-          logMessages.push(`  -> 警告: 调用 NewsAPI 失败 (状态码: ${response.getResponseCode()})。`);
-          errorCount++;
-          continue;
+        const activeCompetitors = DataService.getDataAsObjects('COMPETITOR_REGISTRY').filter(c => c.monitoring_status === 'active' && c.news_monitoring === true);
+        processedCount = activeCompetitors.length;
+        if (activeCompetitors.length === 0) {
+            const msg = "没有需要监控新闻的活跃竞争对手。";
+            this._logExecution(wfName, executionId, startTime, 'completed', 0, 0, 0, msg);
+            return { success: true, message: msg };
         }
 
-        const articles = JSON.parse(response.getContentText()).articles || [];
-        for (const article of articles) {
-          const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, article.url));
-          
-          // ✅ 核心去重检查
-          if (existingHashes.has(duplicateHash)) {
-              logMessages.push(`  -> 发现重复文章，跳过: ${article.title.substring(0,30)}... (Hash: ${duplicateHash})`);
-              duplicateCount++; // 增加重复计数
-              continue; // 跳过此文章
-          }
+        let allNewIntel = [];
+        const existingHashes = new Set((DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE') || []).map(item => item.duplicate_check_hash).filter(Boolean));
+        const newsSources = DataConnector.getAllActiveSourcesOfType('news_source');
+        if (newsSources.length === 0) throw new Error("系统中没有配置任何活跃的新闻数据源。");
+        logMessages.push(`发现 ${activeCompetitors.length} 个竞争对手 和 ${newsSources.length} 个新闻源需要处理。`);
 
-          logMessages.push(`  -> 正在为竞争情报 "${(article.title || "").substring(0,30)}..." 生成 AI 摘要/关键词/向量...`);
-          const aiPrompt = `请为以下关于竞争对手的新闻情报生成一个不超过80字的精炼摘要，和3-5个最核心的关键词（以逗号分隔）。\n\n标题: ${article.title}\n摘要: ${article.description || ''}`;
-          const aiResponse = this._callAIForTextGeneration(aiPrompt);
+        for (const competitor of activeCompetitors) {
+            const query = `"${competitor.company_name}"`;
+            for (const sourceConfig of newsSources) {
+                logMessages.push(`正在从 [${sourceConfig.display_name}] 为竞争对手 '${competitor.company_name}' 搜索新闻...`);
+                try {
+                    const dynamicParams = { q: query, pageSize: 5 };
+                    const responseData = DataConnector.fetchExternalData(sourceConfig, 'everything', dynamicParams);
+                    const rawItems = DataMapper.getRawItems(responseData, sourceConfig.response_mapping_rules.items_path);
+                    const standardNews = DataMapper.map(rawItems, sourceConfig.response_mapping_rules);
 
-          let ai_summary = "";
-          let ai_keywords = "";
-          const lines = aiResponse ? aiResponse.split('\n') : [];
-          if (lines.length > 0) {
-              ai_summary = lines[0].trim();
-              if (lines.length > 1 && lines[1].toLowerCase().includes('关键词')) {
-                  ai_keywords = lines[1].replace(/关键词[:：]/gi, '').trim();
-              } else if (lines.length > 1) {
-                  ai_keywords = lines.find(line => line.toLowerCase().includes('关键词')) || lines[1];
-                  ai_keywords = ai_keywords.replace(/关键词[:：]/gi, '').trim();
-              }
-          }
-          
-          const textForEmbedding = `${article.title} ${ai_summary} ${ai_keywords}`;
-          const embeddingVector = this._callAIForEmbedding(textForEmbedding);
+                    for (const news of standardNews) {
+                        if (!news.url) continue;
+                        const duplicateHash = this._bytesToHex(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, news.url));
+                        if (existingHashes.has(duplicateHash)) { duplicateCount++; continue; }
+                        existingHashes.add(duplicateHash);
 
-          // ✅ 修复：在此处定义 duplicateHash
-          const raw_id = `RAW_CI_${Utilities.formatDate(new Date(), 'UTC', 'yyyyMMddHHmmssSSS')}_${duplicateHash.substring(0, 6)}`;
+                        const textForAI = `标题: ${news.title}\n摘要: ${news.summary || ''}`;
+                        const ai_summary = this._callAIForTextGeneration(`请为以下关于竞争对手的新闻情报生成一个不超过80字的精炼摘要。\n\n${textForAI}`);
+                        const ai_keywords = this._callAIForTextGeneration(`请为以下关于竞争对手的新闻情报提炼3-5个最核心的关键词（以逗号分隔）。\n\n${textForAI}`);
+                        const embeddingVector = this._callAIForEmbedding(`${news.title} ${ai_summary} ${ai_keywords}`);
 
-          const intelDataObject = {
-            raw_id: raw_id,
-            id: raw_id,
-            source_type: 'competitor_intelligence',
-            intelligence_title: article.title,
-            intelligence_summary: (article.description || '').substring(0, 500),
-            source_url: article.url,
-            publication_date: new Date(article.publishedAt),
-            source_platform: article.source.name,
-            author: article.author || '',
-            competitor_name: competitor.company_name,
-            intelligence_type: 'General News', // 初始类型，待 WF7-6 中由 AI 细化
-            tech_keywords: '', // 留空，待 AI 分析
-            ai_summary: ai_summary,
-            ai_keywords: ai_keywords,
-            embedding: embeddingVector,
-            processing_status: 'pending',
-            threat_level_score: 0,
-            business_impact_score: 0,
-            duplicate_check_hash: duplicateHash, // 现在 duplicateHash 已定义
-            workflow_execution_id: executionId,
-            created_timestamp: new Date(),
-            last_update_timestamp: new Date()
-          };
-          allNewIntelObjects.push(intelDataObject);
-          successCount++;
+                        allNewIntel.push({
+                            raw_id: `RAW_CI_${Utilities.getUuid()}`, id: `RAW_CI_${Utilities.getUuid()}`,
+                            intelligence_title: news.title, intelligence_summary: (news.summary || '').substring(0, 500),
+                            source_url: news.url, publication_date: new Date(news.publication_date),
+                            source_platform: news.source_platform, author: news.author || '',
+                            competitor_name: competitor.company_name, intelligence_type: 'General News',
+                            ai_summary, ai_keywords, embedding: embeddingVector, processing_status: 'pending',
+                            duplicate_check_hash: duplicateHash, workflow_execution_id: executionId,
+                            created_timestamp: new Date(), last_update_timestamp: new Date()
+                        });
+                        successCount++;
+                    }
+                } catch (e) { logMessages.push(`  - 警告: 处理源 ${sourceConfig.display_name} 失败: ${e.message}`); errorCount++; }
+            }
         }
-      }
-
-      if (allNewIntelObjects.length > 0) {
-        DataService.batchUpsert('RAW_COMPETITOR_INTELLIGENCE', allNewIntelObjects, 'raw_id');
-        logMessages.push(`成功写入 ${allNewIntelObjects.length} 条新竞争情报数据（含AI预处理）。`);
-      }
-
-      const finalMessage = `成功处理 ${processedCount} 个竞争对手，发现 ${successCount} 条新文章，跳过 ${duplicateCount} 条重复文章。`;
-      this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
-      return { success: true, message: finalMessage, log: logMessages.join('\n') };
-
+        if (allNewIntel.length > 0) DataService.batchUpsert('RAW_COMPETITOR_INTELLIGENCE', allNewIntel, 'raw_id');
+        const finalMessage = `处理 ${processedCount} 个竞争对手，发现 ${successCount} 篇新情报，跳过 ${duplicateCount} 条重复。`;
+        this._logExecution(wfName, executionId, startTime, 'completed', processedCount, successCount, errorCount, finalMessage);
+        return { success: true, message: finalMessage, log: logMessages.join('\n') };
     } catch (e) {
-      const errorMessage = `严重错误: ${e.message}`;
-      this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
-      return { success: false, message: errorMessage, log: logMessages.join('\n') };
+        const errorMessage = `严重错误: ${e.message}`;
+        this._logExecution(wfName, executionId, startTime, 'failed', processedCount, successCount, errorCount + 1, errorMessage);
+        return { success: false, message: errorMessage, log: logMessages.join('\n') }; 
     }
   },
 

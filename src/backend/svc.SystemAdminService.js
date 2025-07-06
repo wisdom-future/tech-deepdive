@@ -23,6 +23,40 @@ const SystemAdminService = {
   },
 
   /**
+   * ✅ 新增方法：专门为前端提供外部数据源的元数据
+   * 这样可以避免重构整个 SystemAdminService。
+   */
+  getExternalDataSourceMetaData: function() {
+    return {
+      displayName: '外部数据源',
+      idField: 'source_id',
+      fields: [
+        { name: 'source_id', label: '源ID (唯一)', type: 'text', required: true, editableOnCreate: true, notes: '创建后不可修改，例如：ARXIV_API' },
+        { name: 'display_name', label: '显示名称', type: 'text', required: true, notes: '在UI上显示的友好名称' },
+        { name: 'source_type', label: '源类型', type: 'select', options: ['academic_paper_source', 'patent_data_source', 'news_source', 'opensource_data_source', 'llm_service', 'chart_service', 'image_cdn', 'other'], required: true, notes: '用于工作流按类型查找数据源' },
+        { name: 'base_url', label: '基础URL', type: 'text', required: true, notes: 'API的根地址，不包含末尾的斜杠' },
+        { name: 'endpoint_paths', label: 'API端点路径 (JSON)', type: 'textarea', notes: '必须是合法的JSON。例如: {"query": "/api/query"}' },
+        { name: 'request_method', label: '请求方法', type: 'select', options: ['GET', 'POST', 'PUT', 'DELETE'], required: true },
+        { name: 'payload_type', label: '请求体类型', type: 'select', options: ['none', 'json', 'form_urlencoded', 'xml'], required: true },
+        { name: 'response_type', label: '响应体类型', type: 'select', options: ['json', 'xml', 'text', 'blob'], required: true },
+        { name: 'auth_method', label: '认证方式', type: 'select', options: ['none', 'header_key', 'query_param_key', 'bearer_token', 'basic_auth'], required: true },
+        { name: 'api_key_name', label: 'API Key名称 (在脚本属性中)', type: 'text', notes: '例如: NEWS_API_KEY' },
+        { name: 'api_key_header_name', label: 'API Key的HTTP头名称', type: 'text', notes: '例如: X-Api-Key' },
+        { name: 'api_key_query_param_name', label: 'API Key的URL参数名', type: 'text', notes: '例如: apiKey' },
+        { name: 'request_headers', label: '固定的请求头 (JSON)', type: 'textarea', notes: '例如: {"Accept": "application/json"}' },
+        { name: 'fixed_query_params', label: '固定的查询参数 (JSON)', type: 'textarea', notes: '例如: {"version": "1"}' },
+        { name: 'is_active', label: '是否启用', type: 'checkbox' },
+        { name: 'priority', label: '优先级 (数字越大越优先)', type: 'number' },
+        { name: 'rate_limit_per_minute', label: '每分钟请求限制', type: 'number' },
+        { name: 'notes', label: '备注', type: 'textarea' },
+        { name: 'created_timestamp', label: '创建时间', type: 'datetime', editable: false },
+        { name: 'last_updated_timestamp', label: '更新时间', type: 'datetime', editable: false }
+      ]
+    };
+  },
+
+
+  /**
    * 在指定的注册表中添加一个新条目。
    * @param {string} registryKey - 注册表键名。
    * @param {Object} entryData - 要添加的新条目的数据对象。
