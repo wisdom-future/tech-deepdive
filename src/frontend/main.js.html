@@ -79,7 +79,7 @@
         { key: 'infoA', label: '行业类别', width: '25%' },
         { key: 'infoB', label: '威胁等级', width: '15%' }, 
         { key: 'date', label: '上次更新', width: '15%' }, 
-        { key: 'id', label: '对手ID', width: '15%' },
+        { key: 'id', label: '聚焦领域', width: '15%' },
     ],
     conference: [
         { key: 'title', label: '会议名称', linkField: 'sourceUrl', width: '30%' }, 
@@ -195,7 +195,14 @@
 
     // techDomain, industryBenchmark, conference 适配器 (来自 Config 数据，保持不变)
     techDomain: item => ({ id: item.tech_id, title: item.tech_name, date: formatDateForDisplay(item.created_date), infoA: item.tech_category, infoB: item.monitoring_status, sourceUrl: null }),
-    industryBenchmark: item => ({ id: item.competitor_id, title: item.company_name, date: formatDateForDisplay(item.last_updated), infoA: item.industry_category, infoB: item.threat_level, sourceUrl: item.website_url }),
+    industryBenchmark: item => ({ 
+      id: item.competitor_id,
+      title: item.company_name, 
+      date: formatDateForDisplay(item.last_updated), 
+      infoA: item.industry_category, 
+      infoB: item.threat_level, 
+      sourceUrl: item.website_url 
+    }),
     conference: item => ({ id: item.conference_id, title: item.conference_name, date: formatDateForDisplay(item.next_event_date), infoA: item.industry_focus, infoB: item.monitoring_status, sourceUrl: item.official_website })
 };
 

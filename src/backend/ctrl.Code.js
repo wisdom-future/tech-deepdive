@@ -2,7 +2,7 @@
 
 function doGet(e) {
   const page = e.parameter.page || 'home';
-  const htmlTemplate = HtmlService.createTemplateFromFile('MainContainer.html');
+  const htmlTemplate = HtmlService.createTemplateFromFile('index.html');
   htmlTemplate.page = page;
   htmlTemplate.params = JSON.stringify(e.parameter);
   return htmlTemplate.evaluate()
