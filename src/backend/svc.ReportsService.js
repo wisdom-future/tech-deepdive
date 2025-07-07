@@ -1,12 +1,11 @@
 // 文件名: backend/svc.Reports.gs (最终 Firestore 适配完整版)
 
-// 文件名: backend/svc.Reports.gs (最终完整、无省略、自包含、修复版)
-
 const ReportsService = {
 
-  // ====================================================================================
+  // ====================================================================================================
   //  主函数：生成报告
-  // ====================================================================================
+  // ====================================================================================================
+
   generateReport: function(reportType, reportTitle, periodStartStr, periodEndStr, techAreas, targetAudience, reportOwner, userReportSummary, additionalRecipientEmail, aiOptions = {}) {
     const ADMIN_EMAIL = Session.getEffectiveUser().getEmail(); 
     const today = new Date();
@@ -30,7 +29,7 @@ const ReportsService = {
     }
 
     try {
-        const parentFolderId = '1lLe47xY5MCuQQGlvmnUBwYyiMTt0qql_';
+        const parentFolderId = '1lLe47xY5MCuQQGlvmnUBwYyiMTt0qql_'; // 请替换为您的Google Drive报告文件夹ID
         reportFolder = DriveApp.getFolderById(parentFolderId);
         Logger.log("成功获取到Google Drive目标文件夹。");
     } catch(driveError) {
@@ -52,15 +51,31 @@ const ReportsService = {
         htmlFile = this._saveReportToDrive(reportFileName, reportContentHtml, 'html', reportFolder);
         
         let mailStatusMessage = "邮件未发送（无收件人）。";
+        let finalReportUrl = null; // 新增变量，用于存储最终的查看URL
+        let githubReportUrl = null; // 新增变量，用于存储GitHub URL
+
         if (htmlFile) { // 仅在文件成功保存后才继续，以确保有可用的下载链接
             Logger.log(`[ReportsService] Report HTML file saved to Drive: ${htmlFile.getName()}, ID: ${htmlFile.getId()}, Size: ${htmlFile.getSize()} bytes.`);
+            
             // ✅ 在这里插入GitHub发布逻辑
             const githubResult = this._publishReportToGitHub(reportFileName, reportContentHtml);
             if(githubResult.success) {
                 Logger.log(`GitHub发布成功，URL: ${githubResult.url}`);
+                githubReportUrl = githubResult.url; // 将GitHub Pages URL 存储起来
             } else {
                 errorMessage += `警告：报告未能发布到GitHub。原因: ${githubResult.message}<br>`;
             }
+            
+            if (githubReportUrl) {
+                // 优先使用 GitHub Pages URL 作为最终的报告查看链接
+                finalReportUrl = githubReportUrl; 
+            } else {
+                // 如果 GitHub Pages URL 不存在（例如发布失败），则回退到 Google Drive 的直接查看链接
+                // 这种链接会尝试让浏览器直接渲染 HTML，而不是进入 Drive 的预览界面
+                finalReportUrl = `https://drive.google.com/uc?export=view&id=${htmlFile.getId()}`;
+                Logger.log(`GitHub发布失败，使用Google Drive直接查看链接: ${finalReportUrl}`);
+            }
+
 
             recipientEmails = this._getReportRecipients(reportType, additionalRecipientEmail);
             if (recipientEmails.length > 0) {
@@ -83,6 +98,7 @@ const ReportsService = {
         } else {
             Logger.log("警告: 报告HTML文件未能成功保存到Google Drive，因此邮件也未发送。");
             errorMessage += "警告：报告HTML文件未能保存到Google Drive。<br>";
+            finalReportUrl = null; // 确保在文件未保存成功时，URL为null
         }
         
         const reportMetadata = {
@@ -90,7 +106,7 @@ const ReportsService = {
             generation_date: today, report_period_start: periodStart, report_period_end: periodEnd,
             generated_by: generatedBy, 
             drive_file_id: htmlFile ? htmlFile.getId() : null,
-            download_url: htmlFile ? htmlFile.getUrl() : null,
+            download_url: finalReportUrl, // <<< 关键修改：使用计算出的 finalReportUrl
             status: htmlFile ? 'Generated' : 'Failed',
             recipients: recipientEmails.join(', '),
             error_message: errorMessage,
@@ -99,7 +115,7 @@ const ReportsService = {
         this._recordReportHistory(reportMetadata);
         Logger.log(`[ReportsService] Report history recorded with status: ${reportMetadata.status}.`);
 
-        return { success: true, message: `报告流程完成。Drive保存: ${htmlFile ? '成功' : '失败'}. ${mailStatusMessage}`, downloadUrl: htmlFile ? htmlFile.getUrl() : null };
+        return { success: true, message: `报告流程完成。Drive保存: ${htmlFile ? '成功' : '失败'}. ${mailStatusMessage}`, downloadUrl: finalReportUrl }; // <<< 关键修改：返回 finalReportUrl
 
     } catch (e) {
         Logger.log(`!!! CRITICAL ERROR during report generation main process: ${e.message}\n${e.stack}`);
@@ -117,10 +133,10 @@ const ReportsService = {
     }
 },
 
-  // ====================================================================================
-//  ✅ 数据聚合函数 (最终版 - 纯数据宏观洞察，无省略)
-// ====================================================================================
-_aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, userReportSummary, periodStartStr, periodEndStr, reportFolder) {
+  // ====================================================================================================
+  // ✅ 数据聚合函数 (最终版 - 纯数据宏观洞察，无省略)
+  // ====================================================================================================
+  _aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, userReportSummary, periodStartStr, periodEndStr, reportFolder) {
     // 1. 初始化最终返回的数据结构
     const data = {
         benchmarks: [],
@@ -233,7 +249,7 @@ _aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, us
             .slice(0, 5);
         Logger.log(`计算出Top趋势: ${data.topTrends.length}条`);
 
-        const graphData = InsightsService.getKnowledgeGraphData();
+        const graphData = InsightsService.getKnowledgeGraphData(); // 假设 InsightsService.getKnowledgeGraphData 可用
         if (graphData && graphData.edges && graphData.edges.length > 0) {
             const nodesMap = new Map(graphData.nodes.map(n => [n.id, n]));
             data.topRelations = graphData.edges
@@ -300,7 +316,7 @@ _aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, us
   },
   
   _generateReportContentHtml: function(reportType, reportTitle, periodStartStr, periodEndStr, reportData) {
-    const template = HtmlService.createTemplateFromFile('frontend/templates/ReportTemplate');
+    const template = HtmlService.createTemplateFromFile('frontend/templates/ReportTemplate'); // 假设 ReportTemplate.html 存在
     template.reportTitle = reportTitle;
     template.periodStartStr = periodStartStr;
     template.periodEndStr = periodEndStr;
@@ -405,17 +421,17 @@ _aggregateReportData: function(reportType, periodStart, periodEnd, techAreas, us
         if (latestJsonResponse.responseCode !== 201 && latestJsonResponse.responseCode !== 200) {
             Logger.log(`更新 latest.json 失败: ${JSON.stringify(latestJsonResponse.result)}`);
             // 即使索引更新失败，报告本身上传成功了，所以我们仍然可以认为部分成功
-            return { success: true, url: reportRawUrl, message: "报告上传成功，但索引文件更新失败" };
+            return { success: true, url: reportPagesUrl, message: "报告上传成功，但索引文件更新失败" }; // 返回 Pages URL
         }
         
         Logger.log("成功更新 latest.json 索引文件。");
-        return { success: true, url: reportRawUrl, message: "发布成功" };
+        return { success: true, url: reportPagesUrl, message: "发布成功" }; // 返回 Pages URL
 
     } catch (e) {
         Logger.log(`与GitHub API交互时发生严重错误: ${e.message}`);
         return { success: false, message: `与GitHub API交互时发生严重错误: ${e.message}` };
     }
-},
+  },
 
 _updateGitHubRedirect: function(gasUrl) {
     const scriptProps = PropertiesService.getScriptProperties();
@@ -494,9 +510,9 @@ _updateGitHubRedirect: function(gasUrl) {
     }
 },
 
-// ====================================================================================
+// ====================================================================================================
 //  ✅ 图表生成函数 (最终版 - 增加延时与重试)
-// ====================================================================================
+// ====================================================================================================
 _generateChartImage: function(chartConfig, fileName) {
     const scriptProps = PropertiesService.getScriptProperties();
     const cloudName = scriptProps.getProperty('CLOUDINARY_CLOUD_NAME');
@@ -534,6 +550,7 @@ _generateChartImage: function(chartConfig, fileName) {
             }
             const imageBase64 = Utilities.base64Encode(qcResponse.getBlob().getBytes());
             const fileDataUri = `data:image/png;base64,${imageBase64}`;
+
 
             const timestamp = String(Math.round(new Date().getTime() / 1000));
             const folder = 'deepdive_reports';
@@ -672,7 +689,7 @@ _generateChartImage: function(chartConfig, fileName) {
 
   _getReportRecipients: function(reportType, additionalRecipientEmail) {
     const recipients = new Set();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
     try {
         const allRecipients = DataService.getDataAsObjects('REPORT_RECIPIENTS');
         allRecipients.forEach(record => {
@@ -781,10 +798,9 @@ _generateChartImage: function(chartConfig, fileName) {
 };
 
 
-
-// ====================================================================
+// ====================================================================================================
 //  ✅ 用于手动测试报告生成的入口函数
-// ====================================================================
+// ====================================================================================================
 function runManualReportTest() {
   try {
     Logger.log("--- 开始手动触发报告生成测试 ---");
@@ -834,3 +850,5 @@ function runManualReportTest() {
     Logger.log(`!!! 手动测试执行失败: ${e.message}\n${e.stack}`);
   }
 }
+
+
