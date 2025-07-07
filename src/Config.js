@@ -31,10 +31,7 @@ const CONFIG = {
     AUTHORS_REGISTRY: 'authors',
     AFFILIATIONS_REGISTRY: 'affiliations',
     DATA_QUALITY_REPORTS: 'data_quality_reports',
-    REPORTS_HISTORY: 'reports_history',
-
-    // Surprise
-    TECH_EVOLUTION_MILESTONES: 'tech_evolution_milestones'
+    REPORTS_HISTORY: 'reports_history'
   },
   
   /**

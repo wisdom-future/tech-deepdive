@@ -693,7 +693,7 @@ _generateChartImage: function(chartConfig, fileName) {
     try {
         const allRecipients = DataService.getDataAsObjects('REPORT_RECIPIENTS');
         allRecipients.forEach(record => {
-            if (String(record.is_active).toLowerCase() === 'true' && (record.report_type === reportType || record.report_type === 'Default')) {
+             if (record.is_active === true && (record.report_type === reportType || record.report_type === 'Default')) {
                 if (record.recipient_email && emailRegex.test(record.recipient_email)) {
                     recipients.add(record.recipient_email.toLowerCase());
                 }

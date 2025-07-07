@@ -840,7 +840,7 @@ const uiUtils = {
                 if (rawData) {
                     document.getElementById('rawDataTotal').textContent = (rawData.total || 0).toLocaleString();
                     document.getElementById('rawDataTodayUpdate').textContent = `近7日: ${(rawData.sevenDayIngestion || 0).toLocaleString()}`; 
-                    const RAWDATA_CATEGORY_ORDER = [ { key: 'academicPapers', label: '论文' }, { key: 'techNews', label: '新闻' }, { key: 'industryDynamics', label: '会议' }, { key: 'patentData', label: '专利' }, { key: 'openSourceData', label: '开源' }, { key: 'competitorIntelligence', label: '竞情' } ];
+                    const RAWDATA_CATEGORY_ORDER = [ { key: 'academicPapers', label: '论文' }, { key: 'techNews', label: '新闻' }, { key: 'industryDynamics', label: '会议' }, { key: 'patentData', label: '专利' }, { key: 'openSourceData', label: '开源' }, { key: 'competitorIntelligence', label: '标杆' } ];
                     document.getElementById('rawDataCategories').innerHTML = rawData.categories ? RAWDATA_CATEGORY_ORDER.map(cat => `<div class="kpi-category-item bg-gray-100 px-3 py-1 rounded-md text-sm"><span class="kpi-category-value font-semibold">${(rawData.categories[cat.key] || 0).toLocaleString()}</span> ${cat.label}</div>`).join('') : '';
                 }
 
@@ -3627,7 +3627,23 @@ const uiUtils = {
                     renderHeader('基础 URL', 'base_url', 'center') +
                     renderHeader('API 端点', 'endpoint_paths', 'center') + // 我们将在这里预览JSON
                     renderHeader('状态', 'is_active', 'center') +
-                    renderHeader('操作', null, 'center')
+                    renderHeader('操作', null, 'center'),
+                // ✅ 新增：报告接收者 (REPORT_RECIPIENTS) 的表头
+                'REPORT_RECIPIENTS':
+                    renderHeader('姓名', 'recipient_name', 'left') +
+                    renderHeader('邮箱', 'recipient_email', 'left') +
+                    renderHeader('报告类型', 'report_type', 'left') +
+                    renderHeader('状态', 'is_active', 'center') +
+                    renderHeader('操作', null, 'right'),
+
+                // ✅ 新增：计划报告 (SCHEDULED_REPORTS_CONFIG) 的表头
+                'SCHEDULED_REPORTS_CONFIG':
+                    renderHeader('报告标题模板', 'report_title_template', 'left') +
+                    renderHeader('报告类型', 'report_type', 'left') +
+                    renderHeader('调度频率', 'schedule_frequency', 'left') +
+                    renderHeader('状态', 'is_active', 'center') +
+                    renderHeader('上次运行状态', 'last_run_status', 'center') +
+                    renderHeader('操作', null, 'right')
             };
             
             if (customHeaders[config.key]) {
@@ -3755,6 +3771,42 @@ const uiUtils = {
                                     <td class="px-6 py-3">${endpointPathsCell()}</td>
                                     <td class="px-6 py-3 text-center">${statusCell}</td>
                                     <td class="px-6 py-3 text-right">${renderActionButtons(docId)}</td>
+                                </tr>`;
+                    }).join('');
+                 // ✅ 新增：报告接收者 (REPORT_RECIPIENTS) 的渲染逻辑
+                case 'REPORT_RECIPIENTS':
+                    return data.map(item => {
+                        const docId = item.id; // 假设 ID 字段是 'id'，或者您在后端定义了 'recipient_id'
+                        const isActive = item.is_active === true;
+                        const statusBadge = isActive ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-inactive">禁用</span>';
+
+                        return `<tr class="hover:bg-gray-50/70 transition-colors duration-200">
+                                    <td class="px-6 py-3"><div class="text-base font-semibold text-gray-900">${item.recipient_name || 'N/A'}</div></td>
+                                    <td class="px-6 py-3 text-base text-gray-600">${item.recipient_email || 'N/A'}</td>
+                                    <td class="px-6 py-3 text-base text-gray-600">${item.report_type || '所有'}</td>
+                                    <td class="px-6 py-3 text-center">${statusBadge}</td>
+                                    <td class="px-6 py-3 text-right">${renderActionButtons(docId || item.recipient_id)}</td>
+                                </tr>`;
+                    }).join('');
+
+                // ✅ 新增：计划报告 (SCHEDULED_REPORTS_CONFIG) 的渲染逻辑
+                case 'SCHEDULED_REPORTS_CONFIG':
+                    return data.map(item => {
+                        const docId = item.id; // 假设 ID 字段是 'id'，或者您在后端定义了 'job_id'
+                        const isActive = item.is_active === true;
+                        const statusBadge = isActive ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-inactive">禁用</span>';
+                        const lastRunStatus = item.last_run_status || '从未运行';
+                        let lastRunStatusClass = 'badge-inactive';
+                        if (lastRunStatus === 'SUCCESS') lastRunStatusClass = 'badge-success';
+                        else if (lastRunStatus === 'FAILED') lastRunStatusClass = 'badge-danger';
+
+                        return `<tr class="hover:bg-gray-50/70 transition-colors duration-200">
+                                    <td class="px-6 py-3"><div class="text-base font-semibold text-gray-900">${item.report_title_template || 'N/A'}</div></td>
+                                    <td class="px-6 py-3 text-base text-gray-600">${item.report_type || 'N/A'}</td>
+                                    <td class="px-6 py-3 text-base text-gray-600">${item.schedule_frequency || 'N/A'}</td>
+                                    <td class="px-6 py-3 text-center">${statusBadge}</td>
+                                    <td class="px-6 py-3 text-center"><span class="badge ${lastRunStatusClass}">${lastRunStatus}</span></td>
+                                    <td class="px-6 py-3 text-right">${renderActionButtons(docId || item.job_id)}</td>
                                 </tr>`;
                     }).join('');
                 default:
@@ -3934,6 +3986,7 @@ const uiUtils = {
 
         loadReportConfigContent: function() {
             const container = document.getElementById('system-tab-content-reports-mgmt');
+            // 如果已经渲染过了，就不要重复渲染
             if (!container || container.querySelector('.registry-tabs')) return;
 
             const reportTabsHtml = this.reportConfigs.map(conf => 
@@ -3956,14 +4009,29 @@ const uiUtils = {
             {
               key: 'TECH_REGISTRY', title: '技术领域', idField: 'tech_id',
               fields: [
-                { name: 'tech_name', label: '技术名称', type: 'text', required: true },
-                { name: 'tech_category', label: '技术类别', type: 'text', required: true },
-                { name: 'tech_keywords', label: '技术关键词 (逗号分隔)', type: 'textarea' },
-                { name: 'monitoring_status', label: '关注状态', type: 'select', options: ['active', 'inactive'], required: true },
-                { name: 'data_source_academic', label: '关注学术论文', type: 'checkbox' },
-                { name: 'data_source_patent', label: '关注专利', type: 'checkbox' },
-                { name: 'data_source_opensource', label: '关注开源项目', type: 'checkbox' },
-                { name: 'data_source_news', label: '关注技术新闻', type: 'checkbox' },
+                // --- 1. 基本信息字段 ---
+                { name: 'tech_name', label: '技术名称', type: 'text', required: true, notes: '该技术领域的核心名称，应简洁明了。' },
+                { name: 'tech_category', label: '技术类别', type: 'text', required: true, notes: '技术所属的大类，可使用逗号分隔多个类别。' },
+                { name: 'monitoring_status', label: '关注状态', type: 'select', options: ['active', 'inactive'], required: true, notes: '设置该技术领域的监控状态。active表示持续监控，inactive表示暂停监控。' },
+                { name: 'tech_keywords', label: '通用技术关键词', type: 'textarea', notes: '用于通用洞察和词云分析。请使用英文逗号分隔，关键词越精确越好。' },
+                { name: 'website_url', label: '官方网站 (可选)', type: 'text', notes: '与该技术领域相关的官方网站或主要信息来源。' },
+
+                // --- 2. 各数据源搜索配置 (WF1-WF4 相关) ---
+                // 学术论文搜索 (WF1)
+                { name: 'data_source_academic', label: '启用学术论文搜索 (WF1)', type: 'checkbox', notes: '勾选此项以通过学术API（如arXiv）获取相关论文。' },
+                { name: 'academic_search_terms', label: '学术搜索关键词', type: 'textarea', notes: '用于学术论文API的搜索查询。请使用英文逗号分隔多个关键词组，支持英文OR逻辑。' },
+
+                // 专利数据搜索 (WF2)
+                { name: 'data_source_patent', label: '启用专利数据搜索 (WF2)', type: 'checkbox', notes: '勾选此项以通过专利API（如SerpApi Google Patents）获取相关专利数据。' },
+                { name: 'patent_search_terms', label: '专利搜索关键词', type: 'textarea', notes: '用于专利API的搜索查询。请使用英文逗号分隔多个关键词组。' },
+
+                // 开源项目搜索 (WF3)
+                { name: 'data_source_opensource', label: '启用开源项目搜索 (WF3)', type: 'checkbox', notes: '勾选此项以通过开源API（如GitHub API）获取相关项目。' },
+                { name: 'opensource_search_terms', label: '开源搜索关键词', type: 'textarea', notes: '用于开源项目API的搜索查询。请使用英文逗号分隔多个关键词组。' },
+
+                // 技术新闻搜索 (WF4)
+                { name: 'data_source_news', label: '启用技术新闻搜索 (WF4)', type: 'checkbox', notes: '勾选此项以通过新闻API（如NewsAPI）获取相关技术新闻。' },
+                { name: 'news_search_terms', label: '新闻搜索关键词', type: 'textarea', notes: '用于新闻API的搜索查询。请使用英文逗号分隔多个关键词组。' }
               ]
             },   
             {
@@ -4044,7 +4112,23 @@ const uiUtils = {
               fields: [
                   { name: 'recipient_name', label: '姓名', type: 'text', required: true },
                   { name: 'recipient_email', label: '邮箱', type: 'email', required: true },
-                  { name: 'report_type', label: '接收报告类型', type: 'text', placeholder: '例如: Daily, Weekly' },
+                  { 
+                    name: 'report_type', 
+                    label: '接收报告类型', 
+                    type: 'select', // <-- 修改类型为 select
+                    // ✅ 新增：提供所有后端支持的报告类型选项
+                    //    这里的选项应该与您系统中实际存在的报告类型保持一致
+                    options: [
+                        'Default', // 一个通用的默认类型
+                        'Daily', 
+                        'Weekly',
+                        'Monthly',
+                        'Quarterly',
+                        'Annual',
+                        'DAILY_ROLLING_7_DAYS', // 与您的“计划报告”中的类型保持一致
+                        'Custom' // 如果您有自定义报告类型
+                    ]
+                  },
                   { name: 'is_active', label: '是否激活', type: 'checkbox' },
               ]
             },
@@ -4054,6 +4138,21 @@ const uiUtils = {
                   { name: 'report_title_template', label: '报告标题模板', type: 'text', required: true },
                   { name: 'report_type', label: '报告类型', type: 'text', required: true },
                   { name: 'schedule_frequency', label: '调度频率', type: 'text', required: true },
+                  { 
+                    name: 'schedule_frequency', 
+                    label: '调度频率', 
+                    type: 'select', // <-- 修改类型为 select
+                    required: true,
+                    // ✅ 新增：提供所有后端支持的调度频率选项
+                    options: [
+                        'DAILY', 
+                        'DAILY_ROLLING_7_DAYS', 
+                        'WEEKLY_MONDAY', 
+                        'MONTHLY_1ST', 
+                        'QUARTERLY_1ST_MONTH', 
+                        'ANNUAL_JAN_1ST'
+                    ]
+                  },
                   { name: 'is_active', label: '是否激活', type: 'checkbox' },
               ]
             }
@@ -4062,7 +4161,7 @@ const uiUtils = {
 
         // 切换主二级Tab (e.g., 系统配置, 数据注册与管理)
         switchSubTab: function(subTabId) {
-          if (this.activeSubTab === subTabId && this.isInitialized) return; // 避免不必要的重绘
+          if (this.activeSubTab === subTabId && this.isInitialized) return;
 
           this.activeSubTab = subTabId;
           this.activeRegistryKey = null;
@@ -4079,14 +4178,17 @@ const uiUtils = {
               content.classList.toggle('hidden', content.id !== `system-tab-content-${subTabId}`);
           });
           
-          // ✅ 核心修改：确保在切换子Tab之前，父容器已经渲染
           if (subTabId === 'registries') {
               const firstRegistryKey = this.registryConfigs[0]?.key;
               if(firstRegistryKey) this.switchRegistryTab(firstRegistryKey);
           } else if (subTabId === 'reports-mgmt') {
               this.loadReportConfigContent();
               const firstReportKey = this.reportConfigs[0]?.key;
-              if(firstReportKey) this.switchRegistryTab(firstReportKey);
+              if(firstReportKey) {
+                  setTimeout(() => {
+                      this.switchRegistryTab(firstReportKey);
+                  }, 0); 
+              } 
           } else {
               const container = document.getElementById(`system-tab-content-${subTabId}`);
               if(container) {
@@ -4098,18 +4200,25 @@ const uiUtils = {
         },
 
         loadRegistryData: async function(registryKey) {
-          const contentContainer = document.getElementById('current-registry-content');
-          if (!contentContainer) return;
-
-          // ✅ 核心修改：直接从 this.registryConfigs 中查找元数据
+          // 决定在哪个主容器里进行操作
+          const containerId = this.reportConfigs.some(c => c.key === registryKey)
+              ? 'current-report-registry-content' // 如果是报告相关的配置，使用这个容器
+              : 'current-registry-content';      // 否则，使用默认的注册表容器
+          
+          // ✅ 核心修正：使用动态的 containerId 来获取正确的容器
+          const contentContainer = document.getElementById(containerId);
+          
           const config = this.getRegistryConfig(registryKey);
-          if (!config) {
-              handleFailure(new Error(`未找到注册表 '${registryKey}' 的前端元数据定义。`));
+
+          // 安全检查，确保容器和配置都存在
+          if (!contentContainer) {
+              console.error(`渲染错误：找不到内容容器 #${containerId}`);
               return;
           }
-          
-          // 将元数据存入当前上下文，供其他函数使用
-          this.currentRegistryMeta = config;
+          if (!config) {
+              console.error(`渲染错误：找不到注册表 '${registryKey}' 的配置`);
+              return;
+          }
 
           // 渲染包含操作区和表格包装器的完整骨架屏
           const tableWrapperId = `registry-table-wrapper-${registryKey}`;
@@ -4128,6 +4237,7 @@ const uiUtils = {
             <div id="${tableWrapperId}" class="mt-3 text-center p-8">正在加载数据...</div>`;
 
           // 为新生成的搜索框绑定事件
+          // ✅ 修正：确保在正确的容器内查找搜索框
           contentContainer.querySelector(`#registry-search-input`).addEventListener('input', (e) => {
             this.currentFilter = e.target.value.trim().toLowerCase();
             this.applyFiltersAndSort();
@@ -4140,22 +4250,32 @@ const uiUtils = {
             this.currentFilter = '';
             this.applyFiltersAndSort(); // 首次渲染
           } catch (e) {
-            document.getElementById(tableWrapperId).innerHTML = `<div class="p-8 text-red-500">加载 ${config.title} 数据失败: ${e.message}</div>`;
+            // ✅ 修正：确保在正确的容器内显示错误信息
+            const tableWrapper = document.getElementById(tableWrapperId);
+            if (tableWrapper) {
+                tableWrapper.innerHTML = `<div class="p-8 text-red-500">加载 ${config.title} 数据失败: ${e.message}</div>`;
+            }
             handleFailure(e);
           }
         },
 
+        // ✅ 请将此函数完整地替换您代码中的 switchRegistryTab 函数
         switchRegistryTab: function(registryKey) {
           if (this.activeRegistryKey === registryKey) return; // 避免重复加载
           this.activeRegistryKey = registryKey;
           
-          document.querySelectorAll('.registry-tab').forEach(tab => {
-              const isSelected = tab.dataset.registry === registryKey;
-              tab.classList.toggle('border-primary', isSelected);
-              tab.classList.toggle('text-primary', isSelected);
-              tab.classList.toggle('border-transparent', !isSelected);
-              tab.classList.toggle('text-gray-500', !isSelected);
-          });
+          // ✅ 核心修正：找到当前可见的导航容器，只操作它内部的标签
+          const visibleNav = document.querySelector('#system-tab-content-registries:not(.hidden) .registry-tabs, #system-tab-content-reports-mgmt:not(.hidden) .registry-tabs');
+          
+          if (visibleNav) {
+            visibleNav.querySelectorAll('.registry-tab').forEach(tab => {
+                const isSelected = tab.dataset.registry === registryKey;
+                tab.classList.toggle('border-primary', isSelected);
+                tab.classList.toggle('text-primary', isSelected);
+                tab.classList.toggle('border-transparent', !isSelected);
+                tab.classList.toggle('text-gray-500', !isSelected);
+            });
+          }
           
           this.loadRegistryData(registryKey);
         },
@@ -4167,140 +4287,5 @@ const uiUtils = {
       }
     }
   };
-
-  /* ==================================================================
-   *  SECTION 4: SINGULARITY & SPACETIME EASTER EGG
-   *  (我们新增的彩蛋功能的核心逻辑)
-   * ================================================================*/
-
-  /**
-   * 设置并显示“时空奇点”彩蛋
-   */
-  function setupSingularity() {
-    const singularity = document.getElementById('singularity-point');
-    if (!singularity) {
-      console.error("Singularity point element not found in the DOM.");
-      return;
-    }
-    
-    const potentialSpots = [
-      { top: '98%', left: '50%' }, { top: '50%', left: '2%' },
-      { top: '10%', left: '98%' }, { top: '80%', left: '95%' }
-    ];
-
-    const spot = potentialSpots[Math.floor(Math.random() * potentialSpots.length)];
-    singularity.style.top = spot.top;
-    singularity.style.left = spot.left;
-    singularity.style.display = 'block';
-
-    singularity.addEventListener('click', activateSingularity);
-  }
-
-  /**
-   * 激活奇点，显示全屏遮罩和加载动画
-   */
-  function activateSingularity() {
-    if (document.getElementById('singularity-overlay')) return;
-
-    const overlay = document.createElement('div');
-    overlay.id = 'singularity-overlay';
-    overlay.className = 'fixed inset-0 z-[100] flex items-center justify-center text-white text-2xl font-mono bg-gray-900 bg-opacity-0 transition-all duration-1000';
-    overlay.innerHTML = '<p id="loading-text" class="opacity-0 transition-opacity duration-500">正在同步时间线...</p>';
-    document.body.appendChild(overlay);
-
-    setTimeout(() => {
-      overlay.classList.add('bg-opacity-95');
-      document.getElementById('loading-text').classList.add('opacity-100');
-    }, 100);
-
-    const loadingTexts = ["校准因果律...", "渲染历史切片...", "欢迎，时间旅行者。"];
-    let textIndex = 0;
-    const interval = setInterval(() => {
-      const loadingEl = document.getElementById('loading-text');
-      if (!loadingEl) {
-          clearInterval(interval);
-          return;
-      }
-      if (textIndex < loadingTexts.length) {
-        loadingEl.textContent = loadingTexts[textIndex];
-        textIndex++;
-      } else {
-        clearInterval(interval);
-        launchHistorySelectorForSingularity(overlay);
-      }
-    }, 1200);
-  }
-
-  /**
-   * 显示技术选择界面
-   * @param {HTMLElement} overlay - 遮罩层元素
-   */
-  async function launchHistorySelectorForSingularity(overlay) {
-    try {
-      const allTechs = await App.callApi('ConfigDataService', 'getTechnologyDomainDetails');
-      if (!allTechs || allTechs.length === 0) {
-        throw new Error("系统中没有已配置的技术领域。");
-      }
-
-      overlay.innerHTML = `
-        <div class="text-center p-8 animate-fade-in">
-          <h2 class="text-4xl mb-12 font-light tracking-wider">请选择一个时空进行探索</h2>
-          <div id="tech-cloud" class="flex flex-wrap justify-center items-center gap-4 max-w-4xl mx-auto">
-            ${allTechs.map(tech => `
-              <button 
-                class="px-5 py-2 bg-gray-800 bg-opacity-70 border border-gray-600 rounded-full hover:bg-violet-500 hover:border-violet-400 hover:scale-110 transition-all duration-300"
-                onclick="startSpacetimeJourney('${tech.tech_id}', '${tech.tech_name}')"
-              >
-                ${tech.tech_name}
-              </button>
-            `).join('')}
-          </div>
-          <button onclick="document.getElementById('singularity-overlay').remove()" class="mt-12 text-gray-400 hover:text-white text-sm">以后再说</button>
-        </div>
-      `;
-    } catch (error) {
-      handleFailure(error);
-      if (overlay) overlay.remove();
-    }
-  }
-
-  /**
-   * 开始时空之旅，先获取数据，再调用3D渲染器
-   * @param {string} techId
-   * @param {string} techName
-   */
-  async function startSpacetimeJourney(techId, techName) {
-    const overlay = document.getElementById('singularity-overlay');
-    try {
-      if (overlay) {
-        const loadingContainer = overlay.querySelector('.animate-fade-in');
-        if(loadingContainer) {
-            loadingContainer.innerHTML = `<p class="text-2xl">正在加载 [${techName}] 的数据...</p>`;
-        }
-      }
-
-      const data = await App.callApi('TechnologyHistoryService', 'getTechnologySpacetimeConeData', [techId]);
-
-      if (overlay) {
-          overlay.classList.remove('bg-opacity-95');
-          setTimeout(() => overlay.remove(), 500);
-      }
-      
-      SpacetimeRenderer.display(data);
-
-    } catch (error) {
-      handleFailure(error);
-      if (overlay) overlay.remove();
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    // 可以在这里初始化你系统的其他部分，例如 App.init()
-    console.log("DOM fully loaded and parsed. Initializing application.");
-   
-    // 初始化彩蛋
-    setupSingularity();
-  });
-
   window.addEventListener('load', () => App.init());
 </script>

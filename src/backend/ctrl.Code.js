@@ -31,7 +31,6 @@ function callApi(serviceName, methodName, args = []) {
     WorkflowsService: WorkflowsService,
     SystemAdminService: SystemAdminService,
     DeepResearchService: DeepResearchService,
-    TechnologyHistoryService: TechnologyHistoryService,
   };
 
   let result;
