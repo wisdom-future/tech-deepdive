@@ -377,3 +377,160 @@ async function debug_scanDataPipelineHealth() {
   Logger.log(`--- [全局数据链路健康度扫描] 结束，耗时: ${duration.toFixed(2)} 秒 ---`);
   Logger.log("==============================================================");
 }
+
+
+// 文件名: backend/tools.ai_data_generator.gs
+
+/**
+ * @fileoverview 包含一个一次性的脚本，使用AI为指定技术领域生成模拟的历史数据。
+ * 这对于在系统初期快速填充数据、测试“技术时空锥”功能非常有用。
+ */
+
+/**
+ * [手动执行] AI创世主函数。
+ * 在Apps Script编辑器中选择此函数并点击“运行”。
+ */
+function populateHistoricalDataWithAI() {
+  const wfName = "[AI Data Generator]";
+  Logger.log(`--- ${wfName} 开始执行 ---`);
+  
+  try {
+    // =======================================================================
+    // 1. 定义我们要生成数据的目标技术领域
+    // =======================================================================
+    const techTopic = "人工智能 (Artificial Intelligence)";
+    const techIdForDb = "artificial_intelligence"; // 这个ID需要与你的technology_registry中的ID一致
+    const techKeywordsForDb = "AI, machine learning, deep learning, neural network, llm";
+
+    Logger.log(`${wfName} 目标领域: ${techTopic}`);
+
+    // =======================================================================
+    // 2. 设计一个强大的、能输出结构化JSON的Prompt
+    // =======================================================================
+    const prompt = `
+      你是一位顶级的技术史学家和分析师。你的任务是为技术领域“${techTopic}”生成一个包含15个关键历史里程碑的列表，时间跨度从1950年至今。
+      这些里程碑必须涵盖以下三种类型：'Pioneering Paper' (开创性学术论文), 'Key Patent' (关键技术专利), 'Major News' (重大新闻事件，如产品发布或公司成立)。
+      
+      请严格按照以下JSON格式返回一个包含15个对象的数组。确保日期逻辑正确，内容简洁且具有代表性。
+      
+      返回的JSON格式必须是:
+      [
+        {
+          "type": "Pioneering Paper",
+          "year": 1950,
+          "title": "Computing Machinery and Intelligence",
+          "authors": "Alan Turing",
+          "summary": "提出了著名的图灵测试，作为判断机器是否具有智能的标准。",
+          "source_platform": "Mind Journal"
+        },
+        {
+          "type": "Major News",
+          "year": 1956,
+          "title": "达特茅斯会议，人工智能学科诞生",
+          "summary": "John McCarthy等人首次提出“人工智能”概念，标志着AI作为一个研究领域的正式诞生。",
+          "source_platform": "Dartmouth College"
+        },
+        {
+          "type": "Key Patent",
+          "year": 1988,
+          "title": "用于手写字符识别的卷积神经网络系统",
+          "authors": "Yann LeCun",
+          "summary": "描述了LeNet-5网络结构，为现代深度学习在图像识别领域的应用奠定了基础。",
+          "source_platform": "USPTO"
+        }
+        // ... 请继续生成总共15个不同类型的里程碑 ...
+      ]
+    `;
+
+    Logger.log(`${wfName} 正在调用AI生成历史数据...`);
+    
+    // =======================================================================
+    // 3. 调用AI并解析返回结果
+    // =======================================================================
+    // 复用 ReportsService 中的 AI 调用函数，并请求更长的返回
+    const aiResultJson = ReportsService._callAIForTextGeneration(prompt, { model: 'gpt-4o', max_tokens: 4000 });
+    
+    // 清理AI返回的字符串，移除可能存在的Markdown代码块标记
+    const cleanedJsonString = aiResultJson.replace(/```json/g, '').replace(/```/g, '').trim();
+    const historicalMilestones = JSON.parse(cleanedJsonString);
+
+    if (!Array.isArray(historicalMilestones) || historicalMilestones.length === 0) {
+      throw new Error("AI未能生成有效的里程碑数据数组。");
+    }
+    Logger.log(`${wfName} AI成功返回了 ${historicalMilestones.length} 条历史里程碑。`);
+
+    // =======================================================================
+    // 4. 将AI生成的数据转换为数据库格式并写入
+    // =======================================================================
+    const papersToUpsert = [];
+    const patentsToUpsert = [];
+    const newsToUpsert = [];
+
+    historicalMilestones.forEach(milestone => {
+      const now = new Date();
+      const publicationDate = new Date(milestone.year, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1); // 随机生成月日
+      const commonData = {
+        id: `AI_GEN_${now.getTime()}_${Math.random().toString(36).substring(2, 6)}`,
+        source_url: `https://example.com/ai_generated/${milestone.year}/${milestone.title.replace(/\s/g, '_')}`,
+        publication_date: publicationDate,
+        tech_keywords: techKeywordsForDb,
+        ai_summary: milestone.summary,
+        ai_keywords: milestone.title,
+        processing_status: 'processed', // 直接标记为已处理
+        workflow_execution_id: 'AI_GENERATOR_RUN',
+        created_timestamp: now,
+        last_update_timestamp: now,
+        duplicate_check_hash: Utilities.getUuid() // 确保唯一性
+      };
+
+      if (milestone.type === 'Pioneering Paper') {
+        papersToUpsert.push({
+          ...commonData,
+          title: milestone.title,
+          abstract: milestone.summary,
+          authors: milestone.authors,
+          source_platform: milestone.source_platform,
+          source_type: 'academic_papers',
+        });
+      } else if (milestone.type === 'Key Patent') {
+        patentsToUpsert.push({
+          ...commonData,
+          title: milestone.title,
+          abstract: milestone.summary,
+          inventors: milestone.authors,
+          patent_number: `AI-PATENT-${milestone.year}-${Math.floor(Math.random() * 1000)}`,
+          application_date: publicationDate,
+          source_platform: milestone.source_platform,
+          source_type: 'patent_data',
+        });
+      } else if (milestone.type === 'Major News') {
+        newsToUpsert.push({
+          ...commonData,
+          news_title: milestone.title,
+          news_summary: milestone.summary,
+          source_platform: milestone.source_platform,
+          author: milestone.authors || 'News Editor',
+          related_companies: '', // 可根据需要扩展
+          source_type: 'tech_news',
+        });
+      }
+    });
+    
+    Logger.log(`${wfName} 数据转换完成。准备写入数据库...`);
+    Logger.log(`  - 论文: ${papersToUpsert.length} 条`);
+    Logger.log(`  - 专利: ${patentsToUpsert.length} 条`);
+    Logger.log(`  - 新闻: ${newsToUpsert.length} 条`);
+
+    // 批量写入数据库
+    if (papersToUpsert.length > 0) DataService.batchUpsert('RAW_ACADEMIC_PAPERS', papersToUpsert, 'id');
+    if (patentsToUpsert.length > 0) DataService.batchUpsert('RAW_PATENT_DATA', patentsToUpsert, 'id');
+    if (newsToUpsert.length > 0) DataService.batchUpsert('RAW_TECH_NEWS', newsToUpsert, 'id');
+
+    Logger.log(`--- ${wfName} 数据写入成功！ ---`);
+    Logger.log(`现在可以去运行 'runManualTimelineBuilder' 来为 '${techIdForDb}' 构建时间轴了。`);
+
+  } catch (e) {
+    Logger.log(`!!! ${wfName} 执行失败: ${e.message} !!!`);
+    Logger.log(e.stack);
+  }
+}

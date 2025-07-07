@@ -7,6 +7,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>技术洞察引擎</title>
   <base target="_top">
+  <!-- 3D 渲染库 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three-spritetext@1.6.3/dist/three-spritetext.min.js"></script>
+
   <!-- 引入Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -118,6 +123,63 @@
 
       .loader-dots .dot:nth-child(3) {
         animation-delay: 0.4s;
+      }
+    }
+
+    /* 时空奇点样式 */
+    #singularity-point {
+      /* 核心：用一个伪元素来创建辉光，主元素保持实体 */
+      position: fixed;
+      width: 6px;  /* 主元素尺寸 */
+      height: 6px;
+      background-color: rgba(233, 213, 255, 0.7); /* 一个更亮的淡紫色实体核心 */
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 9999; /* 提高 z-index 以确保在最顶层 */
+      transition: all 0.3s ease-out;
+    }
+
+    /* 使用 ::before 伪元素创建脉冲的辉光效果 */
+    #singularity-point::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 200%; /* 辉光范围是主元素的两倍 */
+      height: 200%;
+      background-color: #A78BFA; /* 辉光颜色 */
+      border-radius: 50%;
+      box-shadow: 0 0 10px #A78BFA, 0 0 15px #C4B5FD;
+      animation: soft-pulse 3s infinite ease-in-out;
+      z-index: -1; /* 确保辉光在主元素后面 */
+    }
+
+    #singularity-point:hover {
+      transform: scale(1.5); /* 悬停时主元素放大 */
+    }
+
+    /* 悬停时，辉光变得更强、更稳定 */
+    #singularity-point:hover::before {
+      animation: none; /* 停止脉冲动画 */
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.5); /* 辉光也放大 */
+      box-shadow: 0 0 20px #C4B5FD, 0 0 30px #C4B5FD, 0 0 40px #DDD6FE;
+    }
+
+    /* 重新定义一个更柔和的脉冲动画 */
+    @keyframes soft-pulse {
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.7;
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 0.4;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.7;
       }
     }
   </style>
@@ -1194,7 +1256,22 @@
       <p id="toast-message">操作成功！</p>
     </div>
 
+    <!-- 时空奇点 (彩蛋入口) -->
+  <div id="singularity-point" class="fixed w-1 h-1 rounded-full cursor-pointer" style="display: none; z-index: 99;"></div>
+
+    <!-- 时空锥3D场景模态框 -->
+    <div id="spacetime-modal" class="fixed inset-0 z-[101] hidden bg-gray-900 bg-opacity-75">
+      <div class="absolute top-4 right-4 text-white">
+        <button onclick="SpacetimeRenderer.close()" class="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+          <i class="fas fa-times mr-2"></i>关闭
+        </button>
+      </div>
+      <div id="spacetime-container" class="w-full h-full cursor-grab"></div>
+      <div id="spacetime-tooltip" class="absolute hidden bg-white p-2 rounded-md shadow-lg text-sm pointer-events-none"></div>
+    </div>
   </main>
+
+  <?!= include('frontend/spacetime-renderer.html'); ?>
 
   <?!= include('frontend/main.js.html'); ?>
 

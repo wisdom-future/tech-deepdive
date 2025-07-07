@@ -4167,5 +4167,140 @@ const uiUtils = {
       }
     }
   };
+
+  /* ==================================================================
+   *  SECTION 4: SINGULARITY & SPACETIME EASTER EGG
+   *  (我们新增的彩蛋功能的核心逻辑)
+   * ================================================================*/
+
+  /**
+   * 设置并显示“时空奇点”彩蛋
+   */
+  function setupSingularity() {
+    const singularity = document.getElementById('singularity-point');
+    if (!singularity) {
+      console.error("Singularity point element not found in the DOM.");
+      return;
+    }
+    
+    const potentialSpots = [
+      { top: '98%', left: '50%' }, { top: '50%', left: '2%' },
+      { top: '10%', left: '98%' }, { top: '80%', left: '95%' }
+    ];
+
+    const spot = potentialSpots[Math.floor(Math.random() * potentialSpots.length)];
+    singularity.style.top = spot.top;
+    singularity.style.left = spot.left;
+    singularity.style.display = 'block';
+
+    singularity.addEventListener('click', activateSingularity);
+  }
+
+  /**
+   * 激活奇点，显示全屏遮罩和加载动画
+   */
+  function activateSingularity() {
+    if (document.getElementById('singularity-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'singularity-overlay';
+    overlay.className = 'fixed inset-0 z-[100] flex items-center justify-center text-white text-2xl font-mono bg-gray-900 bg-opacity-0 transition-all duration-1000';
+    overlay.innerHTML = '<p id="loading-text" class="opacity-0 transition-opacity duration-500">正在同步时间线...</p>';
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+      overlay.classList.add('bg-opacity-95');
+      document.getElementById('loading-text').classList.add('opacity-100');
+    }, 100);
+
+    const loadingTexts = ["校准因果律...", "渲染历史切片...", "欢迎，时间旅行者。"];
+    let textIndex = 0;
+    const interval = setInterval(() => {
+      const loadingEl = document.getElementById('loading-text');
+      if (!loadingEl) {
+          clearInterval(interval);
+          return;
+      }
+      if (textIndex < loadingTexts.length) {
+        loadingEl.textContent = loadingTexts[textIndex];
+        textIndex++;
+      } else {
+        clearInterval(interval);
+        launchHistorySelectorForSingularity(overlay);
+      }
+    }, 1200);
+  }
+
+  /**
+   * 显示技术选择界面
+   * @param {HTMLElement} overlay - 遮罩层元素
+   */
+  async function launchHistorySelectorForSingularity(overlay) {
+    try {
+      const allTechs = await App.callApi('ConfigDataService', 'getTechnologyDomainDetails');
+      if (!allTechs || allTechs.length === 0) {
+        throw new Error("系统中没有已配置的技术领域。");
+      }
+
+      overlay.innerHTML = `
+        <div class="text-center p-8 animate-fade-in">
+          <h2 class="text-4xl mb-12 font-light tracking-wider">请选择一个时空进行探索</h2>
+          <div id="tech-cloud" class="flex flex-wrap justify-center items-center gap-4 max-w-4xl mx-auto">
+            ${allTechs.map(tech => `
+              <button 
+                class="px-5 py-2 bg-gray-800 bg-opacity-70 border border-gray-600 rounded-full hover:bg-violet-500 hover:border-violet-400 hover:scale-110 transition-all duration-300"
+                onclick="startSpacetimeJourney('${tech.tech_id}', '${tech.tech_name}')"
+              >
+                ${tech.tech_name}
+              </button>
+            `).join('')}
+          </div>
+          <button onclick="document.getElementById('singularity-overlay').remove()" class="mt-12 text-gray-400 hover:text-white text-sm">以后再说</button>
+        </div>
+      `;
+    } catch (error) {
+      handleFailure(error);
+      if (overlay) overlay.remove();
+    }
+  }
+
+  /**
+   * 开始时空之旅，先获取数据，再调用3D渲染器
+   * @param {string} techId
+   * @param {string} techName
+   */
+  async function startSpacetimeJourney(techId, techName) {
+    const overlay = document.getElementById('singularity-overlay');
+    try {
+      if (overlay) {
+        const loadingContainer = overlay.querySelector('.animate-fade-in');
+        if(loadingContainer) {
+            loadingContainer.innerHTML = `<p class="text-2xl">正在加载 [${techName}] 的数据...</p>`;
+        }
+      }
+
+      const data = await App.callApi('TechnologyHistoryService', 'getTechnologySpacetimeConeData', [techId]);
+
+      if (overlay) {
+          overlay.classList.remove('bg-opacity-95');
+          setTimeout(() => overlay.remove(), 500);
+      }
+      
+      SpacetimeRenderer.display(data);
+
+    } catch (error) {
+      handleFailure(error);
+      if (overlay) overlay.remove();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // 可以在这里初始化你系统的其他部分，例如 App.init()
+    console.log("DOM fully loaded and parsed. Initializing application.");
+   
+    // 初始化彩蛋
+    setupSingularity();
+  });
+
   window.addEventListener('load', () => App.init());
 </script>
