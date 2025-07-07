@@ -209,5 +209,32 @@ const CollectionStatsService = {
     } catch(e) {
         return { error: `获取详情失败: ${e.message}`, execution_id: executionId };
     }
+  },
+
+  /**
+   * ✅ 新增：专门用于获取视频洞察数据的函数
+   * @returns {Array<Object>} 包含所有视频洞察记录的数组，按发布日期倒序排序。
+   */
+  getVideoInsights: function() {
+    try {
+      // 从 Firestore 中获取名为 'raw_video_insights' 的集合中的所有文档
+      const videos = DataService.getDataAsObjects('RAW_VIDEO_INSIGHTS') || [];
+      
+      // 按发布日期 (published_date) 进行倒序排序，最新的在前
+      videos.sort((a, b) => {
+        const dateA = a.published_date ? new Date(a.published_date).getTime() : 0;
+        const dateB = b.published_date ? new Date(b.published_date).getTime() : 0;
+        return dateB - dateA; // 降序排序
+      });
+
+      Logger.log(`成功获取并排序了 ${videos.length} 条视频洞察记录。`);
+      return videos;
+      
+    } catch (e) {
+      Logger.log(`获取视频洞察数据时发生严重错误: ${e.message}`);
+      // 向上抛出错误，以便前端的 .catch() 能够捕获到
+      throw new Error(`获取视频洞察数据时发生错误: ${e.message}`);
+    }
   }
+
 };

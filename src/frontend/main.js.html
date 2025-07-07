@@ -1056,6 +1056,8 @@ const uiUtils = {
           } else if (this.activeTab === 'workflows') {
             this.renderWorkflows();
             this.setupScrollObserver();
+          } else if (this.activeTab === 'videos') { // ✅ 新增对视频标签页的处理
+            this.renderVideos();
           }
         },
         
@@ -1624,40 +1626,145 @@ const uiUtils = {
               button.innerHTML = '<i class="fa fa-play-circle mr-2"></i>再次执行';
           }
       },
-        
-        setupScrollObserver: function() {
-          if (this.scrollObserver) this.scrollObserver.disconnect();
-          const sections = document.querySelectorAll('#tab-content-workflows [id^="wf-section-"]');
-          const navLinks = document.querySelectorAll('#tab-content-workflows .workbench-nav-link');
-          if (sections.length === 0 || navLinks.length === 0) return;
 
-          const observerOptions = { root: null, rootMargin: '-30% 0px -65% 0px', threshold: 0 };
-          
-          this.scrollObserver = new IntersectionObserver(entries => {
-            let topMostIntersectingId = null;
-            entries.forEach(entry => {
-              if (entry.isIntersecting) {
-                if (topMostIntersectingId === null) {
-                    topMostIntersectingId = entry.target.getAttribute('id');
+      // ==============================================================================
+      //  ✅ 在此处粘贴以下完整的新函数
+      // ==============================================================================
+      /**
+       * 渲染视频洞察标签页的全部内容
+       */
+      renderVideos: async function() {
+        const listContainer = document.getElementById('video-list-container');
+        const playerIframe = document.getElementById('video-player-iframe');
+        const playerTitle = document.getElementById('video-player-title');
+        const playerDesc = document.getElementById('video-player-desc');
+        const takeawaysContainer = document.getElementById('video-key-takeaways');
+
+        // 安全检查，确保所有关键DOM元素都存在
+        if (!listContainer || !playerIframe || !playerTitle || !playerDesc || !takeawaysContainer) {
+          console.error("视频页面的一个或多个关键DOM元素未找到。");
+          return;
+        }
+
+        // 1. 显示加载状态
+        listContainer.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fa fa-spinner fa-spin mr-2"></i>正在加载视频列表...</div>';
+        playerTitle.textContent = '请从左侧选择一个视频';
+        playerDesc.textContent = '视频详情将在此处显示。';
+        takeawaysContainer.innerHTML = '<p class="text-gray-500">暂无核心观点。</p>';
+        playerIframe.src = 'about:blank'; // 清空播放器
+
+        try {
+          // 2. 调用后端API获取视频数据
+          const videos = await App.callApi('CollectionStatsService', 'getVideoInsights');
+
+          if (!videos || videos.length === 0) {
+            listContainer.innerHTML = '<div class="text-center py-8 text-gray-500">暂无视频洞察记录。</div>';
+            return;
+          }
+
+          // 3. 渲染视频列表
+          listContainer.innerHTML = videos.map(video => {
+            // 将核心观点数组转换为一个安全的、可在 data-* 属性中存储的字符串
+            const takeawaysDataString = JSON.stringify(video.ai_key_takeaways || []);
+
+            return `
+              <div class="video-list-item flex items-start p-3 rounded-lg cursor-pointer transition-colors duration-200 hover:bg-gray-100" 
+                    data-embed-url="${video.embed_url || ''}" 
+                    data-title="${(video.title || '').replace(/"/g, '&quot;')}" 
+                    data-desc="${(video.description || '').replace(/"/g, '&quot;')}"
+                    data-takeaways='${takeawaysDataString.replace(/'/g, "&apos;")}'>
+                <img src="${video.thumbnail_url || 'https://via.placeholder.com/120x68.png?text=No+Preview'}" alt="thumbnail" class="w-24 h-14 object-cover rounded-md shadow-sm mr-3 flex-shrink-0 bg-gray-200">
+                <div class="flex-grow overflow-hidden">
+                  <h5 class="font-semibold text-sm text-gray-800 leading-tight truncate">${video.title || '无标题'}</h5>
+                  <p class="text-xs text-gray-500 mt-1">${video.source_platform || '未知来源'} &middot; ${formatDateForDisplay(video.published_date)}</p>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          // 4. 为列表项绑定点击事件
+          listContainer.querySelectorAll('.video-list-item').forEach(item => {
+            item.addEventListener('click', () => {
+              // 移除所有其他项的激活状态
+              listContainer.querySelectorAll('.video-list-item').forEach(el => el.classList.remove('bg-blue-100', 'shadow-md'));
+              // 为当前项添加激活状态
+              item.classList.add('bg-blue-100', 'shadow-md');
+
+              // 更新播放器和标题/描述
+              playerIframe.src = item.dataset.embedUrl;
+              playerTitle.textContent = item.dataset.title;
+              playerDesc.textContent = item.dataset.desc;
+
+              // 解析并渲染核心观点
+              try {
+                const takeaways = JSON.parse(item.dataset.takeaways);
+                if (Array.isArray(takeaways) && takeaways.length > 0) {
+                  takeawaysContainer.innerHTML = `
+                    <ul class="list-disc list-inside space-y-1">
+                      ${takeaways.map(point => `<li>${point}</li>`).join('')}
+                    </ul>
+                  `;
+                } else {
+                  takeawaysContainer.innerHTML = '<p class="text-gray-500">暂无AI提取的核心观点。</p>';
                 }
+              } catch (e) {
+                console.error("解析核心观点数据失败:", e);
+                takeawaysContainer.innerHTML = '<p class="text-red-500">核心观点数据格式错误。</p>';
+              }
+
+              // 滚动到顶部方便观看（在移动端尤其有用）
+              const playerWrapper = document.getElementById('video-player-wrapper');
+              if (playerWrapper && window.innerWidth < 768) {
+                  playerWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }
             });
-            
-            if(topMostIntersectingId) {
-                navLinks.forEach(link => {
-                  const isActive = link.getAttribute('href') === `#${topMostIntersectingId}`;
-                  link.classList.toggle('bg-primary', isActive);
-                  link.classList.toggle('text-white', isActive);
-                  link.classList.toggle('text-gray-600', !isActive);
-                });
-            }
-          }, observerOptions);
-
-          sections.forEach(section => {
-              if(section) this.scrollObserver.observe(section);
           });
+
+          // 5. 默认选中并播放第一个视频
+          const firstVideoItem = listContainer.querySelector('.video-list-item');
+          if (firstVideoItem) {
+            firstVideoItem.click();
+          }
+
+        } catch (e) {
+          listContainer.innerHTML = `<div class="text-center py-8 text-red-500">加载视频失败: ${e.message}</div>`;
+          handleFailure(e);
         }
       },
+        
+      setupScrollObserver: function() {
+        if (this.scrollObserver) this.scrollObserver.disconnect();
+        const sections = document.querySelectorAll('#tab-content-workflows [id^="wf-section-"]');
+        const navLinks = document.querySelectorAll('#tab-content-workflows .workbench-nav-link');
+        if (sections.length === 0 || navLinks.length === 0) return;
+
+        const observerOptions = { root: null, rootMargin: '-30% 0px -65% 0px', threshold: 0 };
+        
+        this.scrollObserver = new IntersectionObserver(entries => {
+          let topMostIntersectingId = null;
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              if (topMostIntersectingId === null) {
+                  topMostIntersectingId = entry.target.getAttribute('id');
+              }
+            }
+          });
+          
+          if(topMostIntersectingId) {
+              navLinks.forEach(link => {
+                const isActive = link.getAttribute('href') === `#${topMostIntersectingId}`;
+                link.classList.toggle('bg-primary', isActive);
+                link.classList.toggle('text-white', isActive);
+                link.classList.toggle('text-gray-600', !isActive);
+              });
+          }
+        }, observerOptions);
+
+        sections.forEach(section => {
+            if(section) this.scrollObserver.observe(section);
+        });
+      }
+    },
      // 请将此代码块完整替换您文件中 App.pageInitializers.insights 的部分
 
       // 请将此代码块完整替换您文件中 App.pageInitializers.insights 的部分

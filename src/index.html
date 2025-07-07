@@ -480,10 +480,14 @@
         <div class="border-b border-gray-200">
           <nav id="collection-tabs" class="-mb-px flex space-x-8" aria-label="Tabs">
             <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="overview">
-              数据源概览
+              <i class="fa fa-cubes mr-2"></i>文字数据
+            </a>
+             <!-- ✅ 新增：视频洞察标签页 -->
+            <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="videos">
+              <i class="fa fa-youtube-play mr-2"></i>视频数据
             </a>
             <a href="#" class="collection-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg" data-tab="workflows">
-              工作流中心
+              <i class="fa fa-gears mr-2"></i>数采工作流
             </a>
           </nav>
         </div>
@@ -614,6 +618,58 @@
               <div id="wf-layer-6" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             </div>
           </div>
+
+           <!-- ✅ 新增：“视频洞察”的完整内容容器 -->
+          <div id="tab-content-videos" class="tab-content hidden">
+            <div class="flex flex-col md:flex-row gap-6">
+              
+              <!-- 左侧：视频列表 -->
+              <div class="w-full md:w-1/3 lg:w-1/4">
+                <h3 class="text-xl font-semibold mb-4 text-gray-800">视频列表</h3>
+                <div id="video-list-container" class="space-y-2 max-h-[75vh] overflow-y-auto pr-2">
+                  <!-- JS将在此处填充视频列表 -->
+                  <div class="text-center py-8 text-gray-500">正在加载视频列表...</div>
+                </div>
+              </div>
+
+              <!-- 右侧：视频播放器和详情 -->
+              <div class="w-full md:w-2/3 lg:w-3/4">
+                <div id="video-player-wrapper" class="sticky top-[calc(var(--header-height)+1.5rem)]">
+                  
+                  <!-- 上半部分：视频播放器 -->
+                  <div class="relative bg-black rounded-lg shadow-lg" style="padding-top: 56.25%;">
+                    <iframe 
+                      id="video-player-iframe"
+                      class="absolute top-0 left-0 w-full h-full" 
+                      src="" 
+                      title="Video Player" 
+                      frameborder="0" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      allowfullscreen>
+                    </iframe>
+                  </div>
+                  
+                  <!-- 下半部分：标题、描述和关键摘要 -->
+                  <div class="mt-4">
+                    <h4 id="video-player-title" class="text-xl font-bold text-gray-900">请从左侧选择一个视频</h4>
+                    <p id="video-player-desc" class="text-sm text-gray-600 mt-1 mb-4">视频详情将在此处显示。</p>
+                    
+                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg">
+                      <h5 class="font-semibold text-blue-800 mb-2 flex items-center">
+                        <i class="fa fa-key mr-2"></i>AI 核心观点摘要
+                      </h5>
+                      <div id="video-key-takeaways" class="text-sm text-blue-900 space-y-2">
+                        <!-- JS将在此处填充核心观点 -->
+                        <p>暂无核心观点。</p>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+          
         </div>
       </div>
     </div>
@@ -652,7 +708,7 @@
               <i class="fa fa-history"></i> <!-- 假设您的 FA 4.7.0 版本支持此图标，如果不行请替换为 fa-history -->
               <div class="flex flex-col items-center">
                 <span class="text-xs text-gray-500">看友商</span>
-                <span>标杆大事记</span>
+                <span>标杆动态轴</span>
               </div>
             </a>
             <a href="#" class="analyzation-tab whitespace-nowrap py-4 px-1 border-b-2 font-semibold text-lg flex flex-col items-center justify-center text-center" data-tab="trends">

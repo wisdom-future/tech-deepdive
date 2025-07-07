@@ -21,6 +21,7 @@ const CONFIG = {
     RAW_TECH_NEWS: 'raw_tech_news',
     RAW_INDUSTRY_DYNAMICS: 'raw_industry_dynamics',
     RAW_COMPETITOR_INTELLIGENCE: 'raw_competitor_intelligence',
+    RAW_VIDEO_INSIGHTS: 'raw_video_insights',
     
     // Intelligence Data
     TECH_INSIGHTS_MASTER: 'tech_intelligence_master',

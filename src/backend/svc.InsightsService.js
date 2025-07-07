@@ -849,15 +849,38 @@ const InsightsService = {
     const competitorIntel = DataService.getDataAsObjects('RAW_COMPETITOR_INTELLIGENCE') || [];
     const industryDynamics = DataService.getDataAsObjects('RAW_INDUSTRY_DYNAMICS') || [];
     const techNews = DataService.getDataAsObjects('RAW_TECH_NEWS') || [];
+    const videoInsights = DataService.getDataAsObjects('RAW_VIDEO_INSIGHTS') || [];
+
     Logger.log(`[Timeline] 获取到 ${competitorIntel.length} 条竞情, ${industryDynamics.length} 条产业动态, ${techNews.length} 条技术新闻。`);
 
-    // --- 2. 筛选与该标杆企业相关的所有事件 ---
+        // --- 2. 筛选与该标杆企业相关的所有事件 ---
     const allEvents = [];
     const nameLower = benchmarkName.toLowerCase();
 
+    // ✅ 核心修正：创建一个通用的公司匹配函数
+    const isCompanyMatch = (item) => {
+        if (!item) return false;
+        const nameLower = benchmarkName.toLowerCase();
+        
+        // 检查 competitor_name 字段 (字符串)
+        if (item.competitor_name && String(item.competitor_name).toLowerCase() === nameLower) {
+            return true;
+        }
+        // 检查 related_companies 字段 (数组)
+        if (Array.isArray(item.related_companies) && item.related_companies.some(c => String(c || '').toLowerCase() === nameLower)) {
+            return true;
+        }
+        // 检查 related_competitors 字段 (数组)，用于视频
+        if (Array.isArray(item.related_competitors) && item.related_competitors.some(c => String(c || '').toLowerCase() === nameLower)) {
+            return true;
+        }
+        return false;
+    };
+
+
     // 从竞争情报中筛选
     competitorIntel.forEach(item => {
-      if (String(item.competitor_name || '').toLowerCase() === nameLower) {
+      if (isCompanyMatch(item)) {
         allEvents.push({
           date: item.publication_date,
           title: item.intelligence_title,
@@ -870,7 +893,7 @@ const InsightsService = {
 
     // 从产业动态中筛选
     industryDynamics.forEach(item => {
-      if (Array.isArray(item.related_companies) && item.related_companies.some(c => String(c || '').toLowerCase() === nameLower)) {
+      if (isCompanyMatch(item)) {
         allEvents.push({
           date: item.publication_date,
           title: item.event_title,
@@ -883,7 +906,7 @@ const InsightsService = {
     
     // 从技术新闻中筛选
     techNews.forEach(item => {
-      if (Array.isArray(item.related_companies) && item.related_companies.some(c => String(c || '').toLowerCase() === nameLower)) {
+      if (isCompanyMatch(item)) {
           allEvents.push({
               date: item.publication_date,
               title: item.news_title,
@@ -891,6 +914,21 @@ const InsightsService = {
               summary: item.ai_summary || item.news_summary,
               source_url: item.source_url
           });
+      }
+    });
+
+    // 从视频洞察中筛选
+    videoInsights.forEach(item => {
+      if (isCompanyMatch(item)) {
+        allEvents.push({
+          date: item.published_date,
+          title: item.title,
+          type: '核心视频',
+          summary: item.ai_summary || item.description,
+          source_url: item.video_url,
+          embed_url: item.embed_url,
+          thumbnail_url: item.thumbnail_url
+        });
       }
     });
     
