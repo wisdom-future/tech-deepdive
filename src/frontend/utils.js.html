@@ -1,0 +1,82 @@
+<script>
+  /**
+   * @file frontend/utils.js.html
+   * @description 存放不依赖任何其他模块的纯工具函数。
+   */
+
+  function formatDateForDisplay(dateString) {
+    if (!dateString) return 'N/A';
+    try {
+      const dateObj = new Date(dateString);
+      if (isNaN(dateObj.getTime())) return 'Invalid Date';
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (e) {
+      console.error("Error formatting date:", dateString, e);
+      return 'Format Error';
+    }
+  }
+
+  function truncate(str, len = 40) {
+    if (str == null) return '';
+    str = String(str);
+    return str.length > len ? str.slice(0, len) + '...' : str;
+  }
+
+  function handleFailure(error) {
+    const message = error.message || '发生未知错误';
+    console.error('全局错误处理器捕获到错误:', message, error);
+    if (window.uiUtils) {
+      uiUtils.showToast(`错误: ${message}`, 'error');
+    } else {
+      alert(`错误: ${message}`);
+    }
+  }
+
+  function isRelatedToCompany(item, companyFilterName) {
+    const actualFilterName = String(companyFilterName || '').trim();
+    if (actualFilterName === '' || actualFilterName.toLowerCase() === '所有企业') return true;
+    const filterLower = actualFilterName.toLowerCase();
+    if (item.competitor_name && String(item.competitor_name).toLowerCase().includes(filterLower)) return true;
+    if (Array.isArray(item.related_companies)) {
+        for (const company of item.related_companies) {
+            if (String(company || '').toLowerCase().includes(filterLower)) return true;
+        }
+    }
+    return false;
+  }
+
+  function setupHamburgerMenu() {
+    const hamburgerBtn = document.getElementById('hamburger-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+
+    if (hamburgerBtn && mobileMenu) {
+      hamburgerBtn.addEventListener('click', () => {
+        mobileMenu.classList.toggle('hidden');
+        const icon = hamburgerBtn.querySelector('i');
+        if (mobileMenu.classList.contains('hidden')) {
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-bars');
+        } else {
+            icon.classList.remove('fa-bars');
+            icon.classList.add('fa-times');
+        }
+      });
+
+      mobileMenu.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+          if (!mobileMenu.classList.contains('hidden')) {
+            mobileMenu.classList.add('hidden');
+            const icon = hamburgerBtn.querySelector('i');
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-bars');
+          }
+        });
+      });
+    } else {
+      console.warn("汉堡菜单或移动端菜单容器未在HTML中找到。");
+    }
+  }
+</script>

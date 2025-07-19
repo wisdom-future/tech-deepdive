@@ -1,0 +1,56 @@
+<script>
+function PageModuleBuilder(pageId) {
+  let _config = null;
+  let _currentView = null;
+  let _pageContainer = null;
+
+  const init = (pageConfig, context = {}) => {
+    _config = pageConfig;
+    _currentView = context.subView || (_config.hasSubNav ? _config.defaultSubView : null);
+    _pageContainer = document.getElementById(`page-${pageId}`);
+    if (!_pageContainer) return;
+    render();
+  };
+
+  const render = () => {
+    _pageContainer.innerHTML = ''; 
+    if (_config.hasSubNav) {
+      const tabContainer = document.createElement('div');
+      tabContainer.id = `tabs-${pageId}`;
+      tabContainer.className = "bg-white shadow-sm sticky top-16 z-30";
+      _pageContainer.appendChild(tabContainer);
+      renderTabs(tabContainer);
+    }
+    const contentContainer = document.createElement('div');
+    contentContainer.id = `content-${pageId}`;
+    _pageContainer.appendChild(contentContainer);
+    renderView(contentContainer);
+  };
+
+  const renderTabs = (tabContainer) => {
+    const tabElements = uiUtils.createModernTabs(_config.tabs, _currentView, (newViewKey) => {
+      if (newViewKey !== _currentView) {
+        _currentView = newViewKey;
+        const contentContainer = document.getElementById(`content-${pageId}`);
+        renderView(contentContainer); // 只更新内容
+        // 更新Tab高亮
+        tabContainer.querySelectorAll('a').forEach(a => {
+          a.classList.toggle('border-primary', a.dataset.key === newViewKey);
+          a.classList.toggle('text-primary', a.dataset.key === newViewKey);
+          a.classList.toggle('border-transparent', a.dataset.key !== newViewKey);
+          a.classList.toggle('text-gray-500', a.dataset.key !== newViewKey);
+        });
+      }
+    });
+    tabContainer.innerHTML = '';
+    tabContainer.appendChild(tabElements);
+  };
+
+  const renderView = (contentContainer) => {
+    const activeTabConfig = _config.hasSubNav ? _config.tabs.find(t => t.key === _currentView) : _config;
+    contentContainer.innerHTML = `<div class="p-8"><h2 class="text-xl text-primary">${activeTabConfig.label}</h2><p class="mt-4 text-gray-600">内容正在实现中...</p></div>`;
+  };
+
+  return { init };
+}
+</script>

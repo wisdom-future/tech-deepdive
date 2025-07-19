@@ -1,0 +1,349 @@
+<!-- file: frontend/page_findings.js.html (完整、最终修正版) -->
+<script>
+const FindingsPage = (() => {
+    let _isInitialized = false;
+    let _currentTab = 'tech_leads'; // 默认 Tab
+    let _timelineCompanySelect = null;
+    let _reportQueryInput = null;
+
+    function init(context) {
+        if (_isInitialized) {
+            const targetTab = context.subView || _currentTab;
+            _switchTab(targetTab, true);
+            return;
+        }
+        document.getElementById('page-findings')?.addEventListener('click', _handlePageClick);
+        _isInitialized = true;
+        const initialTab = context.subView || 'tech_leads';
+        _switchTab(initialTab, true);
+    }
+
+    function _handlePageClick(e) {
+        const target = e.target;
+        const tabLink = target.closest('.findings-nav-link');
+        if (tabLink && !tabLink.classList.contains('active')) {
+            e.preventDefault();
+            _switchTab(tabLink.dataset.tab);
+            return;
+        }
+        if (target.id === 'generate-timeline-btn') {
+            _handleGenerateTimeline();
+            return;
+        }
+        if (target.id === 'generate-report-btn') {
+            _handleGenerateInsightReport();
+            return;
+        }
+        const generateFromLeadBtn = target.closest('.generate-report-from-lead-btn');
+        if (generateFromLeadBtn) {
+            const card = generateFromLeadBtn.closest('.interactive-panel');
+            const leadTitle = card.querySelector('h4').textContent;
+            _switchTab('insight_report');
+            setTimeout(() => {
+                const queryInput = document.getElementById('insight-report-query');
+                if(queryInput) {
+                    queryInput.value = `基于以下技术线索进行深度分析和报告生成：\n"${leadTitle}"`;
+                }
+            }, 100);
+            return;
+        }
+        if (target.id === 'save-timeline-snapshot-btn') {
+            const companyId = _timelineCompanySelect?.getValue();
+            const companyName = _timelineCompanySelect?.getOption(companyId)?.textContent || '未知实体';
+            
+            // 准备元数据对象
+            const metadata = {
+                title: `${companyName} 的动态时间轴`,
+                description: `截至 ${new Date().toLocaleDateString()} 的 ${companyName} 相关事件时间轴。`,
+                analysisType: '实体时间轴',
+                targetEntity: companyId
+            };
+            
+            // 调用通用的工具函数
+            uiUtils.captureAndSaveSnapshot('timeline-content', metadata);
+            return;
+        }
+
+        const card = e.target.closest('.interactive-card');
+        if (card) {
+            const id = card.dataset.id;
+            const type = card.dataset.type;
+            if (id && type) {
+                _showFindingDetails(type, id); // 调用新的辅助函数
+            }
+            return; // 确保执行完后返回
+        }
+    }
+
+    async function _showFindingDetails(type, id) {
+        try {
+            uiUtils.showToast('正在加载详情...', 'info');
+            // 调用后端 API 获取详情
+            const details = await App.callApi('FindingsService', 'getFindingDetails', [type, id]);
+            
+            if (details && !details.error) {
+                // 准备要在侧边栏中显示的数据
+                const displayDetails = {
+                    '内容 (Content)': details.content,
+                    '标签 (Tags)': details.tags?.join(', '),
+                    '创建者 (Created By)': details.createdBy,
+                    '创建时间 (Created At)': details.createdAt,
+                    '关联实体 (Related Entities)': details.relatedEntities?.join(', ')
+                };
+                
+                // 调用通用的侧边栏工具函数
+                uiUtils.showDetailsSidePanel(details.title, displayDetails, null); // 假设线索没有直接的 sourceUrl
+            } else {
+                throw new Error(details.error || `未找到 ID 为 ${id} 的详情`);
+            }
+        } catch (error) {
+            console.error("Failed to show finding details:", error);
+            uiUtils.showToast(`加载详情失败: ${error.message}`, 'error');
+        }
+    }
+
+    function _switchTab(tabId, forceRefresh = false) {
+        if (!forceRefresh && _currentTab === tabId) return;
+        _currentTab = tabId;
+        console.log(`FindingsPage: Switched to tab -> ${tabId}`);
+
+        document.querySelectorAll('#findings-nav .findings-nav-link').forEach(link => {
+            link.classList.toggle('active', link.dataset.tab === tabId);
+        });
+
+        const mainContent = document.getElementById('findings-main-content');
+        if (!mainContent) return;
+        
+        const activeLink = document.querySelector(`#findings-nav .findings-nav-link[data-tab="${tabId}"]`);
+        const apiType = activeLink?.dataset.apitype;
+        const title = activeLink?.textContent.trim() || "研究工作台";
+
+        switch (tabId) {
+            case 'tech_leads':
+            case 'topic_reports':
+            case 'snapshots':
+                _renderGridContainer(title, apiType);
+                break;
+            case 'entity_timeline':
+                _renderTimelineGenerator();
+                break;
+            case 'routine_reports':
+                mainContent.innerHTML = `
+                    <h2 class="text-2xl font-bold text-text-light mb-6">例行报告</h2>
+                    <div class="panel p-6 text-center text-text-medium">
+                        此功能用于展示由系统自动生成的每日、每周或每月报告。<br/>(功能待实现)
+                    </div>
+                `;
+                break;
+            // 这个 case 是为从“技术线索”跳转准备的，虽然我们通过上面的代码直接调用了 _switchTab
+            case 'insight_report':
+                 _renderReportGenerator();
+                 break;
+            default:
+                mainContent.innerHTML = `<p class="text-center text-warning">未知标签页: ${tabId}</p>`;
+        }
+    }
+
+    async function _renderGridContainer(title, apiType) {
+        const mainContent = document.getElementById('findings-main-content');
+        mainContent.innerHTML = `
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-text-light">${title}</h2>
+                <div class="relative w-full md:w-1/3">
+                    <i class="fa fa-search absolute left-3 top-1/2 -translate-y-1/2 text-text-dark"></i>
+                    <input type="text" id="findings-search-input" placeholder="搜索..." class="input-dark pl-10 w-full">
+                </div>
+            </div>
+            <div id="findings-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div class="col-span-full text-center py-16"><i class="fa fa-spinner fa-spin text-3xl"></i></div>
+            </div>
+        `;
+        document.getElementById('findings-search-input').addEventListener('input', () => _loadGridItems(apiType));
+        _loadGridItems(apiType);
+    }
+
+    async function _loadGridItems(apiType) {
+        const grid = document.getElementById('findings-grid');
+        if (!grid) return;
+        const keyword = document.getElementById('findings-search-input')?.value || '';
+        try {
+            if (!apiType) {
+                throw new Error("未指定 API 类型。");
+            }
+            const response = await App.callApi('FindingsService', 'getFindings', [apiType, { keyword }]);
+            if (response.records && response.records.length > 0) {
+                grid.innerHTML = response.records.map(item => {
+                    let cardHtml = '';
+                     switch(apiType) {
+                        case 'insights': // 技术线索
+                            cardHtml = `
+                                <div class="interactive-card panel p-4 flex flex-col" data-id="${item.id}" data-type="insights">
+                                    <div class="flex-grow">
+                                        <h4 class="font-bold text-text-light mb-2">${item.title}</h4>
+                                        <p class="text-sm text-text-medium line-clamp-3">${item.content}</p>
+                                    </div>
+                                    <div class="flex justify-between items-center text-xs text-text-dark mt-4 pt-2 border-t border-border-dark">
+                                        <span>由 ${item.createdBy} 创建于 ${item.createdAt}</span>
+                                        <button class="btn-secondary text-xs py-1 px-2 generate-report-from-lead-btn">
+                                            <i class="fa fa-file-powerpoint-o mr-1"></i>生成报告
+                                        </button>
+                                    </div>
+                                </div>`;
+                            break;
+                        case 'snapshots':
+                            cardHtml = `
+                                <div class="interactive-card panel p-0 flex flex-col cursor-pointer overflow-hidden" data-id="${item.id}" data-type="snapshots">
+                                    <img src="${item.imageUrl}" alt="${item.title}" class="w-full h-40 object-cover">
+                                    <div class="p-4">
+                                        <h4 class="font-bold text-text-light mb-1">${item.title}</h4>
+                                        <span class="badge badge-inactive mb-2">${item.analysisType}</span>
+                                        <p class="text-xs text-text-dark">保存于 ${item.createdAt}</p>
+                                    </div>
+                                </div>`;
+                            break;
+                        case 'reports': // 专题报告
+                            cardHtml = `
+                                <div class="interactive-card panel p-4 flex flex-col cursor-pointer" data-id="${item.id}" data-type="reports">
+                                    <div class="flex-grow">
+                                        <h4 class="font-bold text-lg text-primary mb-2">${item.title}</h4>
+                                        <p class="text-sm text-text-medium line-clamp-4">${item.summary}</p>
+                                    </div>
+                                    <div class="text-xs text-text-dark mt-4 pt-2 border-t border-border-dark">
+                                        由 ${item.author} 发布于 ${item.publishedAt}
+                                    </div>
+                                </div>`;
+                            break;
+                        default: 
+                            cardHtml = '';
+                    }
+                    return cardHtml;
+                }).join('');
+            } else {
+                grid.innerHTML = `<div class="col-span-full text-center py-16 text-text-medium">没有找到任何内容。</div>`;
+            }
+        } catch (e) {
+            grid.innerHTML = `<div class="col-span-full text-center py-16 text-error">加载失败: ${e.message}</div>`;
+        }
+    }
+
+    function _renderTimelineGenerator() {
+        const mainContent = document.getElementById('findings-main-content');
+        mainContent.innerHTML = `
+            <h2 class="text-2xl font-bold text-text-light mb-6">实体时间轴</h2>
+            <div class="panel p-4 mb-8 flex items-center gap-4">
+                <div class="flex-grow"><select id="timeline-company-selector"></select></div>
+                <button id="generate-timeline-btn" class="btn-primary flex-shrink-0"><i class="fa fa-play-circle mr-2"></i>生成时间轴</button>
+            </div>
+            <div id="timeline-results-container" class="panel p-6">
+                <div class="flex justify-between items-center mb-4 border-b border-border-dark pb-4">
+                    <h3 class="text-lg font-semibold">时间轴结果</h3>
+                    <button id="save-timeline-snapshot-btn" class="btn-secondary hidden"><i class="fa fa-camera mr-2"></i>保存为快照</button>
+                </div>
+                <div id="timeline-content" class="text-center text-text-medium py-16">请选择一个企业以生成其动态时间轴。</div>
+            </div>
+        `;
+        _populateCompanySelector();
+    }
+    
+    async function _populateCompanySelector() {
+        const selectElement = document.getElementById('timeline-company-selector');
+        if (!selectElement) return;
+        try {
+            const companies = await App.callApi('SystemAdminService', 'getCompetitorOptions', []);
+            if (_timelineCompanySelect) _timelineCompanySelect.destroy();
+            _timelineCompanySelect = new TomSelect(selectElement, {
+                options: companies, valueField: 'id', labelField: 'name', placeholder: '搜索或选择一个标杆企业...'
+            });
+        } catch (error) {
+            uiUtils.showToast("加载企业列表失败: " + error.message, "error");
+        }
+    }
+
+    async function _handleGenerateTimeline() {
+        const companyId = _timelineCompanySelect?.getValue();
+        if (!companyId) {
+            uiUtils.showToast("请先选择一个标杆企业", "warning");
+            return;
+        }
+        const timelineContent = document.getElementById('timeline-content');
+        if(!timelineContent) return;
+        timelineContent.innerHTML = `<div class="text-center py-16"><i class="fa fa-spinner fa-spin text-3xl"></i></div>`;
+        
+        try {
+            const data = await App.callApi('FindingsService', 'getCompanyTimeline', [companyId]);
+            
+            timelineContent.innerHTML = `
+                <div class="relative border-l-2 border-border-dark ml-4 pl-8 space-y-8">
+                    ${data.events.map(event => `
+                        <div class="relative">
+                            <div class="absolute -left-[41px] top-1.5 w-4 h-4 bg-primary rounded-full border-4 border-bg-dark"></div>
+                            <p class="text-sm text-text-medium">${new Date(event.date).toLocaleDateString()}</p>
+                            <h4 class="font-semibold text-text-light mt-1">${event.title}</h4>
+                            <p class="text-sm text-text-medium mt-1">${event.summary}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            const saveBtn = document.getElementById('save-timeline-snapshot-btn');
+            if (saveBtn) saveBtn.classList.remove('hidden');
+
+        } catch(e) {
+            timelineContent.innerHTML = `<p class="text-error">生成时间轴失败: ${e.message}</p>`;
+        }
+    }
+
+    function _renderReportGenerator() {
+        const mainContent = document.getElementById('findings-main-content');
+        mainContent.innerHTML = `
+            <h2 class="text-2xl font-bold text-text-light mb-6">AI 洞察报告生成器</h2>
+            <div class="panel p-6">
+                <p class="text-text-medium mb-4">输入您感兴趣的研究主题或问题，或从“技术线索”中发起，AI Copilot 将为您深度挖掘数据并生成一份结构化的洞察报告。</p>
+                <textarea id="insight-report-query" class="input-dark w-full text-base" rows="4" placeholder="例如：分析一下 NVIDIA 和 AMD 在 AI 芯片领域的最新技术布局和市场策略差异..."></textarea>
+                <div class="text-right mt-4">
+                    <button id="generate-report-btn" class="btn-primary"><i class="fa fa-rocket mr-2"></i>生成报告</button>
+                </div>
+            </div>
+            <div id="report-results-container" class="mt-8"></div>
+        `;
+        _reportQueryInput = document.getElementById('insight-report-query');
+    }
+
+    async function _handleGenerateInsightReport() {
+        const query = _reportQueryInput?.value.trim();
+        if (!query) {
+            uiUtils.showToast("请输入您的研究主题", "warning");
+            return;
+        }
+        const resultsContainer = document.getElementById('report-results-container');
+        resultsContainer.innerHTML = `<div class="panel p-6 text-center"><i class="fa fa-spinner fa-spin text-3xl"></i><p class="mt-2">AI 正在撰写报告，请稍候...</p></div>`;
+        
+        try {
+            const { jobId } = await App.callApi('CopilotService', 'performDeepResearch', [query]);
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusResponse = await App.callApi('CopilotService', 'getResearchStatus', [jobId]);
+                    if (statusResponse.status === 'COMPLETED') {
+                        clearInterval(pollInterval);
+                        const md = window.markdownit();
+                        resultsContainer.innerHTML = `
+                            <div class="panel p-6">
+                                <h3 class="text-xl font-bold mb-4">洞察报告</h3>
+                                <div class="prose prose-invert max-w-none">${md.render(statusResponse.result)}</div>
+                            </div>
+                        `;
+                    } else if (statusResponse.status === 'FAILED') {
+                        throw new Error(statusResponse.error || "报告生成任务失败。");
+                    }
+                } catch (pollError) {
+                    clearInterval(pollInterval);
+                    resultsContainer.innerHTML = `<div class="panel p-6 text-error">轮询报告状态失败: ${pollError.message}</div>`;
+                }
+            }, 2000);
+        } catch(e) {
+            resultsContainer.innerHTML = `<div class="panel p-6 text-error">报告生成任务启动失败: ${e.message}</div>`;
+        }
+    }
+
+    return { init };
+})();
+</script>

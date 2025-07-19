@@ -1,0 +1,8 @@
+# Ignore local development files
+local_dev.html
+local_dev/
+
+# Ignore node modules and package files if you use npm
+node_modules/
+package.json
+package-lock.json

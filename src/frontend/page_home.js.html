@@ -1,0 +1,626 @@
+<script>
+const HomePage = (() => {
+
+  // ==================================================================
+  //  1. 模块内所有方法都组织在这个对象中，以确保引用清晰
+  // ==================================================================
+  
+  const _methods = {
+
+    // ==================================================================
+    //  模块级私有辅助函数
+    // ==================================================================
+    // 新增：销毁 TomSelect 实例的辅助函数
+    _destroyTomSelectInstance(id) {
+      const el = document.getElementById(id);
+      if (el && el.tomselect) {
+        el.tomselect.destroy();
+        // 清除引用，防止内存泄漏和旧实例干扰
+        delete el.tomselect;
+      }
+    },
+    
+    // ✅ [新增] 专门用于异步获取数据并渲染所有模块的函数
+    async _loadAndRenderModules() {
+      try {
+        const dashboardData = await App.callApi('DashboardService', 'getDashboardData');
+        console.log("[FRONTEND_RENDER] DashboardService.getDashboardData returned:", dashboardData);
+        
+        if (!dashboardData) {
+          throw new Error("仪表盘数据返回为空。");
+        }
+
+        // 使用 Promise.allSettled 并行渲染所有模块，一个模块的失败不影响其他模块
+        await Promise.allSettled([
+          _methods.renderMarketRadar(document.getElementById('module-marketRadar'), dashboardData.marketRadar),
+          _methods.renderAthenasBriefing(document.getElementById('module-athenasBriefing'), dashboardData.athenasBriefing),
+          _methods.renderEmergingSignals(document.getElementById('module-emergingSignals'), dashboardData.emergingSignals),
+          _methods.renderMyWatchlist(document.getElementById('module-myWatchlist'), dashboardData.myWatchlist),
+          _methods.renderRealtimeTechFeed(document.getElementById('module-techFeed'), dashboardData.realtimeTechFeed)
+        ]);
+        console.log("[FRONTEND_RENDER] All dashboard modules attempted to render.");
+
+      } catch (e) {
+        console.error("Failed to load and render dashboard data:", e);
+        // 在页面上显示一个总的错误信息
+        const container = document.getElementById('page-home');
+        if (container) {
+          container.innerHTML = `<div class="p-8 text-center text-error">仪表盘数据加载失败: ${e.message}</div>`;
+        }
+      }
+    },
+    async _showSidePanel(entityId) {
+      const panel = document.getElementById('dashboard-side-panel');
+      const overlay = document.getElementById('side-panel-overlay');
+      if (!panel || !overlay) return;
+
+      panel.style.transform = "translateX(0%)";
+      overlay.classList.remove('hidden');
+      panel.innerHTML = `<div class="p-8 text-gray-400 text-center">加载中...</div>`;
+
+      const closePanel = () => {
+        panel.style.transform = "translateX(100%)";
+        overlay.classList.add('hidden');
+      };
+      
+      try {
+        // 调用 DashboardService.getEntityDetails，它返回 name, summary, type, relatedFindings
+        const data = await App.callApi('DashboardService', 'getEntityDetails', [entityId]) || {}; 
+        panel.innerHTML = `
+          <div class="flex flex-col h-full bg-[#1F2937] text-white border-l border-gray-700">
+            <div class="flex justify-between items-center p-4 border-b border-gray-700/50">
+              <h3 class="text-lg font-bold">${data.name || '未命名实体'}</h3>
+              <button id="close-panel-btn" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+              <p class="text-gray-300">${data.summary || '暂无简介'}</p>
+              <h4 class="font-semibold text-white border-t border-gray-700/50 pt-4 mt-4">最新信号</h4>
+              <div>
+                ${
+                  data.relatedFindings && data.relatedFindings.length > 0
+                    ? data.relatedFindings.map(ev => `
+                      <div class="mb-2 text-sm p-2 rounded-md hover:bg-white/5">
+                        <span class="inline-block px-2 py-0.5 rounded bg-blue-500/30 text-xs text-blue-300">${ev.type || ''}</span>
+                        <p class="mt-1 text-gray-200">${ev.title || ''}</p>
+                        <a href="${ev.url || '#'}" target="_blank" rel="noopener" class="text-blue-400 hover:underline text-xs">查看原文</a>
+                      </div>
+                    `).join('')
+                    : '<div class="text-gray-500 text-sm">暂无信号</div>'
+                }
+              </div>
+            </div>
+            <div class="p-4 border-t border-gray-700/50 bg-gray-900/50">
+              <button id="side-panel-analyze-btn" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500">✨ 深度分析</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('close-panel-btn').onclick = closePanel;
+        document.getElementById('side-panel-analyze-btn').onclick = () => {
+          App.switchPage('analysis', { entityId: entityId });
+          closePanel();
+        };
+      } catch (e) {
+        panel.innerHTML = `<div class="p-8 text-red-400 text-center">加载失败: ${e.message}</div>`;
+      }
+      overlay.onclick = closePanel;
+    },
+
+    async showManageWatchlistModal() {
+      // 1. 确保旧模态框被移除，防止ID冲突和事件重复绑定
+      document.getElementById('watchlist-modal-container')?.remove();
+
+      // 2. 动态生成唯一的ID，确保每次打开都是全新的、干净的组件实例
+      const uniqueId = `ts-${Date.now()}`;
+      const techSelectId = `user-modal-tech-select-${uniqueId}`;
+      const companySelectId = `user-modal-company-select-${uniqueId}`;
+
+      // 3. 创建模态框的HTML结构
+      const modalContainer = document.createElement('div');
+      modalContainer.id = 'watchlist-modal-container';
+      modalContainer.className = 'fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in';
+      modalContainer.innerHTML = `
+        <div class="bg-white dark:bg-[#1F2937] text-gray-900 dark:text-white rounded-2xl shadow-2xl w-full max-w-2xl border border-gray-200 dark:border-gray-700/50 flex flex-col max-h-[90vh]">
+          <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700/50 flex-shrink-0">
+            <h3 class="text-lg font-bold">管理我的关注</h3>
+            <button id="close-watchlist-modal" class="text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-2xl">&times;</button>
+          </div>
+          <div class="p-6 overflow-y-auto flex-grow">
+            <p class="text-gray-600 dark:text-gray-400 mb-6">通过搜索从我们的实体库中选择您希望持续追踪的技术领域和标杆企业。</p>
+            <div id="watchlist-editor" class="space-y-6">
+              <div>
+                <label for="${techSelectId}" class="block mb-2 font-semibold text-gray-700 dark:text-gray-300">技术领域</label>
+                <select id="${techSelectId}" multiple placeholder="搜索或选择技术..."></select>
+              </div>
+              <div>
+                <label for="${companySelectId}" class="block mb-2 font-semibold text-gray-700 dark:text-gray-300">标杆企业</label>
+                <select id="${companySelectId}" multiple placeholder="搜索或选择公司..."></select>
+              </div>
+            </div>
+          </div>
+          <div class="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-b-2xl text-right flex-shrink-0 border-t border-gray-200 dark:border-gray-700/50">
+            <button id="save-watchlist-btn" class="btn-primary">
+              <span class="btn-text">保存更改</span>
+              <span class="btn-loader hidden"><i class="fa fa-spinner fa-spin mr-2"></i>保存中...</span>
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modalContainer);
+
+      // 绑定关闭事件
+      const closeModal = () => modalContainer.remove();
+      document.getElementById('close-watchlist-modal').onclick = closeModal;
+      
+      let techSelectInstance, companySelectInstance;
+
+      // 使用 setTimeout(..., 0) 确保DOM元素已渲染完毕再初始化TomSelect
+      setTimeout(async () => {
+          try {
+              // a. 先获取当前用户已选择的关注项ID
+              const currentUser = await App.callApi('RegistryService', 'getUserAccountByEmail', [currentUserAuthInfo.user_email]);
+              const currentTechIds = currentUser.effective_focus?.focusedTechIds || [];
+              const currentCompanyIds = currentUser.effective_focus?.focusedCompetitorIds || [];
+
+              // b. 为了在初始时能显示已选项的名称，批量获取它们的详细信息
+              //    这里假设您已在 RegistryService 中添加了 getEntitiesByIds 方法
+              const initialTechOptions = currentTechIds.length > 0 ? await App.callApi('RegistryService', 'getEntitiesByIds', [currentTechIds]) : [];
+              const initialCompanyOptions = currentCompanyIds.length > 0 ? await App.callApi('RegistryService', 'getEntitiesByIds', [currentCompanyIds]) : [];
+              
+              // c. 定义 TomSelect 的动态加载配置函数
+              const getTomSelectLoadConfig = (entityType, initialOptions) => ({
+                  valueField: 'id',
+                  labelField: 'name',
+                  searchField: 'name',
+                  options: initialOptions, // 初始时加载已选项，这样一打开就能看到已选内容
+                  create: false, // 不允许用户创建新选项
+                  load: async (query, callback) => {
+                      // 当用户开始输入时（query长度大于0），才触发加载
+                      if (!query.length) return callback();
+                      try {
+                          // 调用新的后端API进行搜索
+                          const results = await App.callApi('RegistryService', 'searchEntities', [entityType, query, 20]);
+                          callback(results);
+                      } catch (error) {
+                          console.error(`Failed to search ${entityType}:`, error);
+                          uiUtils.showToast(`搜索${entityType}失败`, 'error');
+                          callback(); // 出错时也要调用callback，避免UI卡死
+                      }
+                  },
+                  render: {
+                      option: (data, escape) => `<div><strong>${escape(data.name)}</strong></div>`,
+                      item: (data, escape) => `<div>${escape(data.name)}</div>`,
+                  },
+                  plugins: ['remove_button']
+              });
+
+              // d. 初始化两个选择框
+              techSelectInstance = new TomSelect(`#${techSelectId}`, getTomSelectLoadConfig('Technology', initialTechOptions));
+              techSelectInstance.addItems(currentTechIds); // 将已选的ID设置进去
+
+              companySelectInstance = new TomSelect(`#${companySelectId}`, getTomSelectLoadConfig('Company', initialCompanyOptions));
+              companySelectInstance.addItems(currentCompanyIds);
+
+              // e. 绑定保存按钮的点击事件
+              document.getElementById('save-watchlist-btn').onclick = async () => {
+                  const btn = document.getElementById('save-watchlist-btn');
+                  const btnText = btn.querySelector('.btn-text');
+                  const btnLoader = btn.querySelector('.btn-loader');
+                  
+                  btn.disabled = true;
+                  btnText.classList.add('hidden');
+                  btnLoader.classList.remove('hidden');
+
+                  try {
+                      const selectedTechs = techSelectInstance.getValue();
+                      const selectedCompanies = companySelectInstance.getValue();
+
+                      await App.callApi('RegistryService', 'saveUserFocus', [{
+                          user_email: currentUserAuthInfo.user_email,
+                          focusedTechIds: selectedTechs,
+                          focusedCompetitorIds: selectedCompanies
+                      }]);
+                      
+                      currentUserAuthInfo.effective_focus.focusedTechIds = selectedTechs;
+                      currentUserAuthInfo.effective_focus.focusedCompetitorIds = selectedCompanies;
+                      
+                      // 刷新首页数据以反映新的关注列表
+                      HomePage.init(); // 重新初始化首页
+                      
+                      uiUtils.showToast('关注列表已更新！', 'success');
+                      closeModal();
+
+                  } catch (e) {
+                      console.error("Failed to save watchlist:", e);
+                      uiUtils.showToast(`保存关注失败: ${e.message}`, 'error');
+                  } finally {
+                      if(btn) {
+                          btn.disabled = false;
+                          if(btnText) btnText.classList.remove('hidden');
+                          if(btnLoader) btnLoader.classList.add('hidden');
+                      }
+                  }
+              };
+
+          } catch (e) {
+              const editor = document.getElementById('watchlist-editor');
+              if (editor) editor.innerHTML = `<p class="text-red-500 text-center">加载关注列表编辑器失败: ${e.message}</p>`;
+              console.error("Failed to load and initialize TomSelect:", e);
+          }
+      }, 0);
+    },
+
+
+    // --- 模块化渲染函数 ---
+
+    renderMarketRadar(container, radarData) {
+      console.log("[FRONTEND_RENDER] Starting renderMarketRadar for container:", container.id);
+      try {
+        if (!container) return;
+        container.innerHTML = `<div id="market-radar-chart" class="w-full h-full"></div>`;
+        const chartDom = document.getElementById('market-radar-chart');
+        if (!chartDom) return;
+        const chart = echarts.init(chartDom);
+        if (Array.isArray(radarData) && radarData.length > 0) {
+          chart.setOption(_methods.getMarketRadarOption(radarData));
+        } else {
+          // **核心修改：无数据时也渲染图表，并添加文本提示**
+          const option = _methods.getMarketRadarOption([]); // 传入空数据，让ECharts渲染空图表和轴
+          option.graphic = [ // 添加文本提示
+            {
+              type: 'text',
+              left: 'center',
+              top: 'center',
+              style: {
+                text: '暂无数据可生成雷达图。',
+                fill: '#9CA3AF', // 灰色文本
+                font: '16px "Microsoft YaHei", sans-serif'
+              }
+            }
+          ];
+          chart.setOption(option);
+        }
+        chart.resize(); 
+        window.addEventListener('resize', () => chart.resize());
+        console.log("[FRONTEND_RENDER] renderMarketRadar completed successfully.");
+      } catch (e) {
+        console.error("[FRONTEND_RENDER] Error in renderMarketRadar:", e);
+        container.innerHTML = `<div class="p-8 text-red-400">雷达图加载失败: ${e.message}</div>`;
+      }
+    },
+
+    renderAthenasBriefing(container, briefingData) {
+      console.log("[FRONTEND_RENDER] Starting renderAthenasBriefing for container:", container.id);
+      try {
+        if (!container) return;
+        const hasBriefing = briefingData && briefingData.text;
+        const briefingText = hasBriefing ? briefingData.text : '暂无最新战略简报，引擎正在分析中...';
+        const coreTopic = hasBriefing ? briefingData.core_topic : '等待信号';
+        container.innerHTML = `
+          <div id="briefing-card" class="group relative flex flex-col h-full bg-gradient-to-br from-[#1F2937] to-[#111827] rounded-2xl p-6 border border-gray-700/50 shadow-lg ${hasBriefing ? 'cursor-pointer' : ''} transition-all duration-300 hover:border-blue-500/50 hover:shadow-blue-500/10">
+            <div class="flex items-center space-x-3"><div class="text-3xl text-yellow-400" style="text-shadow: 0 0 15px rgba(251, 191, 36, 0.5);"><i class="fa fa-lightbulb-o"></i></div><h3 class="text-xl font-bold text-white">雅典娜战略简报</h3></div>
+            <div class="mt-4"><span class="inline-block bg-blue-500/20 text-blue-300 text-xs font-semibold px-3 py-1 rounded-full">核心主题: ${coreTopic}</span></div>
+            <p class="text-gray-300 flex-grow mt-3 text-base leading-relaxed">${briefingText}</p>
+            <div class="mt-4 text-right text-blue-400/60 group-hover:text-blue-400 transition-colors duration-300"><span>${hasBriefing ? '点击深入分析 <i class="fa fa-arrow-right ml-1"></i>' : ''}</span></div>
+            <div class="absolute top-0 right-0 w-24 h-24 bg-blue-600/30 rounded-full blur-3xl opacity-50 group-hover:opacity-80 transition-opacity duration-300"></div>
+          </div>`;
+        const cardElement = document.getElementById('briefing-card');
+        if (cardElement && hasBriefing) {
+          // ✅ [修正] 修改这里的点击事件逻辑
+          cardElement.onclick = () => {
+            // 直接使用后端返回的 primary_entity_id
+            if (briefingData.primary_entity_id) {
+              const analysisContext = {
+                  entityId: briefingData.primary_entity_id 
+              };
+              App.switchPage('analysis', analysisContext);
+            } else {
+              // 如果简报没有关联实体，给用户一个提示
+              uiUtils.showToast('此简报未关联到特定实体，无法深入分析。', 'warning');
+            }
+          };
+        }
+        console.log("[FRONTEND_RENDER] renderAthenasBriefing completed successfully.");
+      } catch (e) {
+        console.error("[FRONTEND_RENDER] Error in renderAthenasBriefing:", e);
+        container.innerHTML = `<div class="p-8 text-red-400">简报加载失败: ${e.message}</div>`;
+      }
+    },
+
+    renderEmergingSignals(container, signalsData) {
+      console.log("[FRONTEND_RENDER] Starting renderEmergingSignals for container:", container.id);
+      try {
+        if (!container) return;
+        container.innerHTML = `<div id="emerging-signals-chart" class="w-full h-full"></div>`;
+        const chartDom = document.getElementById('emerging-signals-chart');
+        if (!chartDom) return;
+        const chart = echarts.init(chartDom);
+        if (Array.isArray(signalsData) && signalsData.length > 0) {
+          chart.setOption(_methods.getEmergingSignalsOption(signalsData));
+        } else {
+          const option = _methods.getEmergingSignalsOption([]);
+          option.graphic = [
+            {
+              type: 'text',
+              left: 'center',
+              top: 'center',
+              style: {
+                text: '暂无新兴信号数据。',
+                fill: '#9CA3AF',
+                font: '16px "Microsoft YaHei", sans-serif'
+              }
+            }
+          ];
+          chart.setOption(option);
+        }
+        window.addEventListener('resize', () => chart.resize());
+        console.log("[FRONTEND_RENDER] renderEmergingSignals completed successfully.");
+      } catch (e) {
+        console.error("[FRONTEND_RENDER] Error in renderEmergingSignals:", e);
+        container.innerHTML = `<div class="p-8 text-red-400">新兴信号加载失败: ${e.message}</div>`;
+      }
+    },
+
+    renderMyWatchlist(container, watchlistData) {
+      console.log("[FRONTEND_RENDER] Starting renderMyWatchlist for container:", container.id);
+      try {
+        if (!container) return;
+
+        // ✅ [修正] 在填充内容前，移除加载状态的样式类，并确保有内边距
+        container.className = 'lg:col-span-3 bg-[#111827]/50 rounded-2xl p-6 border border-gray-700/50';
+
+        const items = Array.isArray(watchlistData?.watchlistItems)
+          ? watchlistData.watchlistItems
+          : [];
+
+        let contentHtml = '<p class="text-gray-500 text-center py-8">您还没有任何关注项。</p>';
+
+        if (items.length > 0) {
+          contentHtml = items.map(item => `
+            <div class="watchlist-card p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors cursor-pointer group" data-entity-id="${item.entity_id || ''}">
+              <div class="flex justify-between items-center">
+                <span class="text-white font-semibold group-hover:text-blue-300 transition-colors">${item.name || '[未命名]'}</span>
+                <span class="text-yellow-400 text-lg transition-transform duration-300 ${item.has_major_event ? 'animate-bounce' : 'opacity-0 group-hover:opacity-100'}">🔥</span>
+              </div>
+              <div class="w-full bg-gray-600 rounded-full h-1.5 mt-2 overflow-hidden">
+                <div class="bg-gradient-to-r from-green-400 to-blue-500 h-full rounded-full" style="width: ${item.activity_level || 0}%"></div>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        container.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-white">我的关注</h3>
+            <button id="manage-watchlist-btn" class="text-sm text-blue-400 hover:text-blue-300 hover:underline transition-colors flex items-center">
+              <i class="fa fa-cog mr-1"></i>管理关注
+            </button>
+          </div>
+          <div id="watchlist-content" class="space-y-3">${contentHtml}</div>
+        `;
+
+        container.querySelectorAll('.watchlist-card').forEach(card => {
+          card.onclick = () => {
+            const entityId = card.dataset.entityId;
+            if (entityId) _methods._showSidePanel(entityId);
+          };
+        });
+
+        const manageBtn = document.getElementById('manage-watchlist-btn');
+        if (manageBtn) {
+          manageBtn.onclick = _methods.showManageWatchlistModal;
+        }
+        console.log("[FRONTEND_RENDER] renderMyWatchlist completed successfully.");
+      } catch (e) {
+        console.error("[FRONTEND_RENDER] Error in renderMyWatchlist:", e);
+        container.innerHTML = `<div class="p-8 text-red-400">关注列表加载失败: ${e.message}</div>`;
+      }
+    },
+    
+     renderRealtimeTechFeed(container, allFeedData) {
+      console.log("[FRONTEND_RENDER] Starting renderRealtimeTechFeed for container:", container.id);
+      try {
+        if (!container) return;
+        
+        // ✅ [修正] 在填充内容前，移除加载状态的样式类，并确保有内边距
+        container.className = 'lg:col-span-2 bg-[#111827]/50 rounded-2xl p-6 border border-gray-700/50';
+
+        let currentPage = 1;
+        const itemsPerPage = 5;
+        const totalItems = Array.isArray(allFeedData) ? allFeedData.length : 0;
+        const totalPages = totalItems > 0 ? Math.ceil(totalItems / itemsPerPage) : 1;
+
+        container.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-white">实时技术动态</h3>
+            <button id="tech-feed-refresh-btn" class="text-sm text-blue-400 hover:underline transition-colors flex items-center">
+              <i class="fa fa-refresh mr-1"></i>换一批
+            </button>
+          </div>
+          <div id="tech-feed-list" class="space-y-1"></div>
+        `;
+
+        const listContainer = document.getElementById('tech-feed-list');
+        if (!listContainer) return;
+
+        const updateListContent = () => {
+          const startIndex = (currentPage - 1) * itemsPerPage;
+          const pageData = totalItems > 0 ? allFeedData.slice(startIndex, startIndex + itemsPerPage) : [];
+          if (pageData.length > 0) {
+            listContainer.innerHTML = pageData.map(item => `
+              <a href="${item.sourceUrl || '#'}" target="_blank" rel="noopener noreferrer" 
+                class="block p-3 rounded-md hover:bg-white/10 transition-colors border-b border-gray-800/50 last:border-b-0">
+                <div class="flex items-center justify-between">
+                  <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-500/30 text-blue-300">${item.sourceType}</span>
+                  <span class="text-gray-500">${item.timeAgo}</span>
+                </div>
+                <p class="text-white mt-1 text-sm font-medium">${item.title}</p>
+              </a>
+            `).join('');
+          } else {
+            listContainer.innerHTML = '<p class="text-text-medium text-center py-8">暂无实时动态。</p>';
+          }
+        };
+
+        const refreshButton = document.getElementById('tech-feed-refresh-btn');
+        if (refreshButton) {
+          refreshButton.onclick = () => {
+            currentPage = (currentPage % totalPages) + 1;
+            updateListContent();
+          };
+        }
+        updateListContent();
+        console.log("[FRONTEND_RENDER] renderRealtimeTechFeed completed successfully.");
+      } catch (e) {
+        console.error("[FRONTEND_RENDER] Error in renderRealtimeTechFeed:", e);
+        container.innerHTML = `<div class="p-8 text-red-400">实时动态加载失败: ${e.message}</div>`;
+      }
+    },
+
+    // --- ECharts 配置生成器 ---
+    getMarketRadarOption(data) {
+      const typeColors = {
+        'Technology': 'rgba(59, 130, 246, 0.8)',
+        'Company': 'rgba(16, 185, 129, 0.8)',
+        'Person': 'rgba(245, 158, 11, 0.8)',
+      };
+      return {
+        backgroundColor: 'transparent',
+        grid: { top: 70, right: 70, bottom: 70, left: 70 },
+        tooltip: {
+          backgroundColor: 'rgba(23, 37, 60, 0.8)',
+          borderColor: '#4A5568',
+          textStyle: { color: '#E5E7EB' },
+          formatter: params => `<b>${params.data.name}</b><br/>类型: ${params.data.type}<br/>创新活跃度: ${params.data.value[1]}<br/>市场关注度: ${params.data.value[0]}`
+        },
+        xAxis: {
+          name: '市场关注度', nameTextStyle: { color: '#9CA3AF' },
+          axisLine: { lineStyle: { color: '#4A5568' } },
+          axisLabel: { color: '#9CA3AF' },
+          splitLine: { show: true, lineStyle: { color: 'rgba(74, 85, 104, 0.2)', type: 'dashed' } }
+        },
+        yAxis: {
+          name: '创新活跃度', nameTextStyle: { color: '#9CA3AF' },
+          axisLine: { lineStyle: { color: '#4A5568' } },
+          axisLabel: { color: '#9CA3AF' },
+          splitLine: { show: true, lineStyle: { color: '#30363d' } }
+        },
+        visualMap: [
+          { show: false, dimension: 2, min: 30, max: 100, inRange: { symbolSize: [20, 70] } }
+        ],
+        series: [{
+          type: 'scatter',
+          data: data.map(item => ({
+            name: item.name,
+            value: [item.x_axis_value, item.y_axis_value, item.size_value],
+            type: item.type,
+            itemStyle: {
+              color: new echarts.graphic.RadialGradient(0.5, 0.5, 0.7, [{ offset: 0, color: 'rgba(255, 255, 255, 0.3)' },{ offset: 1, color: typeColors[item.type] || '#9CA3AF' }]),
+              borderColor: item.is_highlighted ? '#F59E0B' : 'rgba(255, 255, 255, 0.3)',
+              borderWidth: item.is_highlighted ? 3 : 1,
+            },
+            emphasis: { focus: 'self', scale: 1.2, itemStyle: { shadowBlur: 20, shadowColor: 'rgba(255, 255, 255, 0.5)' } }
+          })),
+          label: { show: true, position: 'top', formatter: '{b}', color: '#E5E7EB', fontWeight: 'bold', textShadowColor: '#000', textShadowBlur: 5 }
+        }]
+      };
+    },
+    
+    getEmergingSignalsOption(data) {
+      const axisCenter = 50;
+      return {
+        backgroundColor: 'transparent',
+        grid: { top: 40, right: 40, bottom: 40, left: 40 },
+        tooltip: {
+          backgroundColor: 'rgba(23, 37, 60, 0.8)',
+          borderColor: '#4A5568',
+          textStyle: { color: '#E5E7EB' },
+          formatter: params => `<b>${params.data.name}</b><br/>信号强度: ${params.data.value[0]}<br/>验证程度: ${params.data.value[1]}`
+        },
+        xAxis: {
+          name: '信号强度', nameLocation: 'middle', nameGap: 25, nameTextStyle: { color: '#9CA3AF' },
+          min: 0, max: 100,
+          axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+          splitLine: { show: false }
+        },
+        yAxis: {
+          name: '验证程度', nameLocation: 'middle', nameGap: 25, nameTextStyle: { color: '#9CA3AF' },
+          min: 0, max: 100,
+          axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+          splitLine: { show: false }
+        },
+        visualMap: [
+          { show: false, dimension: 2, min: 20, max: 100, inRange: { symbolSize: [15, 50] } }
+        ],
+        series: [{
+          type: 'scatter',
+          data: data.map(item => ({
+            name: item.title,
+            value: [item.signalStrength, item.validationLevel, item.connectionUrgency],
+            itemStyle: {
+              color: new echarts.graphic.RadialGradient(0.5, 0.5, 0.7, [{ offset: 0, color: 'rgba(255, 255, 255, 0.4)' }, { offset: 1, color: `rgba(${Math.round(59 + item.signalStrength)}, ${Math.round(130 - item.validationLevel * 0.5)}, ${Math.round(246 - item.validationLevel * 1.5)}, 0.8)` }]),
+              borderColor: 'rgba(255, 255, 255, 0.3)', borderWidth: 1,
+            }
+          })),
+          markLine: {
+            silent: true, symbol: 'none',
+            lineStyle: { color: 'rgba(107, 114, 128, 0.4)', type: 'solid', width: 1.5 },
+            data: [{ xAxis: axisCenter }, { yAxis: axisCenter }]
+          },
+          markArea: {
+            silent: true,
+            itemStyle: { color: 'rgba(255, 255, 255, 0.02)', borderWidth: 0, opacity: 0.3 },
+            data: [
+              [{ name: '潜力区', xAxis: 0, y: '50%' }, { xAxis: '50%', y: '100%' }],
+              [{ name: '焦点区', xAxis: '50%', y: '50%' }, { xAxis: '100%', y: '100%' }],
+              [{ name: '观察区', xAxis: 0, y: 0 }, { xAxis: '50%', y: '50%' }],
+              [{ name: '成熟区', xAxis: '50%', y: 0 }, { xAxis: '100%', y: '50%' }]
+            ]
+          }
+        }],
+        graphic: [
+          { type: 'text', left: '25%', top: '6%', style: { text: '潜力区', fill: '#10B981', font: 'bold 16px sans-serif', textAlign: 'center' } },
+          { type: 'text', right: '25%', top: '6%', style: { text: '焦点区', fill: '#F59E0B', font: 'bold 16px sans-serif', textAlign: 'center' } },
+          { type: 'text', left: '25%', bottom: '6%', style: { text: '观察区', fill: '#9CA3AF', font: 'bold 16px sans-serif', textAlign: 'center' } },
+          { type: 'text', right: '25%', bottom: '6%', style: { text: '成熟区', fill: '#9CA3AF', font: 'bold 16px sans-serif', textAlign: 'center' } }
+        ]
+      };
+    }
+  };
+
+  // ==================================================================
+  //  页面初始化入口
+  // ==================================================================
+  
+  // ✅ [重构] init 函数现在只负责渲染骨架和触发异步加载
+  function init(pageConfig, context) {
+    const container = document.getElementById('page-home');
+    if (!container) return;
+
+    // 1. 立即渲染页面骨架，给用户即时反馈
+    container.innerHTML = `
+      <div class="p-4 sm:p-6 md:p-8 space-y-8 bg-[#0D1117] min-h-screen">
+        <section id="module-marketRadar" class="h-[550px] bg-black/20 rounded-2xl relative overflow-hidden flex items-center justify-center text-text-medium"><i class="fa fa-spinner fa-spin mr-3"></i>加载市场雷达...</section>
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div id="module-athenasBriefing" class="bg-gradient-to-br from-[#1F2937] to-[#111827] rounded-2xl p-6 border border-gray-700/50 flex items-center justify-center text-text-medium"><i class="fa fa-spinner fa-spin mr-3"></i>加载战略简报...</div>
+          <div id="module-emergingSignals" class="bg-gradient-to-br from-[#1F2937] to-[#111827] rounded-2xl p-6 border border-gray-700/50 h-[400px] flex items-center justify-center text-text-medium"><i class="fa fa-spinner fa-spin mr-3"></i>加载新兴信号...</div>
+        </section>
+        <section class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          <div id="module-myWatchlist" class="lg:col-span-3 bg-[#111827]/50 rounded-2xl p-6 border border-gray-700/50 flex items-center justify-center text-text-medium"><i class="fa fa-spinner fa-spin mr-3"></i>加载我的关注...</div>
+          <div id="module-techFeed" class="lg:col-span-2 bg-[#111827]/50 rounded-2xl p-6 border border-gray-700/50 flex items-center justify-center text-text-medium"><i class="fa fa-spinner fa-spin mr-3"></i>加载实时动态...</div>
+        </section>
+      </div>
+    `;
+
+    // 2. 异步调用数据加载和渲染函数，不阻塞UI
+    _methods._loadAndRenderModules();
+  }
+
+  // ==================================================================
+  //  暴露公共接口
+  // ==================================================================
+  return {
+    init: init,
+    showManageWatchlistModal: _methods.showManageWatchlistModal
+  };
+})();
+</script>

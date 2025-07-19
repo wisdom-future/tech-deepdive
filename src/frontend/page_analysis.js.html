@@ -1,0 +1,531 @@
+<script>
+/**
+ * @file frontend/page_analysis.js.html
+ * @description Handles the Analysis page logic, with a clean architecture and no direct mock dependencies.
+ * @version 3.0 (Production-Ready Architecture)
+ */
+
+const AnalysisPage = (() => {
+  // --- 模块私有变量 ---
+  let _isInitialized = false;
+  let _currentTab = 'network-graph';
+  let _currentEntity = null;
+  
+  let _graphInstance, _evolutionInstance, _ecosystemRadarInstance, _ecosystemMatrixInstance;
+  let _masterGraph = { nodes: new Map(), links: new Map() };
+  let _breadcrumb = [];
+  let _clickTimer = null;
+  let _entitySearchSelect = null;
+
+  async function init(context = {}) {
+    if (!_isInitialized) {
+      _bindEventListeners();
+      _isInitialized = true;
+    }
+    // --- 关键修改：处理不同的入口上下文 ---
+    if (context.entityId) {
+        // 场景1：直接指定了实体 ID (例如从仪表盘侧边栏跳转)
+        await _setAnalysisTarget(context.entityId);
+    } else if (context.keyword) {
+        // 场景2：传递了关键词 (例如从雅典娜简报跳转)
+        uiUtils.showToast(`正在为主题 "${context.keyword}" 寻找分析目标...`, 'info');
+        // 通过搜索找到最相关的实体
+        const searchResults = await App.callApi('ExplorationService', 'getEntities', [{ keyword: context.keyword }, { page: 1, limit: 1 }]);
+        if (searchResults && searchResults.records && searchResults.records.length > 0) {
+            const targetEntityId = searchResults.records[0].id;
+            await _setAnalysisTarget(targetEntityId);
+        } else {
+            uiUtils.showToast(`未能找到与 "${context.keyword}" 相关的实体进行分析`, 'error');
+            // 加载一个默认目标或显示提示信息
+            await _setAnalysisTarget('comp_nvidia'); 
+        }
+    } else {
+        // 场景3：无特定上下文，加载默认目标
+        await _setAnalysisTarget('comp_nvidia');
+    }
+  }
+
+  function _bindEventListeners() {
+    document.getElementById('analysis-tabs')?.addEventListener('click', (e) => {
+      const link = e.target.closest('a.analysis-tab-link');
+      if (link && link.dataset.tab !== _currentTab) {
+        e.preventDefault();
+        _switchTab(link.dataset.tab);
+      }
+    });
+
+    // **新增**: 绑定“切换/设定”按钮的点击事件
+    document.getElementById('analysis-target-switcher-btn')?.addEventListener('click', _openTargetSwitcherModal);
+
+    // 模态框关闭事件
+    document.getElementById('close-target-switcher-modal')?.addEventListener('click', _closeTargetSwitcherModal);
+    document.getElementById('target-switcher-modal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'target-switcher-modal') _closeTargetSwitcherModal();
+    });
+
+    // 模态框确认事件
+    document.getElementById('confirm-target-switch-btn')?.addEventListener('click', _confirmTargetSwitch);
+
+    document.getElementById('analysis-inspector-overlay')?.addEventListener('click', _closeInspectorPanel);
+    
+    window.addEventListener('resize', () => {
+      setTimeout(() => {
+        _graphInstance?.resize();
+        _evolutionInstance?.resize();
+        _ecosystemRadarInstance?.resize();
+        _ecosystemMatrixInstance?.resize();
+      }, 200);
+    });
+  }
+
+  /**
+   * **** 核心修正：现在接收ID，并通过API获取完整信息 ****
+   * @param {string} entityId - 要设为目标的实体ID
+   */
+  async function _setAnalysisTarget(entityId) {
+    try {
+        // 通过统一的API接口获取实体信息，不再直接访问Mock数据
+        const entityInfo = await App.callApi('AnalysisService', 'getEntityInfo', [entityId]);
+        
+        _currentEntity = entityInfo;
+        
+        const display = document.getElementById('analysis-target-display');
+        if (display) {
+          const iconHtml = entityInfo.image_url 
+            ? `<img src="${entityInfo.image_url}" alt="${entityInfo.name}" class="w-6 h-6 rounded-md object-contain mr-3 bg-white/10 p-0.5">`
+            : `<i class="fa ${entityInfo.type === 'Company' ? 'fa-building' : entityInfo.type === 'Technology' ? 'fa-microchip' : entityInfo.type === 'Person' ? 'fa-user' : 'fa-crosshairs'} mr-3 text-text-medium"></i>`;
+          display.innerHTML = `${iconHtml}<span>分析目标：[${entityInfo.type}] ${entityInfo.name}</span>`;
+        }
+        
+        await _switchTab(_currentTab, true);
+
+    } catch (error) {
+        console.error(`设置分析目标失败 (ID: ${entityId}):`, error);
+        uiUtils.showToast(`加载实体 ${entityId} 失败`, 'error');
+    }
+  }
+  
+  async function _switchTab(tabId, forceRefresh = false) {
+    if (tabId === _currentTab && !forceRefresh) return;
+    _currentTab = tabId;
+
+    // **** 核心修正：明确地设置激活和非激活样式 ****
+    document.querySelectorAll('a.analysis-tab-link').forEach(link => {
+      const isActive = link.dataset.tab === tabId;
+      
+      // 统一处理激活状态
+      link.classList.toggle('active', isActive);
+      link.classList.toggle('text-primary', isActive);
+      link.classList.toggle('border-primary', isActive);
+      
+      // 统一处理非激活状态
+      link.classList.toggle('text-text-medium', !isActive);
+      link.classList.toggle('border-transparent', !isActive);
+    });
+
+    document.querySelectorAll('.analysis-tab-content').forEach(content => {
+      content.classList.toggle('hidden', content.id !== `analysis-${tabId}-content`);
+    });
+
+    switch (tabId) {
+      case 'network-graph':
+        await _renderNetworkGraphView(forceRefresh || !_graphInstance);
+        break;
+      case 'evolution':
+        await _renderEvolutionView();
+        break;
+      case 'ecosystem':
+        await _renderEcosystemView();
+        break;
+    }
+  }
+  // =======================================================
+  //  Tab 1: 关系网络 (Network Graph) - (逻辑保持v2.5稳定版)
+  // =======================================================
+  async function _renderNetworkGraphView(isNewTarget = false) {
+    const canvas = document.getElementById('analysis-graph-canvas');
+    if (!canvas) return;
+
+    if (!_graphInstance) {
+        _graphInstance = echarts.init(canvas, null, { renderer: 'canvas' });
+    }
+    
+    if (isNewTarget) {
+      _masterGraph = { nodes: new Map(), links: new Map() };
+      _breadcrumb = [_currentEntity];
+      await _fetchAndProcessGraphData(_currentEntity.id);
+    }
+    
+    _updateGraphVisualization();
+    _updateBreadcrumb();
+    _bindGraphEvents();
+  }
+
+  async function _fetchAndProcessGraphData(entityId) {
+    _graphInstance.showLoading({ text: '加载关系网络中...', color: '#0052ff', textColor: '#c9d1d9' });
+    try {
+      // ✅ [修正] 正确解构从后端返回的对象，并提供默认空数组作为回退
+      const response = await App.callApi('AnalysisService', 'getGraphData', [entityId]);
+      
+      // ✅ [健壮性检查] 确保 response 是一个对象，且 nodes 和 links 是数组
+      const nodes = response?.nodes || [];
+      const links = response?.links || [];
+
+      // 使用解构后的、安全的数组进行遍历
+      nodes.forEach(node => { 
+        if (!_masterGraph.nodes.has(node.id)) {
+          _masterGraph.nodes.set(node.id, node);
+        }
+      });
+      
+      links.forEach(link => {
+        // 使用 source 和 target 组合成唯一的 linkId
+        const linkId = `${link.source}-${link.target}`; 
+        if (!_masterGraph.links.has(linkId)) {
+          _masterGraph.links.set(linkId, link);
+        }
+      });
+
+    } catch (e) { 
+        console.error("加载图谱数据失败:", e); 
+        // 可以在这里向用户显示错误提示
+        uiUtils.showToast(`加载关系网络失败: ${e.message}`, 'error');
+    } 
+    finally { 
+        _graphInstance?.hideLoading(); 
+    }
+  }
+
+  function _updateGraphVisualization() {
+    if (!_graphInstance) return;
+    const currentFocusId = _breadcrumb[_breadcrumb.length - 1].id;
+    const breadcrumbIds = new Set(_breadcrumb.map(n => n.id));
+    const visibleNodeIds = new Set(breadcrumbIds);
+    for (const link of _masterGraph.links.values()) {
+        if (link.source === currentFocusId) visibleNodeIds.add(link.target);
+        if (link.target === currentFocusId) visibleNodeIds.add(link.source);
+    }
+    const dataForECharts = Array.from(_masterGraph.nodes.values()).map(node => ({
+        id: node.id, name: node.name, value: node.value, category: node.id === _breadcrumb[0].id ? '分析目标' : node.category,
+        symbolSize: 20 + Math.sqrt(node.value || 50) * 4,
+        label: { show: visibleNodeIds.has(node.id), color: '#c9d1d9' },
+        itemStyle: { opacity: visibleNodeIds.has(node.id) ? 1 : 0.15 },
+        emphasis: { scale: visibleNodeIds.has(node.id) }
+    }));
+    const linksForECharts = Array.from(_masterGraph.links.values())
+      .filter(link => visibleNodeIds.has(link.source) && visibleNodeIds.has(link.target))
+      .map(link => ({ ...link, lineStyle: { width: 1 + link.strength * 5, color: link.type === '竞争' ? '#dc3545' : '#4a5568', type: link.type === '竞争' ? 'dashed' : 'solid', opacity: (breadcrumbIds.has(link.source) && breadcrumbIds.has(link.target)) ? 1 : (0.4 + link.strength * 0.5) } }));
+    const categories = [ { name: '公司' }, { name: '技术' }, { name: '专家' }, { name: '产品' }, { name: '分析目标' } ];
+    _graphInstance.setOption({
+      tooltip: { formatter: (p) => p.dataType === 'edge' ? `<strong>${p.data.type_label}</strong>: ${p.data.description}` : `<strong>${p.data.name}</strong> [${p.data.category}]`, backgroundColor: 'rgba(22,27,34,0.9)', borderColor: '#30363d', textStyle: { color: '#c9d1d9' } },
+      legend: [{ data: categories.map(c => c.name), textStyle: { color: '#c9d1d9' }, top: 'bottom', left: 'center' }],
+      series: [{ type: 'graph', layout: 'force', data: dataForECharts, links: linksForECharts, categories: categories, roam: true, force: { repulsion: 250, edgeLength: [150, 300], gravity: 0.1, friction: 0.6 }, emphasis: { focus: 'adjacency', lineStyle: { width: 10, opacity: 1 } } }]
+    }, true);
+  }
+
+  function _bindGraphEvents() {
+    if (!_graphInstance) return;
+    _graphInstance.off('click');
+    _graphInstance.off('dblclick');
+    _graphInstance.on('click', (params) => {
+        clearTimeout(_clickTimer);
+        _clickTimer = setTimeout(() => { if (params.dataType === 'node') _showInspectorPanel(params.data.id, 'node'); }, 250);
+    });
+    _graphInstance.on('dblclick', (params) => {
+        clearTimeout(_clickTimer);
+        if (params.dataType === 'node') _handleNodeDoubleClick(params.data.id);
+    });
+  }
+
+  async function _handleNodeDoubleClick(nodeId) {
+    if (nodeId === _breadcrumb[_breadcrumb.length - 1].id) return;
+    const node = _masterGraph.nodes.get(nodeId);
+    if (node) {
+        const existingIndex = _breadcrumb.findIndex(b => b.id === nodeId);
+        if (existingIndex > -1) { _breadcrumb.splice(existingIndex + 1); } 
+        else { _breadcrumb.push(node); }
+        let needsFetch = true;
+        for (const link of _masterGraph.links.values()) { if (link.source === nodeId || link.target === nodeId) { needsFetch = false; break; } }
+        if (needsFetch) { await _fetchAndProcessGraphData(nodeId); }
+        _updateGraphVisualization();
+        _updateBreadcrumb();
+    }
+  }
+  
+  function _updateBreadcrumb() {
+      const container = document.getElementById('graph-breadcrumb');
+      if (!container) return;
+      container.innerHTML = _breadcrumb.map((node, index) => {
+          if (index === _breadcrumb.length - 1) return `<span class="font-bold text-text-light">${node.name}</span>`;
+          return `<a href="#" class="hover:underline text-primary" data-index="${index}">${node.name}</a> <span class="mx-2 text-text-dark">/</span>`;
+      }).join('');
+      container.querySelectorAll('a').forEach(a => {
+          a.onclick = (e) => {
+              e.preventDefault();
+              _breadcrumb.splice(parseInt(e.target.dataset.index, 10) + 1);
+              _updateGraphVisualization();
+              _updateBreadcrumb();
+          };
+      });
+  }
+
+  // =======================================================
+  //  Tab 2: 演进推演 (Evolution Trajectory)
+  // =======================================================
+  async function _renderEvolutionView() {
+    const container = document.getElementById('analysis-evolution-content');
+    const canvasContainer = `<div class="panel p-4 h-[calc(100vh-var(--header-height)-190px)] min-h-[600px]"><div id="evolution-chart-canvas" class="w-full h-full"></div></div>`;
+    container.innerHTML = canvasContainer;
+    const canvas = document.getElementById('evolution-chart-canvas');
+    if (!canvas) return;
+
+    if (_evolutionInstance) _evolutionInstance.dispose();
+    _evolutionInstance = echarts.init(canvas, null, { renderer: 'canvas' });
+    _evolutionInstance.showLoading({ text: '加载演进数据中...', color: '#0052ff', textColor: '#c9d1d9' });
+
+    try {
+      const data = await App.callApi('AnalysisService', 'getEvolutionData', [_currentEntity.id]);
+      _evolutionInstance.hideLoading();
+      
+      // **** 核心修正 3: 增加数据校验 ****
+      if (!data || !data.trendData || data.trendData.length === 0) {
+        canvas.innerHTML = `<div class="flex items-center justify-center h-full text-text-medium">暂无此目标的演进推演数据。</div>`;
+        return;
+      }
+      
+      const option = {
+        tooltip: { trigger: 'axis', axisPointer: { type: 'cross', label: { backgroundColor: '#283b56' } } },
+        legend: { data: ['影响力', '关注度'], textStyle: { color: '#c9d1d9' }, top: 10 },
+        grid: { left: '3%', right: '4%', bottom: '20%', containLabel: true },
+        xAxis: { type: 'time', axisLine: { lineStyle: { color: '#8b949e' } }, splitLine: { show: false } },
+        yAxis: { type: 'value', scale: true, axisLine: { lineStyle: { color: '#8b949e' } }, splitLine: { lineStyle: { color: '#30363d' } } },
+        dataZoom: [{ type: 'inside', start: 0, end: 100 }, { show: true, type: 'slider', bottom: '8%', height: 30 }],
+        series: [
+          { name: '影响力', type: 'line', smooth: true, data: data.trendData.map(d => [d.date, d.influence]) },
+          { name: '关注度', type: 'line', smooth: true, data: data.trendData.map(d => [d.date, d.attention]) },
+          {
+            type: 'custom',
+            renderItem: (params, api) => {
+              const categoryIndex = api.value(0);
+              const start = api.coord([api.value(1), categoryIndex]);
+              const end = api.coord([api.value(2), categoryIndex]);
+              const height = api.size([0, 1])[1] * 0.4;
+              const rectShape = echarts.graphic.clipRectByRect({ x: start[0], y: start[1] - height / 2, width: end[0] - start[0], height: height }, { x: params.coordSys.x, y: params.coordSys.y, width: params.coordSys.width, height: params.coordSys.height });
+              return rectShape && { type: 'rect', shape: rectShape, style: api.style() };
+            },
+            itemStyle: { opacity: 0.8, color: '#0052ff' },
+            encode: { x: [1, 2], y: 0 },
+            data: data.timelineEvents.map(ev => ({
+                name: ev.title,
+                value: [ev.lane === '技术' ? 1 : ev.lane === '市场' ? 2 : 3, new Date(ev.date).getTime(), new Date(ev.date).getTime() + 86400000*30, ev.description],
+                itemStyle: { color: ev.lane === '技术' ? '#0052ff' : ev.lane === '市场' ? '#28a745' : '#ffc107' }
+            }))
+          }
+        ]
+      };
+      _evolutionInstance.setOption(option);
+    } catch(e) {
+      _evolutionInstance?.hideLoading();
+      console.error("加载演进数据失败:", e);
+    }
+  }
+
+  // =======================================================
+  //  Tab 3: 生态位分析 (Ecosystem Analysis)
+  // =======================================================
+  async function _renderEcosystemView() {
+    const container = document.getElementById('analysis-ecosystem-content');
+    container.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="panel p-4 min-h-[400px]"><div id="ecosystem-radar-canvas" class="w-full h-full"></div></div>
+        <div class="panel p-4 min-h-[400px]"><div id="ecosystem-matrix-canvas" class="w-full h-full"></div></div>
+        <div class="panel p-6 lg:col-span-2">
+          <h3 class="font-bold text-lg mb-3">AI 生成洞察 (SWOT)</h3>
+          <div id="ecosystem-swot" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm"></div>
+        </div>
+      </div>`;
+      
+    try {
+      const data = await App.callApi('AnalysisService', 'getEcosystemData', [_currentEntity.id, []]);
+      // **** 核心修正 3: 增加数据校验 ****
+      if (!data || !data.radarData || !data.radarData.series) {
+        container.innerHTML = `<div class="panel p-6 min-h-[600px] flex items-center justify-center text-text-medium">暂无此目标的生态位分析数据。</div>`;
+        return;
+      }
+      
+      if (_ecosystemRadarInstance) _ecosystemRadarInstance.dispose();
+      _ecosystemRadarInstance = echarts.init(document.getElementById('ecosystem-radar-canvas'));
+      _ecosystemRadarInstance.setOption({
+        title: { text: '核心能力雷达图', textStyle: { color: '#c9d1d9' }, left: 'center' },
+        legend: { data: data.radarData.series.map(s => s.name), textStyle: { color: '#c9d1d9' }, bottom: 0, left: 'center' },
+        radar: { indicator: data.radarData.indicator, shape: 'circle', nameGap: 5, splitArea: { areaStyle: { color: ['rgba(119, 133, 150, 0.2)', 'rgba(92, 102, 115, 0.2)'], shadowColor: 'rgba(0, 0, 0, 0.2)', shadowBlur: 10 } } },
+        series: [{ type: 'radar', data: data.radarData.series }]
+      });
+
+      if (_ecosystemMatrixInstance) _ecosystemMatrixInstance.dispose();
+      _ecosystemMatrixInstance = echarts.init(document.getElementById('ecosystem-matrix-canvas'));
+      _ecosystemMatrixInstance.setOption({
+          title: { text: '技术布局矩阵', textStyle: { color: '#c9d1d9' }, left: 'center' },
+          tooltip: { formatter: params => `<strong>${params.data[3]}</strong><br/>成熟度: ${params.data[0]}<br/>投入度: ${params.data[1]}<br/>影响力: ${params.data[2]}` },
+          xAxis: { name: '技术成熟度', type: 'value', scale: true, axisLine: { lineStyle: { color: '#8b949e' } }, splitLine: { show: false } },
+          yAxis: { name: '内部投入度', type: 'value', scale: true, axisLine: { lineStyle: { color: '#8b949e' } }, splitLine: { lineStyle: { color: '#30363d' } } },
+          series: [{ type: 'scatter', data: data.matrixData, symbolSize: params => Math.sqrt(params[2]) * 2, itemStyle: { color: '#0052ff', opacity: 0.7 } }],
+      });
+      
+      const swotContainer = document.getElementById('ecosystem-swot');
+      swotContainer.innerHTML = `
+        <div><h4 class="font-semibold text-green-400 mb-2">优势 (S)</h4><ul class="list-disc list-inside space-y-1">${data.swot.strengths.map(s => `<li>${s}</li>`).join('')}</ul></div>
+        <div><h4 class="font-semibold text-red-400 mb-2">劣势 (W)</h4><ul class="list-disc list-inside space-y-1">${data.swot.weaknesses.map(w => `<li>${w}</li>`).join('')}</ul></div>
+        <div><h4 class="font-semibold text-blue-400 mb-2">机会 (O)</h4><ul class="list-disc list-inside space-y-1">${data.swot.opportunities.map(o => `<li>${o}</li>`).join('')}</ul></div>
+        <div><h4 class="font-semibold text-yellow-400 mb-2">威胁 (T)</h4><ul class="list-disc list-inside space-y-1">${data.swot.threats.map(t => `<li>${t}</li>`).join('')}</ul></div>
+      `;
+    } catch(e) {
+      console.error("加载生态位数据失败:", e);
+      container.innerHTML = `<div class="p-6 text-center text-error">加载生态位数据失败: ${e.message}</div>`;
+    }
+  }
+
+  // =======================================================
+  //  右侧洞察面板 (Inspector Panel) 相关方法
+  // =======================================================
+  async function _showInspectorPanel(elementId, elementType) {
+    const panel = document.getElementById('analysis-inspector-panel');
+    const overlay = document.getElementById('analysis-inspector-overlay');
+    if (!panel || !overlay) return;
+
+    panel.innerHTML = `<div class="p-8 text-center text-text-medium"><i class="fa fa-spinner fa-spin text-2xl"></i></div>`;
+    panel.classList.remove('translate-x-full');
+    overlay.classList.remove('hidden');
+    overlay.onclick = _closeInspectorPanel; 
+
+    try {
+        const details = await App.callApi('AnalysisService', 'getElementDetails', [elementId]);
+        if (!details) throw new Error("未找到详细信息。");
+
+        panel.innerHTML = `
+            <div class="flex justify-between items-center p-4 border-b border-border-dark flex-shrink-0">
+                <h3 class="text-lg font-bold text-text-light">${details.name}</h3>
+                <button id="close-inspector-btn" class="text-text-medium hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-grow text-text-light">
+                <p class="mb-4"><span class="font-semibold text-text-medium">类型:</span> ${details.type}</p>
+                <p class="mb-4"><span class="font-semibold text-text-medium">摘要:</span> ${details.summary}</p>
+                <div class="text-sm">${details.details || ''}</div>
+                <h4 class="font-semibold mt-6 mb-2 border-t border-border-dark pt-4">相关证据</h4>
+                <ul class="list-disc list-inside space-y-2 text-sm">
+                    ${(details.evidence || []).map(ev => `<li><a href="${ev.url}" target="_blank" class="text-primary hover:underline">${ev.title}</a></li>`).join('')}
+                    ${(details.evidence || []).length === 0 ? '<li class="text-text-dark">暂无公开证据</li>' : ''}
+                </ul>
+            </div>
+        `;
+        document.getElementById('close-inspector-btn').addEventListener('click', _closeInspectorPanel);
+    } catch (e) {
+        panel.innerHTML = `<div class="p-8 text-center text-error">${e.message}</div>`;
+    }
+  }
+
+  function _closeInspectorPanel() {
+      const panel = document.getElementById('analysis-inspector-panel');
+      const overlay = document.getElementById('analysis-inspector-overlay');
+      if (panel) panel.classList.add('translate-x-full');
+      if (overlay) {
+          overlay.classList.add('hidden');
+          overlay.onclick = null;
+      }
+  }
+  //  模态框逻辑 (Target Switcher Modal)
+  // =======================================================
+
+  async function _openTargetSwitcherModal() {
+    const modal = document.getElementById('target-switcher-modal');
+    if (!modal) return;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    const confirmBtn = document.getElementById('confirm-target-switch-btn');
+    confirmBtn.disabled = true;
+
+    if (_entitySearchSelect) {
+        _entitySearchSelect.clear();
+        _entitySearchSelect.clearOptions();
+    } else {
+        _entitySearchSelect = new TomSelect('#entity-search-input', {
+            valueField: 'id',
+            labelField: 'name',
+            searchField: 'name',
+            // **** 核心修正：load函数也通过API获取数据 ****
+            load: async (query, callback) => {
+                if (!query.length) return callback();
+                try {
+                    // 模拟一个实体搜索API
+                    const response = await App.callApi('ExplorationService', 'getEntities', [{ keyword: query }, { page: 1, limit: 10 }]);
+                    const results = response.records.map(r => ({id: r.id, name: `[${r.type}] ${r.name}`, type: r.type}));
+                    callback(results);
+                } catch (error) {
+                    console.error("实体搜索失败:", error);
+                    callback();
+                }
+            },
+            onChange: (value) => { confirmBtn.disabled = !value; },
+            render: {
+                option: (data, escape) => `<div><strong>${escape(data.name)}</strong><span class="text-sm text-text-medium ml-2">${escape(data.type)}</span></div>`,
+                item: (data, escape) => `<div>${escape(data.name)}</div>`,
+            }
+        });
+    }
+
+    const focusListContainer = document.getElementById('my-focus-list-container');
+    focusListContainer.innerHTML = `<p class="text-text-dark">加载中...</p>`;
+    // **** 核心修正：从API获取关注列表，而不是直接访问MOCK_DATA ****
+    try {
+        const dashboardData = await App.callApi('DashboardService', 'getDashboardData');
+        const myWatchlist = dashboardData.myWatchlist.watchlistItems;
+        if (myWatchlist && myWatchlist.length > 0) {
+            focusListContainer.innerHTML = myWatchlist.map(item => 
+                `<button class="w-full text-left p-2 rounded-md hover:bg-bg-soft-dark focus-item-btn" data-id="${item.entity_id}" data-name="${item.name}">
+                    ${item.name}
+                </button>`
+            ).join('');
+            focusListContainer.querySelectorAll('.focus-item-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const selectedId = btn.dataset.id;
+                    // 通过API获取该实体的完整信息，以便填充类型
+                    App.callApi('AnalysisService', 'getEntityInfo', [selectedId]).then(entityInfo => {
+                        const selected = { id: entityInfo.id, name: `[${entityInfo.type}] ${entityInfo.name}`, type: entityInfo.type };
+                        _entitySearchSelect.clear();
+                        _entitySearchSelect.addOption(selected);
+                        _entitySearchSelect.setValue(selected.id);
+                        confirmBtn.disabled = false;
+                    });
+                });
+            });
+        } else {
+            focusListContainer.innerHTML = `<p class="text-text-dark">暂无关注项。</p>`;
+        }
+    } catch (error) {
+        focusListContainer.innerHTML = `<p class="text-error">加载关注列表失败</p>`;
+    }
+  }
+
+  function _closeTargetSwitcherModal() {
+    const modal = document.getElementById('target-switcher-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+  }
+
+  async function _confirmTargetSwitch() {
+    if (_entitySearchSelect) {
+        const selectedId = _entitySearchSelect.getValue();
+        if (selectedId) {
+            await _setAnalysisTarget(selectedId); // 只传递ID
+            _closeTargetSwitcherModal();
+        }
+    }
+  }
+
+  return { init };
+})();
+</script>

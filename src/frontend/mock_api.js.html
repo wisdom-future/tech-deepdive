@@ -1,0 +1,924 @@
+<script>
+/**
+ * @file frontend/mock_api.js.html
+ * @description Provides a complete and well-structured mock API for local development.
+ * @version 6.4 (Final Version - All original data preserved, all services implemented)
+ */
+
+// ===================================================================
+//  1. MOCK_DATA - 模拟数据中心 (单一事实来源)
+// ===================================================================
+const MOCK_DATA = {
+
+  // --- 认证与用户信息 ---
+  auth: {
+    authInfo: {
+      user_email: "local.dev@example.com",
+      display_name: "本地开发者 (管理员)", // 建议修改显示名以便区分
+      // **** 核心修正：将角色ID从 'user' 修改为 'admin' ****
+      role_id: "admin", 
+      permissions: {
+        // 确保管理员拥有所有模块的权限
+        allowed_modules: ["home", "exploration", "analysis", "findings", "copilot", "system", "dashboardservice", "analysisservice", "systemadminservice"]
+      },
+      effective_focus: {
+        focusedTechIds: ['tech_quantum', 'tech_ai_chip'],
+        focusedCompetitorIds: ['comp_nvidia', 'comp_cerebras']
+      }
+    }
+  },
+
+  // --- 仪表盘数据 (Dashboard) ---
+  dashboard: {
+    marketRadar: [
+      { entity_id: "comp_nvidia", name: "NVIDIA", type: "Company", x_axis_value: 95, y_axis_value: 88, size_value: 100, is_highlighted: true },
+      { entity_id: "tech_llm", name: "大语言模型", type: "Technology", x_axis_value: 90, y_axis_value: 92, size_value: 90, is_highlighted: false },
+      { entity_id: "tech_chiplet", name: "Chiplet", type: "Technology", x_axis_value: 20, y_axis_value: 85, size_value: 60, is_highlighted: true },
+      { entity_id: "comp_tenstorrent", name: "Tenstorrent", type: "Company", x_axis_value: 15, y_axis_value: 75, size_value: 45, is_highlighted: false },
+      { entity_id: "tech_cloud", name: "云计算", type: "Technology", x_axis_value: 85, y_axis_value: 30, size_value: 95, is_highlighted: false },
+      { entity_id: "comp_intel", name: "Intel", type: "Company", x_axis_value: 75, y_axis_value: 40, size_value: 88, is_highlighted: false },
+      { entity_id: "person_jim_keller", name: "Jim Keller", type: "Person", x_axis_value: 30, y_axis_value: 50, size_value: 70, is_highlighted: false }
+    ],
+    athenasBriefing: {
+      text: "本地模拟：AI芯片的封装技术成为新的竞争焦点，特别是3D堆叠技术，正吸引大量资本和顶级人才流入。",
+      core_topic: "3D芯片堆叠",
+      related_event_id: "evt_chiplet_sumit"
+    },
+    emergingSignals: [
+      { id: 'sig001', title: '新型存算一体芯片架构', signalStrength: 85, validationLevel: 15, connectionUrgency: 30 },
+      { id: 'sig002', title: '基于GNN的药物发现模型', signalStrength: 90, validationLevel: 25, connectionUrgency: 50 },
+      { id: 'sig003', title: 'Cerebras WSE-3 性能评测', signalStrength: 95, validationLevel: 80, connectionUrgency: 90 },
+      { id: 'sig004', title: '多模态Agent自主规划能力', signalStrength: 88, validationLevel: 75, connectionUrgency: 80 },
+      { id: 'sig005', title: '个人知识图谱的边缘计算实现', signalStrength: 40, validationLevel: 10, connectionUrgency: 20 },
+      { id: 'sig006', title: 'Transformer模型的基础应用', signalStrength: 30, validationLevel: 90, connectionUrgency: 70 }
+    ],
+    myWatchlist: {
+      watchlistItems: [
+        { entity_id: 'tech_quantum', name: '量子计算', activity_level: 85, has_major_event: true },
+        { entity_id: 'comp_cerebras', name: 'Cerebras', activity_level: 70, has_major_event: false },
+        { entity_id: 'comp_nvidia', name: 'NVIDIA', activity_level: 99, has_major_event: true }
+      ]
+    },
+    realtimeTechFeed: [
+        { sourceType: 'AI', timeAgo: '5分钟前', title: '新的研究表明，大型语言模型在逻辑推理方面仍有局限。', sourceUrl: 'https://www.deepmind.com/blog/new-research-on-llm-reasoning' },
+        { sourceType: '资本', timeAgo: '2小时前', title: 'AI芯片初创公司 "Neuromorphic" 获得5000万美元A轮融资。', sourceUrl: 'https://techcrunch.com/2025/07/17/neuromorphic-funding/' },
+        { sourceType: '开源', timeAgo: '8小时前', title: 'PyTorch 2.1 发布，原生支持编译模式。', sourceUrl: 'https://pytorch.org/blog/pytorch-2-1-released/' },
+        { sourceType: '专利', timeAgo: '1天前', title: '苹果公司申请一项关于可折叠屏幕的新专利。', sourceUrl: '#' },
+        { sourceType: '市场', timeAgo: '1天前', title: 'Gartner发布最新技术成熟度曲线，生成式AI位于期望膨胀期顶峰。', sourceUrl: '#' },
+        { sourceType: '人才', timeAgo: '2天前', title: '前Google Brain研究员加入OpenAI，领导新的人工智能安全团队。', sourceUrl: '#' },
+        { sourceType: 'AI', timeAgo: '2天前', title: 'Meta发布新一代代码生成模型Code Llama 2。', sourceUrl: '#' }
+    ],
+    sidePanelDetails: {
+      // --- ID 已对齐 ---
+      "comp_nvidia": { 
+          entity_name: "NVIDIA (模拟)", 
+          core_summary: "全球领先的图形处理器（GPU）设计公司，并在人工智能计算领域占据主导地位。", 
+          recent_evidence: [{ type: "产品", title: "发布 Blackwell 架构 GPU", source_url: "#" }] 
+      },
+      "comp_openai": {
+          entity_name: "OpenAI (模拟)",
+          core_summary: "人工智能研究与开发公司，以GPT系列闻名。",
+          recent_evidence: [{ type: "产品", title: "发布文生视频模型 Sora", source_url: "https://openai.com/sora" }]
+      },
+      "comp_sora": {
+          entity_name: "Sora (模拟)",
+          core_summary: "OpenAI发布的文本到视频生成模型。",
+          recent_evidence: [{ type: "论文", title: "技术报告：Diffusion Transformer的威力", source_url: "#" }]
+      },
+      "comp_cerebras": { 
+          entity_name: "Cerebras Systems (模拟)", 
+          core_summary: "一家专注于晶圆级芯片的AI硬件初创公司，旨在通过超大尺寸芯片解决AI计算的通信瓶颈。", 
+          recent_evidence: [{ type: "新闻", title: "Cerebras发布第三代晶圆级芯片WSE-3", source_url: "#" }] 
+      },
+      "comp_quantum_ai": { 
+          entity_name: "量子AI (模拟)", 
+          core_summary: "一种遵循量子力学规律调控量子信息单元进行计算的新型计算模式。", 
+          recent_evidence: [{ type: "论文", title: "实现了1024个量子比特的纠缠态", source_url: "#" }] 
+      },
+      "comp_jim_keller": {
+          entity_name: "Jim Keller (模拟)",
+          core_summary: "著名芯片架构师，曾效力于AMD、Apple、Tesla、Intel。",
+          recent_evidence: [{ type: "新闻", title: "Jim Keller 加入 Tenstorrent 担任 CTO", source_url: "#" }]
+      },
+      "comp_tsmc": {
+          entity_name: "台积电 (模拟)",
+          core_summary: "全球最大的专业集成电路制造服务公司。",
+          recent_evidence: [{ type: "新闻", title: "宣布 2nm 工艺进展顺利", source_url: "#" }]
+      },
+      "comp_alphafold": {
+          entity_name: "AlphaFold (模拟)",
+          core_summary: "DeepMind开发的蛋白质结构预测AI系统。",
+          recent_evidence: [{ type: "新闻", title: "AlphaFold 3 发布，可预测几乎所有生命分子的结构", source_url: "#" }]
+      },
+      "comp_google": {
+          entity_name: "Google (模拟)",
+          core_summary: "全球知名的互联网科技巨头。",
+          recent_evidence: [{ type: "产品", title: "发布多模态大模型 Gemini", source_url: "#" }]
+      },
+      "comp_meta": {
+          entity_name: "Meta Platforms (模拟)",
+          core_summary: "全球领先的社交媒体和元宇宙公司。",
+          recent_evidence: [{ type: "开源", title: "发布 Llama 3 开源大模型", source_url: "#" }]
+      },
+      "comp_risc_v": {
+          entity_name: "RISC-V (模拟)",
+          core_summary: "一种开源指令集架构。",
+          recent_evidence: [{ type: "新闻", title: "RISC-V Summit 2024 成功举办", source_url: "#" }]
+      }
+    }
+  },
+
+  // --- 探索中心数据 (Exploration) ---
+  exploration: {
+    streams: {
+        market: [ "全球AI芯片市场预测：未来五年复合增长率达30%。", "NVIDIA发布新一代GPU架构，算力再创新高。", "边缘AI计算需求激增，初创公司获巨额融资。", "自动驾驶技术加速落地，传感器融合成关键。", "某大型科技公司宣布进军机器人领域，布局智能制造。", "AI在医疗诊断领域展现巨大潜力。", "数据中心能耗问题日益突出，液冷技术受关注。" ],
+        tech: [ "新型量子计算算法在特定问题上实现突破。", "Chiplet技术推动半导体封装新变革。", "Transformer模型在多模态理解方面取得进展。", "存算一体架构芯片有望解决AI算力瓶颈。", "Graph Neural Networks (GNN) 在药物发现中应用。", "可解释AI（XAI）成为研究热点。", "神经形态计算硬件迎来新发展。" ],
+        talent: [ "前Google AI科学家加入OpenAI，专注于通用人工智能。", "知名半导体架构师跳槽至某AI芯片公司。", "高校AI专业毕业生就业率创新高，薪资普遍上涨。", "某独角兽公司启动全球AI人才招聘计划。", "机器学习工程师成为最热门的职位之一。", "AI伦理专家需求量大增。", "计算机视觉领域人才竞争激烈。" ],
+        myFocus: [ "【关注】Cerebras发布WSE-3，性能提升显著。", "【关注】量子纠缠技术最新进展。", "【关注】NVIDIA财报超预期，AI业务增长强劲。", "【关注】Tenstorrent与AMD合作传闻。", "【关注】AI伦理治理国际峰会召开。", "【关注】特定AI模型在金融风险评估中表现优异。", "【关注】半导体供应链面临挑战及应对策略。" ]
+    },
+    galaxy: {
+      nodes: [
+        { id: 'cluster_ai_chip', name: 'AI芯片', type: 'cluster', category: 'Technology', heat: 0.9, relevance: 0.8, summary: '专注于AI算力核心的硬件技术集群。', x: 20, y: 30, z: 10, size: 15, color: '#0052ff' },
+        { id: 'cluster_llm_app', name: '大模型应用', type: 'cluster', category: 'Application', heat: 0.95, relevance: 0.9, summary: '围绕大型语言模型展开的各类应用场景。', x: -30, y: 10, z: -5, size: 18, color: '#28a745' },
+        { id: 'cluster_quantum_comp', name: '量子计算', type: 'cluster', category: 'Frontier', heat: 0.6, relevance: 0.7, summary: '基于量子力学原理的新型计算范式。', x: 50, y: -20, z: 20, size: 12, color: '#ffc107' },
+        { id: 'particle_nvidia_h100', parentId: 'cluster_ai_chip', name: 'NVIDIA H100', type: 'particle', category: 'Product', heat: 0.8, relevance: 0.7, summary: 'NVIDIA旗舰AI加速卡。', x: 25, y: 35, z: 12, size: 3, color: '#ADD8E6', url: 'https://www.nvidia.com/en-us/data-center/h100/' },
+        { id: 'particle_cerebras_wse3', parentId: 'cluster_ai_chip', name: 'Cerebras WSE-3', type: 'particle', category: 'Product', heat: 0.85, relevance: 0.75, summary: 'Cerebras晶圆级AI芯片。', x: 18, y: 25, z: 8, size: 3, color: '#ADD8E6', url: 'https://www.cerebras.net/wse-3/' },
+        { id: 'particle_sora_paper', parentId: 'cluster_llm_app', name: 'OpenAI Sora', type: 'particle', category: 'Research', heat: 0.98, relevance: 0.95, summary: 'OpenAI文生视频模型。', x: -35, y: 15, z: -8, size: 4, color: '#90EE90', url: 'https://openai.com/sora' },
+        { id: 'particle_google_gemini', parentId: 'cluster_llm_app', name: 'Google Gemini', type: 'particle', category: 'Product', heat: 0.92, relevance: 0.88, summary: 'Google多模态大模型。', x: -28, y: 5, z: -3, size: 3.5, color: '#90EE90', url: 'https://gemini.google.com/' },
+        { id: 'particle_mistral_7b', parentId: 'cluster_llm_app', name: 'Mistral 7B', type: 'particle', category: 'Product', heat: 0.88, relevance: 0.82, summary: 'Mistral AI开源小尺寸大模型。', x: -25, y: 18, z: -10, size: 2.8, color: '#90EE90', url: 'https://mistral.ai/news/announcing-mistral-7b/' },
+        { id: 'particle_ibm_qiskit', parentId: 'cluster_quantum_comp', name: 'IBM Qiskit', type: 'particle', category: 'Tool', heat: 0.65, relevance: 0.7, summary: 'IBM量子计算开源SDK。', x: 55, y: -25, z: 22, size: 2.5, color: '#FFD700', url: 'https://qiskit.org/' },
+      ],
+      edges: [
+        { source: 'cluster_ai_chip', target: 'cluster_llm_app', strength: 0.7 },
+        { source: 'cluster_ai_chip', target: 'particle_nvidia_h100', strength: 0.9 },
+        { source: 'cluster_ai_chip', target: 'particle_cerebras_wse3', strength: 0.85 },
+        { source: 'cluster_llm_app', target: 'particle_sora_paper', strength: 0.95 },
+        { source: 'cluster_llm_app', target: 'particle_google_gemini', strength: 0.9 },
+        { source: 'cluster_llm_app', target: 'particle_mistral_7b', strength: 0.88 },
+        { source: 'cluster_quantum_comp', target: 'particle_ibm_qiskit', strength: 0.8 },
+        { source: 'particle_nvidia_h100', target: 'particle_google_gemini', strength: 0.6 }, // 跨集群关联示例
+        { source: 'particle_sora_paper', target: 'particle_cerebras_wse3', strength: 0.5 }, // 跨集群关联示例
+      ]
+    },
+    topicFeeds: {
+      popularTopics: [
+        { id: 'topic_sora', name: 'Sora 模型', type: 'Technology' },
+        { id: 'topic_ai_chip', name: 'AI 芯片', type: 'Technology' },
+        { id: 'topic_edge_ai', name: '边缘AI', type: 'Technology' },
+        { id: 'topic_quantum_comp', name: '量子计算', type: 'Technology' },
+        { id: 'topic_nvidia', name: 'NVIDIA', type: 'Company' },
+        { id: 'topic_autonomous_driving', name: '自动驾驶', type: 'Application' },
+      ],
+      feeds: {
+       'topic_sora': [
+          { id: 'sora_feed_1', title: 'OpenAI发布文生视频模型Sora，效果惊艳', summary: 'Sora能够根据文本指令生成长达一分钟的视频。', sourceType: '新闻', publicationDate: '2024-02-15', url: 'https://openai.com/sora', relatedEntities: ['OpenAI', 'Sora'] },
+          // --- 关键修改：提供一个有效的链接 ---
+          { id: 'sora_feed_2', title: 'Sora技术报告：Diffusion Transformer的威力', summary: '详细介绍了Sora背后的技术架构，结合了扩散模型和Transformer。', sourceType: '论文', publicationDate: '2024-02-16', url: 'https://openai.com/research/video-generation-models-as-world-simulators', relatedEntities: ['Diffusion Model', 'Transformer'] },
+          { id: 'sora_feed_3', title: 'Sora引发视频行业震荡，影视制作流程或将重构', summary: 'Sora的出现对传统影视制作带来巨大冲击和变革。', sourceType: '市场', publicationDate: '2024-02-18', url: 'https://www.theverge.com/2024/2/15/24074151/openai-sora-text-to-video-generator-ai', relatedEntities: ['影视行业'] },
+          { id: 'sora_feed_4', title: 'Stability AI推出类似Sora的开源文生视频模型', summary: '开源社区紧随其后，发布了更小巧的文生视频模型。', sourceType: '开源', publicationDate: '2024-03-01', url: 'https://stability.ai/news/stable-video-diffusion', relatedEntities: ['Stability AI'] },
+          { id: 'sora_feed_5', title: 'Sora对AI算力需求巨大，推动AI芯片发展', summary: '高质量视频生成背后是庞大的计算资源消耗。', sourceType: '新闻', publicationDate: '2024-02-20', url: 'https://www.tomshardware.com/pc-components/gpus/sora-is-a-data-center-gpu-killer-app-that-will-push-demand-for-ai-and-HPC-GPUs-to-new-highs', relatedEntities: ['AI芯片'] },
+        ]
+      },
+      feedRelationships: [
+        { sourceItemId: 'sora_feed_5', targetItemId: 'chip_feed_1', type: '推动关系', strength: 0.8 },
+        { sourceItemId: 'sora_feed_2', targetItemId: 'chip_feed_5', type: '技术关联', strength: 0.6 },
+      ]
+    },
+    entityExplorer: {
+      entities: [
+        // --- 关键修改：统一所有 ID 格式 ---
+        { id: 'comp_nvidia', name: 'NVIDIA', type: 'Company', industry: 'AI芯片, GPU', summary: '全球领先的AI计算平台提供商。', status: 'active', location: '美国加州圣克拉拉', microChartData: [100, 120, 150, 180, 200, 250, 300], influenceScore: 95 },
+        { id: 'comp_openai', name: 'OpenAI', type: 'Company', industry: 'AI, 大模型', summary: '人工智能研究与开发公司，以GPT系列闻名。', status: 'active', location: '美国加州旧金山', microChartData: [50, 70, 90, 130, 180, 250, 320], influenceScore: 98 },
+        { id: 'tech_sora', name: 'Sora', type: 'Technology', industry: 'AI, 视频生成', summary: 'OpenAI发布的文本到视频生成模型。', status: 'active', location: 'N/A', microChartData: [0, 0, 0, 50, 150, 280, 400], influenceScore: 99 },
+        { id: 'comp_cerebras', name: 'Cerebras Systems', type: 'Company', industry: 'AI芯片, 晶圆级计算', summary: '专注于开发晶圆级AI芯片。', status: 'active', location: '美国加州洛斯阿尔托斯', microChartData: [30, 40, 50, 60, 70, 80, 90], influenceScore: 80 },
+        { id: 'tech_quantum_ai', name: '量子AI', type: 'Technology', industry: '量子计算, AI', summary: '量子计算与人工智能的交叉领域。', status: 'inactive', location: 'N/A', microChartData: [10, 15, 20, 25, 30, 35, 40], influenceScore: 60 },
+        { id: 'person_jim_keller', name: 'Jim Keller', type: 'Person', industry: '半导体设计', summary: '著名芯片架构师，曾效力于AMD、Apple、Tesla、Intel。', status: 'active', location: 'N/A', microChartData: [10, 12, 15, 18, 20, 22, 25], influenceScore: 90 },
+        { id: 'comp_tsmc', name: '台积电', type: 'Company', industry: '半导体制造', summary: '全球最大的专业集成电路制造服务公司。', status: 'active', location: '台湾新竹', microChartData: [200, 210, 220, 230, 240, 250, 260], influenceScore: 92 },
+        { id: 'tech_alphafold', name: 'AlphaFold', type: 'Technology', industry: 'AI, 生物科技', summary: 'DeepMind开发的蛋白质结构预测AI系统。', status: 'active', location: 'N/A', microChartData: [0, 0, 0, 100, 180, 250, 300], influenceScore: 88 },
+        { id: 'comp_google', name: 'Google', type: 'Company', industry: '互联网, AI, 软件', summary: '全球知名的互联网科技巨头。', status: 'active', location: '美国加州山景城', microChartData: [300, 310, 320, 330, 340, 350, 360], influenceScore: 97 },
+        { id: 'comp_meta', name: 'Meta Platforms', type: 'Company', industry: '社交媒体, AI, VR', summary: '全球领先的社交媒体和元宇宙公司。', status: 'active', location: '美国加州门洛帕克', microChartData: [180, 190, 200, 210, 220, 230, 240], influenceScore: 91 },
+        { id: 'tech_risc_v', name: 'RISC-V', type: 'Technology', industry: '处理器架构', summary: '一种开源指令集架构。', status: 'active', location: 'N/A', microChartData: [50, 60, 70, 80, 90, 100, 110], influenceScore: 75 },
+      ],
+      filterOptions: {
+        entityTypes: ['Company', 'Technology', 'Person', 'Research_Institution', 'Product'],
+        industries: ['AI', '半导体设计', '半导体制造', '大模型', '视频生成', '处理器架构', '互联网', '社交媒体', '生物科技', '量子计算'],
+        locations: ['美国加州圣克拉拉', '美国加州旧金山', '美国加州洛斯阿尔托斯', '台湾新竹', '美国加州山景城', '美国加州门洛帕克', '硅谷'],
+        statuses: ['active', 'inactive']
+      }
+    }
+  },
+
+  analysis: {
+    fullGraph: {
+       'comp_nvidia': {
+        nodes: [
+          { id:  'comp_nvidia', name: 'NVIDIA', type: '分析目标', value: 100, category: '公司' },
+          { id: 'tsmc', name: 'TSMC', type: '公司', value: 80, category: '公司' },
+          { id: 'cuda', name: 'CUDA', type: '技术', value: 90, category: '技术' },
+          { id: 'jensen', name: 'Jensen Huang', type: '专家', value: 85, category: '专家' },
+          { id: 'amd', name: 'AMD', type: '公司', value: 75, category: '公司' },
+        ],
+        links: [
+          { source:  'comp_nvidia', target: 'tsmc', type: '合作', strength: 0.9, description: '战略代工伙伴', type_label: '战略合作' },
+          { source:  'comp_nvidia', target: 'cuda', type: '技术应用', strength: 1.0, description: '核心计算平台', type_label: '核心技术' },
+          { source:  'comp_nvidia', target: 'jensen', type: '雇佣', strength: 0.98, description: '创始人兼CEO', type_label: '核心人物' },
+          { source:  'comp_nvidia', target: 'amd', type: '竞争', strength: 0.95, description: 'GPU市场主要竞争对手', type_label: '主要竞争' },
+        ]
+      },
+      'tsmc': {
+        nodes: [
+          { id: 'apple', name: 'Apple', type: '公司', value: 95, category: '公司' },
+          { id: 'qualcomm', name: 'Qualcomm', type: '公司', value: 70, category: '公司' },
+        ],
+        links: [
+          { source: 'tsmc', target: 'apple', type: '合作', strength: 0.9, description: 'A系列芯片独家代工', type_label: '战略合作' },
+          { source: 'tsmc', target: 'qualcomm', type: '合作', strength: 0.7, description: '骁龙芯片代工', type_label: '业务合作' },
+          { source: 'tsmc', target:  'comp_nvidia', type: '合作', strength: 0.9, description: '战略代工伙伴', type_label: '战略合作' },
+        ]
+      },
+      // **** 新增：为“我的关注”列表中的实体补充数据 ****
+      'tech_quantum': {
+        nodes: [
+          { id: 'tech_quantum', name: '量子计算', type: '分析目标', value: 100, category: '技术' },
+          { id: 'google_quantum', name: 'Google Quantum AI', type: '研究机构', value: 80, category: '研究机构' },
+          { id: 'ibm_quantum', name: 'IBM Quantum', type: '研究机构', value: 75, category: '研究机构' },
+          { id: 'q_error_correction', name: '量子纠错', type: '技术', value: 90, category: '技术' },
+        ],
+        links: [
+          { source: 'tech_quantum', target: 'google_quantum', type: '研究产出', strength: 0.8, description: '发布Sycamore处理器' },
+          { source: 'tech_quantum', target: 'ibm_quantum', type: '研究产出', strength: 0.7, description: '提供云量子计算平台' },
+          { source: 'tech_quantum', target: 'q_error_correction', type: '概念关联', strength: 0.95, description: '实现量子计算的核心挑战' },
+        ]
+      },
+      'comp_cerebras': {
+        nodes: [
+          { id: 'comp_cerebras', name: 'Cerebras', type: '分析目标', value: 100, category: '公司' },
+          { id: 'wse_chip', name: 'WSE (晶圆级引擎)', type: '产品', value: 90, category: '产品' },
+          { id: 'g42', name: 'G42', type: '公司', value: 70, category: '公司' },
+          { id: 'comp_nvidia', name: 'NVIDIA', type: '公司', value: 95, category: '公司' },
+        ],
+        links: [
+          { source: 'comp_cerebras', target: 'wse_chip', type: '技术应用', strength: 1.0, description: '核心产品' },
+          { source: 'comp_cerebras', target: 'g42', type: '合作', strength: 0.8, description: '共建Condor Galaxy超级计算机' },
+          { source: 'comp_cerebras', target: 'comp_nvidia', type: '竞争', strength: 0.7, description: 'AI训练硬件市场竞争者' },
+        ]
+      }
+    },
+    elementDetails: {
+       'comp_nvidia': { name: 'NVIDIA', type: '公司', summary: '全球领先的AI计算平台提供商。', details: '成立于1993年，以其GPU在游戏和专业市场闻名，现已成为AI和数据中心领域的绝对领导者。', evidence: [{ title: 'NVIDIA官网', url: 'https://www.nvidia.com' }] },
+      'tsmc': { name: 'TSMC', type: '公司', summary: '全球最大的专业集成电路制造服务公司。', details: '台湾积体电路制造股份有限公司，是苹果、NVIDIA、AMD等众多无厂半导体公司的主要芯片制造商。', evidence: [{ title: 'TSMC官网', url: 'https://www.tsmc.com' }] },
+      'cuda': { name: 'CUDA', type: '技术', summary: 'NVIDIA推出的并行计算平台和编程模型。', details: 'CUDA（Compute Unified Device Architecture），使得开发者能利用NVIDIA GPU进行通用计算，是其AI生态的核心护城河。', evidence: [{ title: 'CUDA Toolkit文档', url: 'https://developer.nvidia.com/cuda-toolkit' }] },
+      'nvidia_tsmc': { name: 'NVIDIA 与 TSMC 的合作关系', type: '合作', summary: 'NVIDIA是TSMC先进制程的最大客户之一。', details: '从7nm节点开始，NVIDIA的高端GPU几乎全部由TSMC独家代工，形成了紧密的战略绑定关系。', evidence: [{ title: '报道：NVIDIA 3nm订单细节', url: '#' }] },
+      'tech_quantum': { name: '量子计算', type: '技术', summary: '基于量子力学的新型计算范式。', details: '利用量子比特进行计算，有望在特定问题上实现指数级加速。', evidence: [] },
+      'comp_cerebras': { name: 'Cerebras Systems', type: '公司', summary: '专注于开发晶圆级AI芯片。', details: '其WSE系列芯片是目前全球最大的单一芯片，旨在解决AI训练中的通信瓶颈。', evidence: [] }
+    },
+    evolution: {
+       'comp_nvidia': {
+        trendData: [
+          { date: '2020-01-01', influence: 60, attention: 55 },
+          { date: '2021-01-01', influence: 75, attention: 70 },
+          { date: '2022-01-01', influence: 85, attention: 80 },
+          { date: '2023-01-01', influence: 95, attention: 98 },
+          { date: '2024-01-01', influence: 98, attention: 99 },
+        ],
+        timelineEvents: [
+          { date: '2020-05-14', lane: '技术', title: '发布Ampere架构', description: '推出A100 GPU，奠定AI训练领先地位。' },
+          { date: '2021-04-12', lane: '市场', title: '发布Grace CPU', description: '宣布进军数据中心CPU市场，挑战Intel和AMD。' },
+          { date: '2022-09-20', lane: '技术', title: '发布Hopper架构', description: '推出H100 GPU，专为Transformer模型优化。' },
+          { date: '2023-05-29', lane: '市场', title: '市值突破1万亿美元', description: '成为首家市值达到1万亿美元的芯片公司。' },
+          { date: '2024-03-18', lane: '技术', title: '发布Blackwell架构', description: '推出B200 GPU，进一步巩固其在AI领域的霸主地位。' },
+        ]
+      },
+      'tech_quantum': {
+        trendData: [ { date: '2020-01-01', influence: 20, attention: 30 }, { date: '2024-01-01', influence: 45, attention: 60 } ],
+        timelineEvents: [ { date: '2023-10-23', lane: '技术', title: 'Google声称实现量子优越性', description: 'Sycamore处理器在特定计算上超越了经典超算。' } ]
+      },
+      'comp_cerebras': {
+        trendData: [ { date: '2020-01-01', influence: 30, attention: 20 }, { date: '2024-01-01', influence: 60, attention: 55 } ],
+        timelineEvents: [ { date: '2024-03-13', lane: '产品', title: '发布WSE-3晶圆级AI芯片', description: '性能翻倍，继续在巨型芯片领域保持领先。' } ]
+      }
+    },
+    
+    ecosystem: {
+       'comp_nvidia': {
+        radarData: {
+          indicator: [
+            { name: '技术创新', max: 100 }, { name: '市场份额', max: 100 },
+            { name: '人才密度', max: 100 }, { name: '资本实力', max: 100 },
+            { name: '生态建设', max: 100 }
+          ],
+          series: [
+            { value: [95, 90, 85, 98, 99], name: 'NVIDIA' },
+            { value: [85, 70, 80, 75, 70], name: 'AMD' },
+            { value: [88, 60, 90, 95, 80], name: 'Google (TPU)' },
+          ]
+        },
+        matrixData: [
+          // [成熟度, 投入度, 影响力, '技术领域']
+          [80, 90, 100, '通用GPU计算'],
+          [70, 85, 95, 'AI推理芯片'],
+          [95, 95, 98, 'AI训练芯片'],
+          [40, 60, 70, '数据中心CPU'],
+          [60, 75, 80, '自动驾驶芯片'],
+        ],
+        swot: {
+          strengths: ['在AI训练芯片领域拥有绝对领先地位', 'CUDA生态护城河极深，用户粘性高'],
+          weaknesses: ['产品价格高昂，功耗较大', '在CPU领域仍是追赶者'],
+          opportunities: ['生成式AI爆发带来的持续算力需求', '自动驾驶和机器人市场的巨大潜力'],
+          threats: ['来自AMD、Google等巨头的竞争加剧', '地缘政治风险影响供应链']
+        }
+      },
+      'tech_quantum': {
+        radarData: {
+          indicator: [ { name: '理论突破', max: 100 }, { name: '工程实现', max: 100 }, { name: '资本关注', max: 100 }, { name: '生态建设', max: 100 } ],
+          series: [ { value: [85, 40, 70, 50], name: '量子计算' } ]
+        },
+        matrixData: [ [20, 70, 80, '量子算法'], [40, 50, 60, '量子硬件'] ],
+        swot: { strengths: ['颠覆性潜力'], weaknesses: ['技术尚未成熟，易受环境干扰'], opportunities: ['解决经典计算无法解决的难题'], threats: ['商业化路径漫长且不确定'] }
+      },
+      'comp_cerebras': {
+        radarData: {
+          indicator: [ { name: '技术创新', max: 100 }, { name: '市场份额', max: 100 }, { name: '人才密度', max: 100 }, { name: '资本实力', max: 100 } ],
+          series: [ { value: [98, 10, 70, 60], name: 'Cerebras' } ]
+        },
+        matrixData: [ [90, 90, 85, '晶圆级芯片'] ],
+        swot: { strengths: ['独特的晶圆级芯片架构，解决了片间通信瓶颈'], weaknesses: ['生态系统较小，应用场景受限'], opportunities: ['超大模型训练市场的特定需求'], threats: ['来自NVIDIA等巨头的通用方案竞争'] }
+      }
+    }
+  },
+  findings: {
+    insights: [
+      { id: 'ins001', title: 'NVIDIA的CUDA生态构成其核心护城河', type: 'insights', content: 'CUDA平台通过锁定开发者和应用生态，为NVIDIA的硬件销售提供了强大的、难以复制的竞争优势。', tags: ['NVIDIA', 'CUDA', '护城河'], createdBy: 'AI分析', createdAt: '2024-07-10', relatedEntities: ['comp_nvidia', 'cuda'] },
+      { id: 'ins002', title: '晶圆级芯片是后摩尔时代的一个潜在突破方向', type: 'insights', content: '以Cerebras为代表的晶圆级芯片（WSE）通过将整个晶圆作为单颗芯片，消除了片间通信瓶颈，尤其适合巨型AI模型的训练。', tags: ['Cerebras', '芯片架构'], createdBy: '本地开发者', createdAt: '2024-07-12', relatedEntities: ['comp_cerebras'] }
+    ],
+    snapshots: [
+      { 
+        id: 'snap001', 
+        title: 'NVIDIA在2024Q2的关系网络图', 
+        type: 'snapshots', 
+        description: '该快照展示了NVIDIA与其主要合作伙伴（TSMC）和竞争对手（AMD）的核心关系。', 
+        // **** 核心修正：使用有效的占位符图片链接 ****
+        imageUrl: 'https://placehold.co/600x400/161B22/c9d1d9?text=关系网络快照', 
+        analysisType: '关系网络', 
+        targetEntity: 'comp_nvidia', 
+        createdAt: '2024-07-15' 
+      },
+      { 
+        id: 'snap002', 
+        title: 'AI芯片核心能力雷达图', 
+        type: 'snapshots', 
+        description: '对比了NVIDIA, AMD, Google在AI芯片领域的核心竞争力。', 
+        // **** 核心修正：使用有效的占位符图片链接 ****
+        imageUrl: 'https://placehold.co/600x400/161B22/c9d1d9?text=雷达图快照', 
+        analysisType: '生态位分析', 
+        targetEntity: 'comp_nvidia', 
+        createdAt: '2024-07-16' 
+      }
+    ],
+
+    reports: [
+      { id: 'rep001', title: '2024年上半年AI芯片行业竞争格局分析', type: 'reports', summary: '本报告深入分析了NVIDIA、AMD、Intel及多家初创公司在AI芯片领域的最新动态、技术布局和市场策略...', author: '本地开发者', publishedAt: '2024-07-01', contentBlocks: [ { type: 'insight', id: 'ins001' }, { type: 'snapshot', id: 'snap002' } ] }
+    ],
+
+    // --- 在这里粘贴 (PASTE) companyTimelines 对象 ---
+    companyTimelines: {
+        'comp_nvidia': {
+            aiSummary: `在过去的这个月，NVIDIA 在AI领域的表现引人注目，其 Blackwell 架构 GPU 的发布持续发酵，显示出投资者对其未来增长的信心。与此同时，来自 AMD 和初创公司的竞争压力也在增加。`,
+            keyThemes: ['GPU架构', 'AI算力竞争', '供应链稳定'],
+            mostImportantEvent: {
+                title: `NVIDIA 发布 Blackwell 架构 GPU`,
+                summary: '这一事件进一步巩固了其在 AI 训练和推理市场的领导地位，预计将带来显著的性能提升。'
+            },
+            events: [
+                { date: '2025-07-10', title: '分析师上调 NVIDIA 目标价', summary: '摩根士丹利将 NVIDIA 的目标股价上调至 $150，理由是其在 AI 领域拥有不可动摇的护城河。', tags: ['Finance', 'Stock'] },
+                { date: '2025-07-01', title: '台积电确认3nm工艺将用于 NVIDIA 下一代产品', summary: '供应链消息证实，NVIDIA 的下一代 GPU 将采用台积电最先进的 3nm 工艺制造。', tags: ['Supply Chain', 'Manufacturing'] },
+                { date: '2025-06-25', title: 'NVIDIA CUDA 13.0 发布，支持新的软件定义硬件特性', summary: '新版 CUDA 增强了对稀疏计算和混合精度的支持，进一步优化了大型语言模型的性能。', tags: ['Software', 'CUDA', 'Ecosystem'] },
+            ].sort((a, b) => new Date(b.date) - new Date(a.date))
+        },
+        'comp_cerebras': {
+            aiSummary: `Cerebras Systems 本月继续在巨型芯片领域发力，其 WSE-3 芯片在多个超算中心完成部署。市场正在密切关注其与传统 GPU 集群方案在真实世界大型模型训练中的成本效益对比。`,
+            keyThemes: ['晶圆级芯片', '超算中心', '成本效益分析'],
+            mostImportantEvent: {
+                title: `G42 完成基于 Cerebras WSE-3 的 Condor Galaxy 2 超算部署`,
+                summary: '这是晶圆级芯片技术在商业和科研领域获得认可的一个重要里程碑，展示了其处理超大规模 AI 任务的潜力。'
+            },
+            events: [
+                { date: '2025-07-12', title: 'Cerebras 发表论文，阐述其软件编译器如何优化稀疏计算', summary: '论文详细介绍了其软件栈如何自动利用权重稀疏性来加速模型训练，而无需修改模型代码。', tags: ['Research', 'Software'] },
+                { date: '2025-06-30', title: '传闻 Cerebras 正在寻求新一轮融资', summary: '据知情人士透露，Cerebras 正在与投资者接触，计划进行 E 轮融资，以扩大其在全球市场的部署。', tags: ['Finance', 'Venture Capital'] },
+            ].sort((a, b) => new Date(b.date) - new Date(a.date))
+        },
+        'default_timeline': {
+             aiSummary: '关于该公司的月度 AI 分析摘要正在生成中...',
+             keyThemes: ['数据收集中'],
+             mostImportantEvent: { title: '暂无关键事件', summary: '系统正在监控该公司的相关动态。' },
+             events: [
+                 { date: new Date().toISOString(), title: '系统已开始追踪此实体', summary: '相关的历史数据正在回填中。', tags: ['System'] }
+             ]
+        }
+    }
+    // --- 结束粘贴 ---
+  },
+  copilot: {
+      // 预设的Markdown报告，用于模拟AI生成的结果
+      nvidiaVsCerebrasReport: `
+    # NVIDIA vs. Cerebras：AI芯片领域的战略差异分析
+
+    ## **一、 摘要**
+    本报告旨在深度剖析NVIDIA与Cerebras在AI芯片领域的技术路线、市场策略和核心竞争力。NVIDIA凭借其成熟的CUDA生态和通用GPU架构占据市场主导地位，而Cerebras则以其颠覆性的晶圆级芯片（WSE）作为差异化竞争点，专注于超大规模AI模型的训练市场。
+
+    ---
+
+    ## **二、 核心技术与护城河对比**
+
+    ### **NVIDIA: 生态为王**
+    NVIDIA的护城河不仅在于其强大的GPU硬件，更在于其经营多年的 <data-highlight>CUDA</data-highlight> 软件生态。
+    - **优点**: 开发者基数庞大，工具链成熟，应用范围广。
+    - **缺点**: 单卡算力有物理极限，大规模集群依赖高速互联（NVLink）。
+
+    ### **Cerebras: 架构即优势**
+    Cerebras的核心竞争力在于其 <data-highlight>晶圆级引擎（WSE）</data-highlight>，它从根本上解决了片间通信的瓶颈。
+    - **优点**: 单芯片算力极高，内存带宽巨大，非常适合训练巨型模型。
+    - **缺点**: 生态系统薄弱，应用场景相对单一，成本高昂。
+
+    ---
+
+    ## **三、 市场策略与潜在风险**
+
+    | 公司 | 市场策略 | 潜在风险 |
+    |---|---|---|
+    | **NVIDIA** | "销售铲子"，提供通用算力平台，覆盖从云端到边缘的全场景。 | 来自AMD、Google TPU以及众多初创公司的竞争；供应链地缘政治风险。 |
+    | **Cerebras**| 专注于超算中心和国家级AI项目等金字塔尖市场。 | 市场规模有限；通用性不足可能导致客户流失；对特定制造工艺的依赖。|
+
+    ---
+
+    ## **四、 结论**
+    NVIDIA在短期和中期内仍将凭借其强大的生态系统保持市场领导地位。Cerebras作为“屠龙勇士”，其技术路线极具前瞻性，但在商业化和生态建设上仍面临巨大挑战。两者将在超大规模模型训练领域展开激烈竞争。
+      `
+    },
+  system: {
+    allTechOptions: [
+      { id: 'tech_quantum', name: '量子计算' }, { id: 'tech_ai_chip', name: 'AI芯片' },
+      { id: 'tech_chiplet', name: 'Chiplet' }, { id: 'tech_llm', name: '大语言模型' }
+    ],
+    allCompanyOptions: [
+      { id: 'comp_nvidia', name: 'NVIDIA' }, { id: 'comp_cerebras', name: 'Cerebras' },
+      { id: 'comp_tenstorrent', name: 'Tenstorrent' }, { id: 'comp_intel', name: 'Intel' }
+    ],
+    snapshot: {
+      techCount: 12,
+      // 新增：最近更新的技术
+      latestTech: '多模态学习',
+      
+      companyCount: 25,
+      // 新增：需要高度关注的公司
+      highPriorityCompanies: 5,
+      
+      conferenceCount: 8,
+      // 新增：即将举行的会议
+      upcomingConference: 'NeurIPS 2024',
+      
+      dataSourceCount: 5,
+      // 新增：失败或异常的数据源
+      errorDataSources: 1,
+      
+      userCount: 10,
+      // 新增：管理员数量
+      adminCount: 2,
+      
+      taskCount: 4,
+      // 新增：上次失败的任务数
+      failedTasks: 0,
+      
+      templateCount: 6,
+      // 新增：最常用的模板
+      popularTemplate: '周度竞争情报模板',
+    },
+    technology_registry: [
+      { id: 'tech001', tech_name: '大语言模型', tech_keywords: 'LLM, GPT, Transformer', tech_category: '核心技术', monitoring_status: '活跃' },
+      { id: 'tech002', tech_name: 'AI芯片', tech_keywords: 'NPU, GPU, TPU, AGI Chip', tech_category: '硬件基础', monitoring_status: '活跃' },
+      { id: 'tech003', tech_name: '多模态学习', tech_keywords: 'Multi-modal, Vision-Language', tech_category: '前沿算法', monitoring_status: '观察中' },
+    ],
+    competitor_registry: [
+      { id: 'comp001', company_name: 'OpenAI', industry: 'AI', priority: '高', focus_area: 'AGI, 大模型', monitoring_status: '活跃' },
+      { id: 'comp002', company_name: 'Cerebras', industry: 'AI芯片', priority: '中', focus_area: '晶圆级芯片', monitoring_status: '活跃' },
+      { id: 'comp003', company_name: 'Anthropic', industry: 'AI', priority: '高', focus_area: 'AI安全, 大模型', monitoring_status: '活跃' },
+    ],
+    conference_registry: [
+        { id: 'conf001', name: 'NeurIPS', full_name: 'Conference on Neural Information Processing Systems', focus: '机器学习, AI', next_date: '2024-12-10' },
+        { id: 'conf002', name: 'CVPR', full_name: 'Conference on Computer Vision and Pattern Recognition', focus: '计算机视觉', next_date: '2025-06-18' },
+    ],
+    external_data_sources: [
+        { id: 'src001', name: 'arXiv', type: '论文库', url: 'https://arxiv.org', status: '启用' },
+        { id: 'src002', name: 'Google Patents', type: '专利库', url: 'https://patents.google.com', status: '启用' },
+    ],
+    user_accounts: [
+      { id: 'user001', user_email: 'admin@example.com', display_name: '管理员', role_id: 'admin', status: '活跃' },
+      { id: 'user002', user_email: 'user@example.com', display_name: '普通用户', role_id: 'user', status: '活跃' },
+      { id: 'user003', user_email: 'guest@example.com', display_name: '访客', role_id: 'guest', status: '禁用' },
+    ],
+    automation_tasks: [
+        { id: 'task001', name: '每周竞品动态报告', frequency: '每周', last_run: '2024-07-15 08:00', status: '成功' },
+        { id: 'task002', name: '每日AI芯片新闻摘要', frequency: '每日', last_run: '2024-07-16 09:00', status: '成功' },
+    ],
+    report_templates: [
+        { id: 'tpl001', name: '周度竞争情报模板', created_by: '管理员', created_at: '2024-06-01' },
+        { id: 'tpl002', name: '季度技术趋势模板', created_by: '管理员', created_at: '2024-05-20' },
+    ]
+  },
+
+  runtime: {
+    jobStatus: {},
+  }
+};
+
+
+// ===================================================================
+//  2. MOCK_SERVICES - 模拟服务实现
+// ===================================================================
+const MOCK_SERVICES = {
+
+  AuthService: {
+    authenticateUser: () => MOCK_DATA.auth.authInfo
+  },
+
+  DashboardService: {
+    getDashboardData: (args) => new Promise(resolve => setTimeout(() => resolve(MOCK_DATA.dashboard), 500)),
+    getSidePanelData: (args) => new Promise(resolve => {
+      const entityId = args[0];
+      const data = MOCK_DATA.dashboard.sidePanelDetails[entityId] || { entity_name: `未找到 ${entityId} 的模拟数据` };
+      setTimeout(() => resolve(data), 200);
+    })
+  },
+
+  ExplorationService: {
+    analyzeUrl: (args) => new Promise(resolve => {
+      const url = args[0];
+      console.log(`[MOCK] Analyzing URL: ${url}`);
+      setTimeout(() => {
+        resolve({
+          finalRecord: {
+            id: `url-analysis-${Date.now()}`,
+            title: `分析报告: ${new URL(url).hostname}`,
+            ai_summary: `这是对URL [${url.substring(0,30)}...] 的模拟AI分析摘要。内容识别出多个关键实体，显示出较高的商业价值。`,
+            ai_keywords: ["模拟", "URL", "分析", "摘要"],
+            source_platform: new URL(url).hostname,
+            publication_date: new Date().toISOString()
+          }
+        });
+      }, 2500);
+    }),
+
+    startFileUpload: (args) => new Promise(resolve => {
+      const [fileName] = args;
+      console.log(`[MOCK] Starting file upload session for ${fileName}.`);
+      setTimeout(() => resolve({ uploadId: `mock-upload-${Date.now()}` }), 200);
+    }),
+
+    appendFileChunk: (args) => new Promise(resolve => {
+      setTimeout(() => resolve({ success: true }), 50 + Math.random() * 100);
+    }),
+
+    finishFileUpload: (args) => new Promise(resolve => {
+      const jobId = `mock-job-${Date.now()}`;
+      MOCK_DATA.runtime.jobStatus[jobId] = 0;
+      setTimeout(() => resolve({ jobId: jobId, message: "Mock upload complete, analysis started." }), 500);
+    }),
+
+    getAnalysisStatus: (args) => new Promise(resolve => {
+      const jobId = args[0];
+      const statusSequence = [ '正在解析文件结构', '提取文本内容', 'AI实体识别', 'AI摘要与价值评估', '完成' ];
+      let currentStatusIndex = MOCK_DATA.runtime.jobStatus[jobId] || 0;
+
+      setTimeout(() => {
+        if (currentStatusIndex < statusSequence.length - 1) {
+          resolve({ status: statusSequence[currentStatusIndex], result: null });
+          MOCK_DATA.runtime.jobStatus[jobId]++;
+        } else {
+          delete MOCK_DATA.runtime.jobStatus[jobId];
+          resolve({
+            status: 'Completed',
+            result: {
+              id: jobId,
+              title: `文件分析报告: ${jobId.substring(jobId.length - 6)}`,
+              ai_summary: '这是对一个模拟上传文件的最终AI分析摘要。文件内容质量高，包含多个潜在的技术创新点。',
+              ai_keywords: ['模拟', '文件', '上传', '成功', '创新点'],
+              source_platform: '文件上传',
+              publication_date: new Date().toISOString()
+            }
+          });
+        }
+      }, 1500);
+    }),
+
+    filterGalaxyMap: (args) => new Promise(resolve => {
+      const keyword = args[0] ? args[0].toLowerCase() : '';
+      if (!keyword) return resolve(MOCK_DATA.exploration.galaxy);
+
+      const filteredNodes = MOCK_DATA.exploration.galaxy.nodes.filter(node =>
+        node.name.toLowerCase().includes(keyword) ||
+        node.summary.toLowerCase().includes(keyword) ||
+        node.category.toLowerCase().includes(keyword)
+      );
+      const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+      const filteredEdges = MOCK_DATA.exploration.galaxy.edges.filter(edge =>
+        filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
+      );
+      console.log(`[MOCK] Filtering galaxy map by keyword: "${keyword}"`);
+      setTimeout(() => resolve({ nodes: filteredNodes, edges: filteredEdges }), 300);
+    }),
+
+    getEntityDetails: (args) => new Promise(resolve => {
+      const entityId = args[0];
+      const entity = MOCK_DATA.exploration.entityExplorer.entities.find(e => e.id === entityId);
+      console.log(`[MOCK] Resolving getEntityDetails for: ${entityId}`);
+      setTimeout(() => resolve(entity || { id: entityId, name: '未找到实体', summary: '无详细信息' }), 300);
+    }),
+
+    getStreamsData: () => new Promise(resolve => setTimeout(() => resolve(MOCK_DATA.exploration.streams), 500)),
+    getGalaxyMapData: () => new Promise(resolve => setTimeout(() => resolve(MOCK_DATA.exploration.galaxy), 500)),
+    getPopularTopics: () => new Promise(resolve => setTimeout(() => resolve(MOCK_DATA.exploration.topicFeeds.popularTopics), 300)),
+    getFeedDataByTopics: (args) => new Promise(resolve => {
+        const [topics] = args;
+        const results = {};
+        topics.forEach(topicId => {
+            results[topicId] = MOCK_DATA.exploration.topicFeeds.feeds[topicId] || [];
+        });
+        setTimeout(() => resolve({ feeds: results, relationships: MOCK_DATA.exploration.topicFeeds.feedRelationships }), 500);
+    }),
+    getEntities: (args) => new Promise(resolve => {
+        const [filters, pagination] = args;
+        let filtered = MOCK_DATA.exploration.entityExplorer.entities.filter(entity => {
+            return (!filters.type || entity.type === filters.type) &&
+                   (!filters.industry || entity.industry.toLowerCase().includes(filters.industry.toLowerCase()));
+        });
+        const paginated = filtered.slice((pagination.page - 1) * pagination.limit, pagination.page * pagination.limit);
+        setTimeout(() => resolve({ records: paginated, totalRecords: filtered.length }), 500);
+    }),
+        // --- 新增：模拟获取单条 Feed 详情 ---
+    getFeedItemDetails: (args) => new Promise(resolve => {
+        const feedId = args[0];
+        let foundItem = null;
+
+        // 在所有 feed 中查找
+        for (const topicKey in MOCK_DATA.exploration.topicFeeds.feeds) {
+            const item = MOCK_DATA.exploration.topicFeeds.feeds[topicKey].find(i => i.id === feedId);
+            if (item) {
+                foundItem = item;
+                break;
+            }
+        }
+        setTimeout(() => {
+            if (foundItem) {
+                // 返回一个更详细的对象，用于在侧边栏显示
+                resolve({
+                    title: foundItem.title,
+                    summary: foundItem.summary,
+                    sourceType: foundItem.sourceType,
+                    publicationDate: foundItem.publicationDate,
+                    relatedEntities: foundItem.relatedEntities.join(', '),
+                    sourceUrl: foundItem.url
+                });
+            } else {
+                resolve({ error: `未找到 ID 为 ${feedId} 的信息` });
+            }
+        }, 300);
+    }),
+    getEntityFilterOptions: () => new Promise(resolve => setTimeout(() => resolve(MOCK_DATA.exploration.entityExplorer.filterOptions), 200)),
+  },
+
+  AnalysisService: {
+    getGraphData: (args) => new Promise(resolve => {
+      const [entityId] = args; // 不再需要 existingNodeIds，因为前端逻辑已优化
+      const graphForEntity = MOCK_DATA.analysis.fullGraph[entityId];
+      let response = graphForEntity ? { nodes: graphForEntity.nodes, links: graphForEntity.links } : { nodes: [], links: [] };
+      setTimeout(() => resolve(response), 600);
+    }),
+
+    /**
+     * **** 新增：模拟根据ID获取实体基本信息 ****
+     * @param {Array} args - 包含实体ID的数组, e.g., ['comp_nvidia']
+     */
+    getEntityInfo: (args) => new Promise(resolve => {
+        const [entityId] = args;
+        // 在所有可能的实体列表中查找
+        const entity = MOCK_DATA.exploration.entityExplorer.entities.find(e => e.id === entityId);
+        
+        if (entity) {
+            // 只返回前端需要的基本信息
+            resolve({ id: entity.id, name: entity.name, type: entity.type });
+        } else {
+            // 优雅地处理找不到的情况
+            console.warn(`[MOCK] Entity with ID "${entityId}" not found for getEntityInfo.`);
+            resolve({ id: entityId, name: entityId.toUpperCase(), type: '未知' });
+        }
+    }),
+
+    getElementDetails: (args) => new Promise(resolve => {
+        const [elementId] = args;
+        let result = MOCK_DATA.analysis.elementDetails[elementId];
+
+        if (!result && elementId.includes('_')) {
+            const parts = elementId.split('_');
+            result = MOCK_DATA.analysis.elementDetails[`${parts[0]}_${parts[1]}`] || MOCK_DATA.analysis.elementDetails[`${parts[1]}_${parts[0]}`];
+        }
+        
+        setTimeout(() => resolve(result || { name: '未找到详情', summary: '无' }), 300);
+    }),
+
+    getEvolutionData: (args) => new Promise(resolve => {
+        const [entityId] = args;
+        const data = MOCK_DATA.analysis.evolution[entityId] || { trendData: [], timelineEvents: [] };
+        setTimeout(() => resolve(data), 700);
+    }),
+      
+    getEcosystemData: (args) => new Promise(resolve => {
+        const [entityId, competitorIds] = args;
+        // 简单模拟，实际应根据competitorIds过滤数据
+        const data = MOCK_DATA.analysis.ecosystem[entityId] || { radarData: {}, matrixData: [], swot: {} };
+        setTimeout(() => resolve(data), 700);
+    })
+  },
+
+  FindingsService: {
+    getFindings: (args) => new Promise(resolve => {
+        const [type, filters] = args;
+        console.log(`[MOCK] FindingsService.getFindings called for type: ${type}`);
+        const data = MOCK_DATA.findings[type] || [];
+        // 模拟筛选
+        const filteredData = data.filter(item => 
+            !filters?.keyword || item.title.toLowerCase().includes(filters.keyword.toLowerCase())
+        );
+        setTimeout(() => resolve({
+            records: filteredData,
+            totalRecords: filteredData.length
+        }), 400);
+    }),
+    // --- 新增：模拟保存快照的服务 ---
+    saveSnapshot: (args) => new Promise(resolve => {
+        const snapshotData = args[0];
+        console.log('[MOCK] Received snapshot data to save:', {
+            ...snapshotData,
+            imageData: snapshotData.imageData.substring(0, 50) + '...' // 避免在控制台打印过长的 Base64 字符串
+        });
+
+        // 在模拟数据中添加新的快照
+        const newSnapshot = {
+            id: `snap_${Date.now()}`,
+            title: snapshotData.title,
+            type: 'snapshots', // 确保类型正确
+            description: snapshotData.description,
+            imageUrl: 'https://placehold.co/600x400/161B22/c9d1d9?text=新保存的快照', // 实际应用中，这里会是后端返回的图片 URL
+            analysisType: snapshotData.analysisType,
+            targetEntity: snapshotData.targetEntity,
+            createdAt: snapshotData.createdAt
+        };
+        MOCK_DATA.findings.snapshots.unshift(newSnapshot); // 将新快照添加到数组开头
+
+        setTimeout(() => {
+            resolve({ success: true, snapshotId: newSnapshot.id });
+        }, 1000);
+    }),
+    getFindingDetails: (args) => new Promise(resolve => {
+        const [type, id] = args;
+        console.log(`[MOCK] FindingsService.getFindingDetails called for type: ${type}, id: ${id}`);
+        const item = MOCK_DATA.findings[type]?.find(i => i.id === id);
+        // 模拟关联内容的获取
+        if (type === 'reports' && item) {
+            item.hydratedContent = item.contentBlocks.map(block => {
+                return MOCK_DATA.findings[block.type + 's']?.find(content => content.id === block.id);
+            });
+        }
+        setTimeout(() => resolve(item), 250);
+    }),
+    // --- 确保 getCompanyTimeline 方法存在且正确 ---
+    getCompanyTimeline: (args) => new Promise(resolve => {
+        const companyId = args[0];
+        const timelineData = MOCK_DATA.findings.companyTimelines[companyId] || MOCK_DATA.findings.companyTimelines['default_timeline'];
+        setTimeout(() => resolve(timelineData), 800);
+    })
+  },
+
+  CopilotService: {
+      performDeepResearch: (args) => new Promise(resolve => {
+          const [query] = args;
+          console.log(`[MOCK] CopilotService.performDeepResearch called with query: "${query}"`);
+          const jobId = `copilot-job-${Date.now()}`;
+          // 将任务状态存入运行时数据
+          MOCK_DATA.runtime.jobStatus[jobId] = 0; 
+          setTimeout(() => resolve({ jobId: jobId }), 500);
+      }),
+
+      getResearchStatus: (args) => new Promise(resolve => {
+          const [jobId] = args;
+          const statusSequence = [
+            '正在解析研究需求...',
+            '调用AnalysisService获取关系网络...',
+            '调用AnalysisService获取生态位数据...',
+            'AI正在生成SWOT分析...',
+            '正在撰写报告结构...',
+            '完成'
+          ];
+          
+          let currentStatusIndex = MOCK_DATA.runtime.jobStatus[jobId];
+          
+          if (typeof currentStatusIndex === 'undefined') {
+              resolve({ status: 'FAILED', error: '任务ID不存在' });
+              return;
+          }
+
+          if (currentStatusIndex < statusSequence.length - 1) {
+              resolve({ status: statusSequence[currentStatusIndex], progress: Math.round((currentStatusIndex + 1) / statusSequence.length * 100), result: null });
+              MOCK_DATA.runtime.jobStatus[jobId]++;
+          } else {
+              delete MOCK_DATA.runtime.jobStatus[jobId];
+              resolve({
+                status: 'COMPLETED',
+                progress: 100,
+                result: MOCK_DATA.copilot.nvidiaVsCerebrasReport // 返回预设的Markdown报告
+              });
+          }
+      }),
+  },
+
+  SystemAdminService: {
+    getTechOptions: () => new Promise(resolve => resolve(MOCK_DATA.system.allTechOptions)),
+    getCompetitorOptions: () => new Promise(resolve => resolve(MOCK_DATA.system.allCompanyOptions)),
+    getUserAccountByEmail: (args) => new Promise(resolve => {
+        const user = MOCK_DATA.auth.authInfo;
+        resolve({
+            user_email: user.user_email,
+            display_name: user.display_name,
+            role_id: user.role_id,
+            effective_focus: user.effective_focus
+        });
+    }),
+    saveUserFocus: (args) => new Promise(resolve => {
+        const [focusData] = args;
+        MOCK_DATA.auth.authInfo.effective_focus.focusedTechIds = focusData.focusedTechIds;
+        MOCK_DATA.auth.authInfo.effective_focus.focusedCompetitorIds = focusData.focusedCompetitorIds;
+        resolve({ success: true });
+    }),
+        getSystemSnapshot: () => new Promise(resolve => {
+        setTimeout(() => resolve(MOCK_DATA.system.snapshot), 300);
+    }),
+    getRegistry: (args) => new Promise(resolve => {
+        const [registryKey, options] = args;
+        const data = MOCK_DATA.system[registryKey] || [];
+        // 模拟搜索
+        const filtered = data.filter(item => {
+            if (!options?.search) return true;
+            return Object.values(item).some(val => String(val).toLowerCase().includes(options.search.toLowerCase()));
+        });
+        setTimeout(() => resolve({
+            records: filtered,
+            totalRecords: filtered.length
+        }), 400);
+    }),
+    getRegistryItem: (args) => new Promise(resolve => {
+        const [registryKey, itemId] = args;
+        const item = MOCK_DATA.system[registryKey]?.find(i => i.id === itemId);
+        setTimeout(() => resolve(item), 200);
+    }),
+    saveRegistryItem: (args) => new Promise(resolve => {
+        const [registryKey, item] = args;
+        const registry = MOCK_DATA.system[registryKey];
+        if (!registry) return resolve({ success: false, error: '注册表不存在' });
+
+        if (item.id) { // 更新
+            const index = registry.findIndex(i => i.id === item.id);
+            if (index > -1) registry[index] = { ...registry[index], ...item };
+        } else { // 新增
+            item.id = `new_${registryKey}_${Date.now()}`;
+            registry.push(item);
+        }
+        resolve({ success: true, item: item });
+    }),
+    deleteRegistryItem: (args) => new Promise(resolve => {
+        const [registryKey, itemId] = args;
+        const registry = MOCK_DATA.system[registryKey];
+        if (!registry) return resolve({ success: false, error: '注册表不存在' });
+        
+        const index = registry.findIndex(i => i.id === itemId);
+        if (index > -1) registry.splice(index, 1);
+        
+        resolve({ success: true });
+    })
+  }
+};
+
+
+// ===================================================================
+//  3. MOCK_API - 公共接口 (保持不变)
+// ===================================================================
+const MOCK_API = (() => {
+  return {
+    getService: (serviceName) => {
+      if (!MOCK_SERVICES[serviceName]) {
+        console.error(`[MOCK] Service not found: ${serviceName}`);
+        return new Proxy({}, { get: () => () => Promise.resolve({ error: `Service ${serviceName} not found` }) });
+      }
+      return MOCK_SERVICES[serviceName];
+    }
+  };
+})();
+</script>

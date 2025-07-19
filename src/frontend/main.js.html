@@ -1,0 +1,184 @@
+<script>
+  /**
+   * @file frontend/main.js.html
+   * @description Application entry point, handles initialization, routing, and global events.
+   * @version 7.0 (Final Stable Version)
+   */
+
+  // ==================================================================
+  //  1. Page Handlers (Routing Table)
+  // ==================================================================
+  const pageHandlers = {
+    'home': HomePage,
+    'exploration': ExplorationPage,
+    'analysis': AnalysisPage,
+    'copilot': ActionsPage,
+    'findings': FindingsPage,
+    'system': SystemPage,
+    'default': HomePage
+  };
+
+  // ==================================================================
+  //  2. Global UI and Event Handlers
+  // ==================================================================
+  function setupGlobalUI(authInfo) {
+    const userDisplayElement = document.getElementById('user-display-name');
+    if (userDisplayElement) {
+      userDisplayElement.textContent = authInfo.display_name;
+    }
+  }
+
+  function setupGlobalEventListeners() {
+    document.querySelectorAll('.nav-link').forEach(l => {
+      l.addEventListener('click', e => {
+        e.preventDefault();
+        const pageId = e.currentTarget.dataset.page;
+        if (pageId) App.switchPage(pageId);
+      });
+    });
+    setupHamburgerMenu();
+
+    // 为用户显示名称添加点击事件，以打开用户管理模态框
+    const userDisplayElement = document.getElementById('user-display-name');
+    if (userDisplayElement) {
+      userDisplayElement.addEventListener('click', () => {
+        // 确保 HomePage 模块已加载且其 showManageWatchlistModal 方法可用
+        // pageHandlers['home'] 包含了 HomePage 模块的公共接口
+        if (pageHandlers['home'] && typeof pageHandlers['home'].showManageWatchlistModal === 'function') {
+          pageHandlers['home'].showManageWatchlistModal();
+        } else {
+          console.warn("HomePage 模块或 showManageWatchlistModal 方法未准备好。");
+          uiUtils.showToast("用户管理功能未准备好，请稍后再试。", "info");
+        }
+      });
+    }
+  }
+
+  // ==================================================================
+  //  3. App Core Lifecycle Methods
+  // ==================================================================
+  let authReadyPromise;
+  let authReadyResolve;
+  let authReadyReject;
+
+  // file: frontend/main.js.html
+
+  App.init = function() {
+    if (App._initialized) return;
+    App._initialized = true;
+
+    console.log("[MAIN.JS] App.init() called.");
+    
+    authReadyPromise = new Promise((resolve, reject) => {
+      authReadyResolve = resolve;
+      authReadyReject = reject;
+    });
+
+    // --- 关键修改：统一本地和 GAS Mock 的初始化方式 ---
+    // 如果是本地环境，或者在 GAS 环境下强制使用 Mock，则走前端模拟认证流程
+    if (window.IS_LOCAL_ENV === true || (window.IS_LOCAL_ENV === false && App.FORCE_MOCK_IN_GAS === true)) {
+      const logPrefix = window.IS_LOCAL_ENV ? '[LOCAL_MOCK]' : '[GAS_MOCK]';
+      console.log(`${logPrefix} Initializing with mock authentication.`);
+      
+      // 因为 App.callApi 会自动路由到 MOCK_API，所以这里可以直接调用
+      App.callApi('AuthService', 'authenticateUser', [])
+        .then(authInfo => {
+          App.handleAuthInfoLoaded(authInfo);
+        })
+        .catch(error => {
+          App.handleAuthError(error);
+        });
+
+    } else {
+      // --- 只有在 GAS 环境且不强制 Mock 时，才走真实的后端调用 ---
+      console.log("[MAIN.JS] Running in REAL GAS ENV mode. Calling backend...");
+      google.script.run
+        .withSuccessHandler(response => {
+          try {
+            const authInfo = JSON.parse(response);
+            if (authInfo && authInfo.error === 'LOGIN_REQUIRED') {
+              window.top.location.href = authInfo.redirectUrl;
+              return;
+            }
+            if (authInfo.error) { throw new Error(authInfo.error); }
+            App.handleAuthInfoLoaded(authInfo);
+          } catch (e) {
+            App.handleAuthError(new Error(`认证响应解析失败: ${e.message}`));
+          }
+        })
+        .withFailureHandler(error => { App.handleAuthError(error); })
+        .callApi('AuthService', 'authenticateUser', []);
+    }
+  };
+
+  App.handleAuthInfoLoaded = function(authInfo) {
+    currentUserAuthInfo = authInfo;
+    console.log("[MAIN.JS] App.handleAuthInfoLoaded() called with user:", currentUserAuthInfo.display_name);
+
+    if (authReadyResolve) {
+      authReadyResolve(authInfo);
+      console.log("[MAIN.JS] authReadyPromise has been resolved. API calls are now unlocked.");
+    }
+  
+    const finalizeUi = () => {
+      console.log("[MAIN.JS] Finalizing UI...");
+      
+      const loader = document.getElementById('loader');
+      if (loader) loader.style.display = 'none';
+
+      const pageContentWrapper = document.getElementById('page-content-wrapper');
+      if (pageContentWrapper) pageContentWrapper.classList.remove('hidden');
+
+      setupGlobalUI(authInfo);
+      setupGlobalEventListeners();
+
+      const params = new URLSearchParams(window.location.search);
+      const page = params.get('page') || 'home';
+      
+      App.switchPage(page);
+      console.log(`[MAIN.JS] ✅ App initialized successfully! Switched to page: ${page}`);
+    };
+  
+    finalizeUi();
+  };
+
+  App.handleAuthError = function(error) {
+    console.error('[MAIN.JS] Authentication Error:', error);
+    const loader = document.getElementById('loader');
+    if (loader) loader.style.display = 'none';
+    if(authReadyReject) authReadyReject(error);
+    const contentArea = document.getElementById('main-content');
+    if(contentArea) contentArea.innerHTML = `<div class="text-center p-8 text-red-500">应用初始化失败: ${error.message}</div>`;
+  };
+
+  App.switchPage = async function(pageId, context = {}) {
+    console.log(`[MAIN.JS] Switching to page: ${pageId}`);
+    
+    // --- 核心修正：控制全局探索HUD的可见性 ---
+    const explorationHud = document.getElementById('exploration-hud');
+    if (explorationHud) {
+        if (pageId === 'exploration') {
+            explorationHud.style.display = 'block';
+        } else {
+            explorationHud.style.display = 'none';
+        }
+    }
+
+    document.querySelectorAll('.nav-link').forEach(l => {
+        l.classList.toggle('active', l.dataset.page === pageId);
+    });
+    document.querySelectorAll('.page-container').forEach(p => {
+        p.classList.toggle('hidden', p.id !== `page-${pageId}`);
+    });
+
+    const pageInitializer = pageHandlers[pageId] || pageHandlers['default'];
+    if (pageInitializer && typeof pageInitializer.init === 'function') {
+        try {
+            await authReadyPromise;
+            await pageInitializer.init(context);
+        } catch(e) {
+            console.error(`Error initializing page '${pageId}':`, e);
+        }
+    }
+  };
+</script>

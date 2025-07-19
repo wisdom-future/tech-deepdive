@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技术洞察引擎</title>
+    <!-- <base target="_top"> -->
+
+    <!-- =================================================================== -->
+    <!-- 1. 外部库加载 (JS) - JS 库的加载顺序通常不太受 CSS 影响，但为了结构清晰，仍保持在 CSS 之前 -->
+    <!-- =================================================================== -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2.1.0/dist/echarts-wordcloud.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.0.0/dist/markdown-it.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- 3D 渲染库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three-spritetext@1.8.1/dist/three-spritetext.min.js"></script>
+
+    <!-- =================================================================== -->
+    <!-- 2. Tailwind CSS 配置 (必须在所有使用 Tailwind 类之前)                -->
+    <!-- =================================================================== -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0052ff',
+                        secondary: '#6c757d',
+                        success: '#28a745',
+                        warning: '#ffc107',
+                        error: '#dc3545',
+                        info: '#17a2b8',
+                        
+                        'bg-deep-dark': '#0D1117',
+                        'bg-dark': '#161B22',
+                        'bg-soft-dark': '#21262d',
+                        'border-dark': '#30363d',
+                        
+                        'text-light': '#c9d1d9',
+                        'text-medium': '#8b949e',
+                        'text-dark': '#6e7681',
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'card': '0 4px 15px rgba(0,0,0,0.2)',
+                        'card-hover': '0 6px 20px rgba(0,0,0,0.3)',
+                        'glow-primary': '0 0 15px rgba(0, 82, 255, 0.6), 0 0 25px rgba(0, 82, 255, 0.4)',
+                        'glow-active-tab': '0 0 8px rgba(0, 82, 255, 0.8), 0 0 15px rgba(0, 82, 255, 0.5)',
+                    }
+                },
+            }
+        }
+    </script>
+
+    <!-- =================================================================== -->
+    <!-- 3. 自定义样式系统 - CSS 文件加载顺序非常重要                         -->
+    <!-- =================================================================== -->
+    
+    <!-- 3.1. 原子工具类定义 (通过 @apply) - 这些样式会直接转换为 CSS -->
+    <style type="text/tailwindcss">
+        @layer components {
+            .panel {
+                @apply bg-bg-dark border border-border-dark rounded-xl shadow-card;
+            }
+            .interactive-panel {
+                @apply panel transition-all duration-300 hover:border-primary hover:shadow-glow-primary;
+            }
+            .input-dark {
+                @apply w-full bg-bg-soft-dark border border-border-dark rounded-lg px-4 py-2 text-text-light placeholder-text-dark focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-colors;
+            }
+            .btn-primary {
+                @apply px-6 py-2 bg-primary text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100;
+            }
+            .btn-secondary {
+                @apply px-4 py-2 bg-bg-soft-dark text-text-light rounded-md hover:bg-gray-700 transition;
+            }
+        }
+        @layer utilities {
+            .content-auto { content-visibility: auto; }
+            .transition-default { @apply transition-all duration-300 ease-in-out; }
+            
+            .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+            .badge-success { @apply bg-green-800/50 text-green-200; }
+            .badge-inactive { @apply bg-gray-700 text-gray-300; }
+            .badge-danger { @apply bg-red-800/50 text-red-200; }
+        }
+    </style>
+    
+    <!-- 3.2. 全局样式和第三方库覆盖 - 这些样式会直接转换为 CSS -->
+    <style>
+        /* --- 全局样式 --- */
+        :root {
+            --header-height: 80px;
+        }
+        
+        body {
+            background-color: #0D1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #161B22; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #8b949e; }
+
+        /* 骨架屏动画 */
+        @keyframes shimmer { 0% { background-position: -1000px 0 } 100% { background-position: 1000px 0 } }
+        .skeleton { background: linear-gradient(to right, #21262d 4%, #30363d 25%, #21262d 36%); background-size: 1000px 100%; animation: shimmer 1.5s infinite linear; }
+        
+        /* 隐藏未激活的Tab内容 */
+        .explore-tab-content.hidden, .analysis-tab-content.hidden, .system-tab-content.hidden { display: none; }
+        
+        .tom-select-custom .ts-control {
+            background-color: #f9fafb; /* bg-gray-50 */
+            border: 1px solid #d1d5db;   /* border-gray-300 */
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem;
+        }
+        .tom-select-custom .ts-control input {
+            color: #111827; /* text-gray-900 */
+        }
+        .tom-select-custom .ts-control input::placeholder {
+            color: #6b7280; /* text-gray-500 */
+        }
+        .tom-select-custom .ts-dropdown {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            z-index: 100;
+            margin-top: 4px;
+        }
+        .tom-select-custom .ts-dropdown .option {
+            padding: 0.6rem 1rem;
+            color: #374151; /* text-gray-700 */
+        }
+        .tom-select-custom .ts-dropdown .option:hover, 
+        .tom-select-custom .ts-dropdown .active {
+            background-color: #0052ff; /* primary */
+            color: #ffffff;
+        }
+        .tom-select-custom .ts-control .item {
+            background: #0052ff;
+            color: #ffffff;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 500;
+            margin: 2px 4px 2px 0;
+            padding: 5px 12px;
+        }
+        .tom-select-custom .ts-control .remove {
+            color: #a5b4fc;
+            margin-left: 6px;
+        }
+
+        /* 深色模式下的覆盖样式 */
+        .dark .tom-select-custom .ts-control {
+            background-color: #21262d; /* bg-soft-dark */
+            border-color: #30363d;     /* border-dark */
+        }
+        .dark .tom-select-custom .ts-control input {
+            color: #c9d1d9; /* text-light */
+        }
+        .dark .tom-select-custom .ts-control input::placeholder {
+            color: #6e7681; /* text-dark */
+        }
+        .dark .tom-select-custom .ts-dropdown {
+            background-color: #161B22; /* bg-dark */
+            border-color: #30363d;     /* border-dark */
+        }
+        .dark .tom-select-custom .ts-dropdown .option {
+            color: #c9d1d9; /* text-light */
+        }
+
+        /* **** 新增：为成果中心左侧导航定义样式 **** */
+        .findings-nav-link {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            color: #8b949e;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .findings-nav-link:hover {
+            background-color: #21262d;
+            color: #c9d1d9;
+        }
+        .findings-nav-link.active {
+            background-color: #0052ff;
+            color: #ffffff;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0, 82, 255, 0.3);
+        }
+
+        /* --- 新增：浅色主题 ("白纸黑字") 样式 --- */
+        /* 当 <html> 标签有 'light' 类时，这些样式会生效 */
+        .light body {
+            background-color: #ffffff; /* 白色背景 */
+            color: #111827;           /* 深灰色文字 (bg-gray-900) */
+        }
+        .light .panel, .light .interactive-panel {
+            background-color: #f9fafb; /* bg-gray-50 */
+            border-color: #e5e7eb;   /* border-gray-200 */
+        }
+        .light .input-dark {
+            background-color: #f3f4f6; /* bg-gray-100 */
+            border-color: #d1d5db;   /* border-gray-300 */
+            color: #111827;
+        }
+        .light .input-dark::placeholder {
+            color: #6b7280; /* text-gray-500 */
+        }
+        .light .text-text-light { color: #1f2937; } /* text-gray-800 */
+        .light .text-text-medium { color: #4b5563; } /* text-gray-600 */
+        .light .text-text-dark { color: #6b7280; } /* text-gray-500 */
+
+        /* 修正导航栏在浅色模式下的文字颜色 */
+        .light #theme-toggle-btn, .light #user-display-name {
+            color: #1f2937; /* 深色文字以在浅色背景下可见 */
+            /* 或者保持白色，如果您的导航栏背景在浅色模式下仍然是深色的 */
+        }
+    </style>
+
+    <!-- 核心 CSS 库 (Font Awesome 可以在这里) -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+
+    <!-- !!! TomSelect 的 CSS 必须在所有自定义 <style> 标签之后 !!! -->
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css" rel="stylesheet">
+
+</head>
+<body class="text-gray-200"> <!-- 调整 body 默认文字颜色 -->
+  <!-- 导航栏 -->
+   <header class="fixed top-0 left-0 w-full h-auto md:h-[var(--header-height)] bg-navDark border-b border-gray-800/20 flex flex-row items-center px-4 md:px-6 py-2 md:py-0 z-50 shadow-lg bg-[url('https://media.istockphoto.com/id/153948983/photo/swimmer-diving-after-the-jump-underwater-view.jpg?s=1024x1024&w=is&k=20&c=MI1DyHT47zouV_vFmobsayuie3py-ltW_HufxX2aptM=')] bg-cover bg-center bg-blend-overlay bg-navDark/80">
+    <!-- Logo -->
+    <div class="w-full md:w-auto flex justify-between items-center">
+      <div class="logo text-white font-bold text-2xl tracking-wide text-shadow-md">
+        Deepdive Engine
+      </div>
+      <!-- 移动端汉堡菜单按钮 (保持不变) -->
+      <button id="hamburger-menu-btn" class="text-white text-2xl p-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-600 md:hidden">
+        <i class="fa fa-bars"></i>
+      </button>
+    </div>
+    
+    <!-- 导航菜单 -->
+    <nav id="main-nav" class="w-full md:w-auto hidden md:flex flex-wrap justify-center md:justify-start items-center gap-x-2 gap-y-2 mt-2 md:mt-0 md:ml-10">
+      <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="home">
+        <i class="fa fa-dashboard mr-2"></i>Dashboard
+      </a>
+      <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="exploration">
+        <i class="fa fa-database mr-2"></i>Exploration
+      </a>
+      <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="analysis">
+        <i class="fa fa-lightbulb-o mr-2"></i>Analysis
+      </a>
+      <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="findings">
+        <i class="fa fa-file-text-o mr-2"></i>Findings
+      </a>
+      <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="copilot">
+        <i class="fa fa-cogs mr-2"></i>AI-Copilot
+      </a>
+      <a href="#" class="nav-link text-white px-4 py-2 rounded-lg font-medium transition-all hover:bg-white/20 text-lg flex items-center" data-page="system">
+        <i class="fa fa-gears mr-2"></i>System
+      </a>
+    </nav>
+
+    <div class="flex items-center ml-auto space-x-2" style="gap:10px;">
+      <!-- 用户名 -->
+      <div id="user-display-name" class="text-white text-sm sm:block"></div>
+    </div>
+  </header>
+
+  <!-- 2. 主内容区域 -->
+  <main id="main-content" class="pt-[var(--header-height)]">
+    <!-- 初始加载动画 -->
+    <div id="loader" class="flex flex-col justify-center items-center h-[calc(100vh-var(--header-height)-60px)] text-gray-500 text-lg">
+      <div class="spinner border-4 border-gray-200 border-l-primary w-10 h-10 rounded-full animate-spin mb-4"></div>
+      <p>正在初始化...</p>
+    </div>
+
+    <div id="page-content-wrapper" class="hidden ...">
+      <div id="page-home" class="page-container hidden">
+        <section id="module-marketRadar"></section>
+        <section id="module-athenasBriefing"></section>
+        <section id="module-emergingSignals"></section>
+        <section id="module-myWatchlist"></section>
+        <section id="module-techFeed"></section>
+     </div>
+
+      <div id="page-exploration" class="page-container hidden">
+        <!-- Tab Navigation -->
+        <div class="border-b border-gray-700 sticky top-[var(--header-height)] z-30 bg-gray-900/80">
+          <div id="explore-tabs" class="flex border-b border-gray-700">
+            <!-- 🌌 全域星图 (Galaxy Map) -->
+            <a href="#" data-tab="galaxy" class="explore-tab-link px-6 py-4 font-bold text-base border-b-2 border-transparent active">
+              <i class="fa fa-globe mr-2"></i> 🌌 全域星图
+            </a>
+            <!-- 🧬 主题信息流 (Topic Feeds) -->
+            <a href="#" data-tab="feeds" class="explore-tab-link px-6 py-4 font-bold text-base border-b-2 border-transparent text-gray-300">
+              <i class="fa fa-rss mr-2"></i> 🧬 主题信息流
+            </a>
+            <!-- 🔬 实体浏览器 (Entity Explorer) -->
+            <a href="#" data-tab="explorer" class="explore-tab-link px-6 py-4 font-bold text-base border-b-2 border-transparent text-gray-300">
+              <i class="fa fa-cubes mr-2"></i> 🔬 实体浏览器
+            </a>
+          </div>
+        </div>
+
+        <!-- Tab Content Panels -->
+        <!-- 🌌 全域星图 内容面板 -->
+        <div id="explore-galaxy-content" class="explore-tab-content p-4 md:p-6 lg:p-8 bg-transparent">
+          <div id="spacetime-container" class="relative w-full h-[calc(100vh-var(--header-height)-120px)] bg-gray-900/50 rounded-xl shadow-lg border border-gray-700">
+            <button id="galaxy-back-btn" class="absolute top-4 left-4 bg-gray-700/50 text-white px-4 py-2 rounded-lg hover:bg-primary transition-colors hidden z-10">
+              <i class="fa fa-arrow-left mr-2"></i>返回星系视图
+            </button>
+            <div class="absolute inset-0 flex items-center justify-center text-gray-400 text-lg">
+              <i class="fa fa-spinner fa-spin mr-3"></i> 正在加载全域星图...
+            </div>
+            <div id="spacetime-tooltip" class="absolute bg-black/70 text-white text-xs p-2 rounded shadow-lg hidden pointer-events-none z-50"></div>
+          </div>
+        </div>
+
+        <!-- 🧬 主题信息流 内容面板 -->
+        <div id="explore-feeds-content" class="explore-tab-content hidden p-4 md:p-6 lg:p-8 bg-transparent">
+          <div class="flex flex-col lg:flex-row gap-6 h-full">
+            <!-- 主题选择器 -->
+            <div class="lg:w-1/4 bg-gray-800/50 p-6 rounded-xl shadow-lg border border-gray-700 flex flex-col">
+              <h3 class="text-xl font-bold text-gray-200 mb-4">选择主题</h3>
+              <select id="feeds-topic-selector" multiple class="w-full bg-gray-700 border border-gray-600 text-white"></select>
+              <div class="mt-auto pt-4 border-t border-gray-700 text-gray-400 text-sm">选择1-4个主题，查看相关信息流。</div>
+            </div>
+            <!-- 动态信息流矩阵 -->
+            <div id="feeds-matrix-container" class="lg:flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[400px]">
+              <div class="col-span-full flex items-center justify-center h-full bg-gray-900/50 rounded-xl text-gray-400 text-lg border border-gray-700">
+                👋 请从左侧选择主题以加载信息流。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 🔬 实体浏览器 内容面板 -->
+        <div id="explore-explorer-content" class="explore-tab-content hidden p-4 md:p-6 lg:p-8 bg-transparent">
+          <div class="flex flex-col lg:flex-row gap-6 h-full">
+            <!-- 实体筛选面板 -->
+            <div class="lg:w-1/4 bg-gray-800/50 p-6 rounded-xl shadow-lg border border-gray-700 flex flex-col">
+              <h3 class="text-xl font-bold text-gray-200 mb-4">筛选实体</h3>
+              <div class="space-y-4">
+                <div>
+                  <label for="explorer-entity-type" class="block text-sm font-medium text-gray-400 mb-1">实体类型</label>
+                  <select id="explorer-entity-type" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                    <option value="">所有类型</option>
+                    <option value="Company">公司</option>
+                    <option value="Technology">技术</option>
+                    <option value="Person">专家/人才</option>
+                    <option value="Research_Institution">研究机构</option>
+                    <option value="Product">产品</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="explorer-industry" class="block text-sm font-medium text-gray-400 mb-1">行业分类</label>
+                  <input type="text" id="explorer-industry" placeholder="例如：AI芯片" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                </div>
+                <div>
+                  <label for="explorer-status" class="block text-sm font-medium text-gray-400 mb-1">活跃状态</label>
+                  <select id="explorer-status" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                    <option value="">所有状态</option>
+                    <option value="active">活跃</option>
+                    <option value="inactive">非活跃</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="explorer-location" class="block text-sm font-medium text-gray-400 mb-1">地理位置</label>
+                  <input type="text" id="explorer-location" placeholder="例如：硅谷" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                </div>
+                <div class="mt-6 flex justify-end gap-2">
+                  <button id="explorer-reset-filter-btn" class="px-4 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition">重置</button>
+                  <button id="explorer-apply-filter-btn" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-blue-700 transition">应用筛选</button>
+                </div>
+              </div>
+            </div>
+            <!-- 实体列表 -->
+            <div id="explorer-entity-list-container" class="lg:flex-1 bg-gray-800/50 p-6 rounded-xl shadow-lg border border-gray-700">
+              <h3 class="text-xl font-bold text-gray-200 mb-4">实体列表</h3>
+              <div id="explorer-entity-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="col-span-full text-center py-16 text-gray-400">
+                  <i class="fa fa-search text-5xl mb-4"></i>
+                  <p class="text-lg">请使用左侧筛选器查找实体。</p>
+                </div>
+              </div>
+              <div id="explorer-pagination" class="flex justify-center items-center mt-6 gap-2"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+          
+      <!-- =================================================================== -->
+      <!-- 4. 分析中心页面 (PAGE ANALYSIS)                                     -->
+      <!-- =================================================================== -->
+      <div id="page-analysis" class="page-container hidden">
+        <!-- 1. 顶部目标栏 -->
+        <div id="analysis-top-bar" class="p-4 border-b border-border-dark flex items-center bg-bg-dark text-text-light sticky top-[var(--header-height)] z-20">
+          <span id="analysis-target-display" class="font-bold text-lg flex items-center">
+            <!-- 内容将由JS填充 -->
+            <i class="fa fa-crosshairs mr-3 text-text-medium"></i>
+            <span>分析目标：[请从探索页或下方选择]</span>
+          </span>
+          <button id="analysis-target-switcher-btn" class="ml-4 px-4 py-1.5 bg-bg-soft-dark hover:bg-primary hover:text-white rounded-lg transition-colors text-text-light text-sm">
+            <i class="fa fa-search mr-2"></i>切换/设定
+          </button>
+        </div>
+
+        <!-- 2. 三维分析透镜 (Tab Navigation) -->
+        <div class="border-b border-border-dark bg-bg-dark sticky top-[calc(var(--header-height)+65px)] z-20">
+          <nav id="analysis-tabs" class="flex space-x-1 px-4">
+            <a href="#" class="analysis-tab-link active px-6 py-4 font-semibold border-b-2 border-primary text-primary" data-tab="network-graph">
+              <i class="fa fa-sitemap mr-2"></i>🕸️ 关系网络
+            </a>
+            <a href="#" class="analysis-tab-link px-6 py-4 font-semibold border-b-2 border-transparent text-text-medium" data-tab="evolution">
+              <i class="fa fa-line-chart mr-2"></i>⏳ 演进推演
+            </a>
+            <a href="#" class="analysis-tab-link px-6 py-4 font-semibold border-b-2 border-transparent text-text-medium" data-tab="ecosystem">
+              <i class="fa fa-globe mr-2"></i>🗺️ 生态位分析
+            </a>
+          </nav>
+        </div>
+
+        <!-- 3. Tab内容面板 -->
+        <div class="p-4 md:p-6 lg:p-8">
+          <!-- 关系网络 面板 -->
+          <div id="analysis-network-graph-content" class="analysis-tab-content">
+            <div class="panel p-4 h-[calc(100vh-var(--header-height)-190px)] min-h-[600px] flex flex-col">
+              <!-- 钻取路径导航 -->
+              <div id="graph-breadcrumb" class="flex-shrink-0 mb-3 text-sm text-text-medium"></div>
+              <!-- ECharts 图表容器 -->
+              <div id="analysis-graph-canvas" class="flex-grow w-full h-full"></div>
+            </div>
+          </div>
+          <!-- 演进推演 面板 -->
+          <div id="analysis-evolution-content" class="analysis-tab-content hidden">
+            <div class="panel p-6 min-h-[600px] flex flex-col items-center justify-center text-text-medium">
+                <i class="fa fa-hourglass-half text-6xl text-text-dark mb-4"></i>
+                <p class="text-xl font-semibold">演进推演功能正在开发中...</p>
+              </div>
+          </div>
+          <!-- 生态位分析 面板 -->
+          <div id="analysis-ecosystem-content" class="analysis-tab-content hidden">
+            <div class="panel p-6 min-h-[600px] flex flex-col items-center justify-center text-text-medium">
+                <i class="fa fa-bullseye text-6xl text-text-dark mb-4"></i>
+                <p class="text-xl font-semibold">生态位分析功能正在开发中...</p>
+              </div>
+          </div>
+        </div>
+
+        <!-- 4. 右侧洞察面板 (Inspector) -->
+        <div id="analysis-inspector-panel" class="fixed top-0 right-0 h-full w-[400px] bg-bg-dark border-l border-border-dark shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out z-40 flex flex-col">
+          <!-- 内容将由JS填充 -->
+        </div>
+        <div id="analysis-inspector-overlay" class="fixed inset-0 bg-black/60 hidden z-30"></div>
+      </div>
+
+      <!-- =================================================================== -->
+      <!-- 5. 成果中心页面 (PAGE FINDINGS)                                     -->
+      <!-- =================================================================== -->
+      <div id="page-findings" class="page-container hidden">
+        <div class="flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8">
+          <!-- 1. 左侧成果类型导航 -->
+          <aside class="w-full md:w-64 flex-shrink-0 bg-bg-dark border-r border-border-dark p-4">
+            <h3 class="font-bold text-lg mb-4 text-text-light px-2">研究工作台</h3>
+            <nav id="findings-nav" class="space-y-1">
+              
+              <!-- 1. 技术线索 -->
+              <a href="#" class="findings-nav-link active" data-tab="tech_leads" data-apitype="insights">
+                <i class="fa fa-lightbulb-o fa-fw mr-3"></i><span>技术线索</span>
+              </a>
+              
+              <!-- 2. 专题报告 (原“历史报告”) -->
+              <a href="#" class="findings-nav-link" data-tab="topic_reports" data-apitype="reports">
+                <i class="fa fa-file-text-o fa-fw mr-3"></i><span>专题报告</span>
+              </a>
+
+              <!-- 3. 实体时间轴 -->
+              <a href="#" class="findings-nav-link" data-tab="entity_timeline">
+                <i class="fa fa-calendar-times-o fa-fw mr-3"></i><span>实体时间轴</span>
+              </a>
+              
+              <!-- 4. 分析快照 -->
+              <a href="#" class="findings-nav-link" data-tab="snapshots" data-apitype="snapshots">
+                <i class="fa fa-camera fa-fw mr-3"></i><span>分析快照</span>
+              </a>
+
+              <!-- 5. 例行报告 (新) -->
+              <a href="#" class="findings-nav-link" data-tab="routine_reports">
+                  <i class="fa fa-clock-o fa-fw mr-3"></i><span>例行报告</span>
+              </a>
+
+            </nav>
+          </aside>
+
+          <!-- 2. 右侧主内容区 -->
+          <main id="findings-main-content" class="flex-1 p-6 overflow-y-auto">
+            <!-- 内容将由 JS 动态填充 -->
+            <div class="text-center text-text-medium py-16">
+                <i class="fa fa-spinner fa-spin text-3xl"></i>
+            </div>
+          </main>
+        </div>
+        
+        <!-- 3. 成果详情侧边面板 -->
+        <div id="findings-inspector-panel" class="fixed top-0 right-0 h-full w-full max-w-2xl bg-bg-dark border-l border-border-dark shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out z-40 flex flex-col">
+          <!-- 详情内容将由JS动态填充 -->
+        </div>
+        <div id="findings-inspector-overlay" class="fixed inset-0 bg-black/60 hidden z-30"></div>
+      </div>
+
+      <!-- 新增：创建/编辑专题报告的模态框 -->
+      <div id="report-editor-modal" class="fixed inset-0 bg-black/70 z-50 hidden items-center justify-center p-4">
+          <div class="panel w-full max-w-4xl h-[90vh] flex flex-col p-0">
+              <div class="flex justify-between items-center p-4 border-b border-border-dark">
+                  <h3 class="text-lg font-bold text-text-light">创建/编辑专题报告</h3>
+                  <button id="close-report-editor-btn" class="text-text-medium hover:text-white text-2xl">&times;</button>
+              </div>
+              <div class="flex-grow p-6 overflow-y-auto">
+                  <input type="text" id="report-title-input" placeholder="输入报告标题..." class="input-dark w-full text-2xl font-bold mb-6">
+                  <div id="report-block-editor" class="prose prose-invert max-w-none">
+                      <!-- 块编辑器内容 -->
+                  </div>
+              </div>
+              <div class="p-4 bg-bg-deep-dark border-t border-border-dark flex justify-end gap-3">
+                  <button class="btn-secondary">保存草稿</button>
+                  <button class="btn-primary">发布报告</button>
+              </div>
+          </div>
+      </div>
+
+      <!-- =================================================================== -->
+      <!-- 6. AI Copilot 页面 (PAGE COPILOT)                                   -->
+      <!-- =================================================================== -->
+      <div id="page-copilot" class="page-container hidden">
+        <div class="p-4 md:p-6 lg:p-8">
+          <div class="panel p-6 md:p-8">
+            <h2 class="text-2xl font-bold mb-6 text-text-light">AI Copilot 深度研究</h2>
+            
+            <div class="space-y-6">
+              <!-- 1. 研究查询输入区 -->
+              <div class="flex flex-col md:flex-row gap-4 items-start">
+                <div class="flex-grow w-full">
+                  <label for="research-query" class="block text-sm font-medium text-text-medium mb-1">输入您的研究查询：</label>
+                  <textarea id="research-query" 
+                            class="input-dark w-full text-base" 
+                            placeholder="例如：分析一下NVIDIA在AI芯片领域的护城河有多深，并对比其与Cerebras在技术路线上的主要差异和潜在风险..." 
+                            rows="3"></textarea>
+                </div>
+                <button id="perform-research-btn" class="btn-primary w-full md:w-auto mt-0 md:mt-7 flex-shrink-0">
+                  <i class="fa fa-flask mr-2"></i>开始深度研究
+                </button>
+              </div>
+
+              <!-- 2. 研究报告展示区 -->
+              <div class="bg-bg-deep-dark p-6 rounded-lg border border-border-dark min-h-[400px] relative">
+                <h3 class="text-xl font-semibold mb-4 text-text-light flex items-center">
+                  <i class="fa fa-file-text-o text-primary mr-3"></i>研究报告
+                </h3>
+                <div id="research-results-display" class="prose prose-invert max-w-none text-text-light">
+                  <p class="text-text-medium">在此输入您的研究查询，AI Copilot 将为您生成一份包含图文和数据的深度分析报告。</p>
+                </div>
+                <!-- 加载指示器 -->
+                <div id="research-loading-overlay" class="absolute inset-0 bg-bg-deep-dark/80 backdrop-blur-sm flex-col items-center justify-center hidden rounded-lg">
+                    <div class="loader-dots mb-4">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                    <p id="research-status-text" class="text-primary text-lg font-medium"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================================== -->
+      <!-- 7. 系统中心页面 (PAGE SYSTEM)                                     -->
+      <!-- =================================================================== -->
+      <div id="page-system" class="page-container hidden">
+        <div class="p-4 md:p-6 lg:p-8">
+          <h2 class="text-2xl font-bold mb-6 text-text-light">系统控制面板</h2>
+          <!-- 卡片式网格布局 -->
+          <div id="system-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            <!-- 系统管理卡片将由JS动态填充 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增：通用的配置管理模态框 -->
+      <div id="management-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
+        <div class="panel w-full max-w-4xl h-[90vh] flex flex-col p-0">
+          <!-- Modal Header -->
+          <div class="flex justify-between items-center p-4 border-b border-border-dark flex-shrink-0">
+            <h3 id="modal-title" class="text-lg font-bold text-text-light">管理</h3>
+            <button id="close-management-modal" class="text-text-medium hover:text-white text-2xl">&times;</button>
+          </div>
+          <!-- Modal Body -->
+          <div class="p-6 flex-grow overflow-y-auto">
+            <!-- 表格和表单将由JS动态填充 -->
+            <div id="modal-content-area"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 关键修改：将侧边栏的 DOM 结构移动到这里，作为全局组件 -->
+      <div id="dashboard-side-panel" class="fixed top-0 right-0 h-full w-full md:w-[420px] bg-white dark:bg-bg-dark shadow-lg transform translate-x-full transition-transform duration-300 ease-in-out z-50"></div>
+      <div id="side-panel-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-40"></div>
+      <!-- 结束修改 -->
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ============= 全局详情展示模态框 (MODAL) ================= -->
+    <!-- ============================================================ -->
+    <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-gray-700"> <!-- ✅ 适应深色背景 -->
+        <!-- Modal Header -->
+        <div class="flex justify-between items-center p-4 border-b border-gray-700"> <!-- ✅ 适应深色背景 -->
+          <h3 id="modalTitle" class="text-xl font-semibold text-gray-200">数据详情</h3> <!-- ✅ 适应深色背景 -->
+          <button class="close-button text-gray-400 hover:text-gray-200 text-2xl">&times;</button> <!-- ✅ 适应深色背景 -->
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto text-gray-300"> <!-- ✅ 适应深色背景 -->
+          <div id="noDataMessage" class="text-center text-gray-500 py-8 hidden">没有找到相关数据。</div> <!-- ✅ 适应深色背景 -->
+          <div class="overflow-x-auto">
+              <table id="detailTable" class="w-full divide-y divide-gray-700 table-fixed"> <!-- ✅ 适应深色背景 -->
+                <!-- thead and tbody will be generated by JS -->
+              </table>
+          </div>
+        </div>
+
+        <!-- Modal Footer (for pagination, if needed later) -->
+        <div class="modal-footer flex justify-between items-center p-4 border-t border-gray-700"> <!-- ✅ 适应深色背景 -->
+          <span id="paginationInfo" class="text-sm text-gray-400"></span> <!-- ✅ 适应深色背景 -->
+          <div>
+            <button id="prevPageBtn" class="px-4 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 disabled:opacity-50">上一页</button> <!-- ✅ 适应深色背景 -->
+            <button id="nextPageBtn" class="px-4 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 disabled:opacity-50 ml-2">下一页</button> <!-- ✅ 适应深色背景 -->
+          </div>
+        </div>
+      </div>
+    </div>
+        <!-- ============= 历史记录详情专用模态框 ================= -->
+    <div id="historyDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+      <div class="bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-700"> <!-- ✅ 适应深色背景 -->
+        <div class="flex justify-between items-center p-4 border-b border-gray-700"> <!-- ✅ 适应深色背景 -->
+          <h3 id="historyModalTitle" class="text-xl font-semibold text-gray-200">任务详情</h3> <!-- ✅ 适应深色背景 -->
+          <button class="close-button text-gray-400 hover:text-gray-200 text-2xl">&times;</button> <!-- ✅ 适应深色背景 -->
+        </div>
+        <div id="historyModalBody" class="p-6 overflow-y-auto text-gray-300"> <!-- ✅ 适应深色背景 -->
+          <!-- 内容将由JS填充 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 全局Toast通知容器 -->
+    <div id="toast-notification" class="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 ease-in-out z-[100]">
+      <p id="toast-message">操作成功！</p>
+    </div>
+
+    <div id="user-modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50" style="display:none;">
+      <div class="bg-gray-900 rounded-2xl shadow-xl w-full max-w-lg flex flex-col border border-gray-700"> <!-- ✅ 适应深色背景 -->
+        <div class="flex justify-between items-center p-4 border-b border-gray-700"> <!-- ✅ 适应深色背景 -->
+          <h3 class="text-xl font-bold text-gray-200">个人中心</h3> <!-- ✅ 适应深色背景 -->
+          <button id="close-user-modal" class="text-gray-400 hover:text-gray-200 text-2xl font-bold">&times;</button> <!-- ✅ 适应深色背景 -->
+        </div>
+        <div class="p-6 text-gray-200"> <!-- ✅ 适应深色背景 -->
+          <div class="mb-6">
+            <div id="user-modal-display-name" class="font-semibold text-lg text-primary"></div>
+            <div id="user-modal-email" class="text-gray-400 text-sm"></div> <!-- ✅ 适应深色背景 -->
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2 font-medium text-gray-400">关注技术领域</label> <!-- ✅ 适应深色背景 -->
+            <select id="user-modal-tech-select" multiple class="w-full bg-gray-700 border border-gray-600 text-white"></select> <!-- ✅ 适应深色背景 -->
+          </div>
+          <div class="mb-4">
+            <label class="block mb-2 font-medium text-gray-400">关注标杆企业</label> <!-- ✅ 适应深色背景 -->
+            <select id="user-modal-company-select" multiple class="w-full bg-gray-700 border border-gray-600 text-white"></select> <!-- ✅ 适应深色背景 -->
+          </div>
+          <div class="flex justify-end">
+            <button id="save-user-focus" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700">保存关注</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- 全局模态框 (MODALS)                                                 -->
+    <!-- =================================================================== -->
+    <div id="target-switcher-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
+      <div class="panel w-full max-w-lg p-0 flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex justify-between items-center p-4 border-b border-border-dark flex-shrink-0">
+          <h3 class="text-lg font-bold text-text-light">切换分析目标</h3>
+          <button id="close-target-switcher-modal" class="text-text-medium hover:text-white text-2xl">&times;</button>
+        </div>
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto space-y-6">
+          <div>
+            <label for="entity-search-input" class="block text-sm font-medium text-text-medium mb-2">搜索实体 (公司、技术等)</label>
+            <select id="entity-search-input" placeholder="输入名称进行搜索..."></select>
+          </div>
+          <div>
+            <h4 class="text-sm font-medium text-text-medium mb-2">或从我的关注中选择</h4>
+            <div id="my-focus-list-container" class="space-y-2 max-h-48 overflow-y-auto">
+              <!-- “我的关注”列表将由JS动态填充 -->
+              <p class="text-text-dark">正在加载关注列表...</p>
+            </div>
+          </div>
+        </div>
+        <!-- Modal Footer -->
+        <div class="p-4 bg-bg-deep-dark border-t border-border-dark flex-shrink-0 text-right">
+          <button id="confirm-target-switch-btn" class="btn-primary" disabled>确认切换</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+<!-- =============================================================== -->
+<!-- ======== LOCAL DEVELOPMENT SCRIPT LOADER (FINAL VERSION) ======== -->
+<!-- =============================================================== -->
+<script>
+    window.IS_LOCAL_ENV = true; 
+    console.log('%c[DEV_MODE] Local environment activated. API calls will be mocked.', 'color: white; background-color: #2c3e50; padding: 4px; border-radius: 4px;');
+    // 关键修改：在本地开发模式下，也最先定义 App 对象
+    const App = {};
+    console.log('Initial App object created for local dev.');
+
+    function includeAndExecute(path) {
+      return new Promise(async (resolve, reject) => {
+        try {
+          const response = await fetch(path);
+          if (!response.ok) throw new Error(`Failed to fetch ${path}: ${response.statusText}`);
+          const htmlContent = await response.text();
+          const scriptTagMatch = htmlContent.match(/<script>([\s\S]*?)<\/script>/);
+          if (scriptTagMatch && scriptTagMatch[1]) {
+            const scriptElement = document.createElement('script');
+            scriptElement.textContent = scriptTagMatch[1];
+            document.head.appendChild(scriptElement);
+          }
+          resolve();
+        } catch (error) { reject(error); }
+      });
+    }
+
+    (async () => {
+      const scriptsToLoad = [
+        'frontend/state_api.js.html', 'frontend/config.js.html', 'frontend/utils.js.html',
+        'frontend/ui_utils.js.html',  'frontend/mock_api.js.html', 
+        'frontend/page_home.js.html', 'frontend/page_exploration.js.html', 'frontend/page_analysis.js.html',
+        'frontend/page_findings.js.html', 'frontend/page_copilots.js.html',
+        'frontend/page_system.js.html', 'frontend/main.js.html'
+      ];
+      console.log('[DEV_MODE] Starting sequential script loading...');
+      try {
+        for (const scriptPath of scriptsToLoad) {
+          await includeAndExecute(scriptPath);
+          console.log(`[DEV_MODE] ... loaded ${scriptPath}`);
+        }
+        console.log('[DEV_MODE] All scripts loaded.');
+        
+        // 在所有脚本加载完毕后，手动调用初始化函数
+        App.init(); 
+      } catch (error) {
+        console.error("Critical error during script loading sequence.", error);
+        document.getElementById('loader').innerHTML = `<p class="text-red-500">脚本加载失败: ${error.message}</p>`;
+      }
+    })();
+</script>
+
+</body>
+</html>

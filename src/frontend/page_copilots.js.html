@@ -1,0 +1,124 @@
+<script>
+/**
+ * @file frontend/page_copilots.js.html
+ * @description Handles the AI Copilot (Deep Research Center) page logic.
+ * @version 1.0 (Initial Implementation)
+ */
+
+const ActionsPage = (() => {
+    let _isInitialized = false;
+    let _researchButton = null;
+    let _queryInput = null;
+    let _resultsDisplay = null;
+    let _loadingOverlay = null;
+    let _statusText = null;
+    let _pollInterval = null; // 用于存储轮询的计时器
+
+    function init() {
+        if (_isInitialized) return;
+        
+        // 获取所有需要的DOM元素
+        _researchButton = document.getElementById('perform-research-btn');
+        _queryInput = document.getElementById('research-query');
+        _resultsDisplay = document.getElementById('research-results-display');
+        _loadingOverlay = document.getElementById('research-loading-overlay');
+        _statusText = document.getElementById('research-status-text');
+
+        _bindEventListeners();
+        _isInitialized = true;
+    }
+
+    function _bindEventListeners() {
+        if (_researchButton) {
+            _researchButton.addEventListener('click', _handlePerformResearch);
+        }
+    }
+
+    async function _handlePerformResearch() {
+        const query = _queryInput.value.trim();
+        if (!query) {
+            uiUtils.showToast('请输入您的研究查询！', 'error');
+            return;
+        }
+
+        // 1. 进入加载状态
+        _setLoadingState(true, '正在启动研究任务...');
+        
+        // 清除上一次的轮询（如果有）
+        if (_pollInterval) {
+            clearInterval(_pollInterval);
+        }
+
+        try {
+            // 2. 启动异步研究任务
+            const { jobId } = await App.callApi('CopilotService', 'performDeepResearch', [query]);
+            if (!jobId) throw new Error("未能获取任务ID。");
+
+            // 3. 开始轮询任务状态
+            _pollInterval = setInterval(async () => {
+                try {
+                    const statusResponse = await App.callApi('CopilotService', 'getResearchStatus', [jobId]);
+                    
+                    if (statusResponse.status === 'COMPLETED') {
+                        clearInterval(_pollInterval);
+                        _pollInterval = null;
+                        _renderReport(statusResponse.result);
+                        _setLoadingState(false);
+                    } else if (statusResponse.status === 'FAILED') {
+                        throw new Error(statusResponse.error || "研究任务执行失败。");
+                    } else {
+                        // 更新加载状态文本
+                        _statusText.textContent = statusResponse.status;
+                    }
+                } catch (pollError) {
+                    clearInterval(_pollInterval);
+                    _pollInterval = null;
+                    _handleError(pollError);
+                }
+            }, 2000); // 每2秒轮询一次
+
+        } catch (initialError) {
+            _handleError(initialError);
+        }
+    }
+    
+    function _renderReport(markdownText) {
+        if (window.markdownit) {
+            const md = window.markdownit();
+            const html = md.render(markdownText);
+            _resultsDisplay.innerHTML = html;
+        } else {
+            // 降级处理，直接显示Markdown文本
+            _resultsDisplay.innerHTML = `<pre>${markdownText}</pre>`;
+        }
+    }
+
+    function _setLoadingState(isLoading, initialMessage = '') {
+        if (isLoading) {
+            _researchButton.disabled = true;
+            _researchButton.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>研究中...';
+            _loadingOverlay.classList.remove('hidden');
+            _loadingOverlay.classList.add('flex');
+            _statusText.textContent = initialMessage;
+            _resultsDisplay.innerHTML = ''; // 清空旧报告
+        } else {
+            _researchButton.disabled = false;
+            _researchButton.innerHTML = '<i class="fa fa-flask mr-2"></i>开始深度研究';
+            _loadingOverlay.classList.add('hidden');
+            _loadingOverlay.classList.remove('flex');
+        }
+    }
+
+    function _handleError(error) {
+        console.error("AI Copilot研究失败:", error);
+        uiUtils.showToast(`研究失败: ${error.message}`, 'error');
+        _setLoadingState(false);
+        _resultsDisplay.innerHTML = `<p class="text-error">抱歉，研究过程中发生错误。请稍后重试。</p>`;
+    }
+
+    return { init };
+})();
+
+// 在 main.js.html 的 pageHandlers 中确保 ActionsPage 已被引用
+// const pageHandlers = { ..., 'copilot': ActionsPage, ... };
+</script>

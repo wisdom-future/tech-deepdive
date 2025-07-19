@@ -1,0 +1,173 @@
+<!-- 文件名: frontend/ui_utils.js.html -->
+<script>
+  const uiUtils = {
+    showToast: function(message, type = 'success') {
+        const toastElement = document.getElementById('toast-notification');
+        const messageElement = document.getElementById('toast-message');
+        if (!toastElement || !messageElement) return;
+        messageElement.textContent = message;
+        toastElement.classList.remove('bg-green-500', 'bg-red-500');
+        if (type === 'success') {
+            toastElement.classList.add('bg-green-500');
+        } else {
+            toastElement.classList.add('bg-red-500');
+        }
+        toastElement.classList.remove('translate-x-full');
+        toastElement.classList.add('translate-x-0');
+        setTimeout(() => {
+            toastElement.classList.remove('translate-x-0');
+            toastElement.classList.add('translate-x-full');
+        }, 3000);
+    },
+    // --- 新增：通用的截图并保存快照的函数 ---
+    /**
+     * 捕获指定 DOM 元素的内容，并将其保存为一个新的“分析快照”。
+     * @param {string} elementId - 要截图的 DOM 元素的 ID。
+     * @param {object} metadata - 包含快照元数据的对象。
+     * @param {string} metadata.title - 快照的标题。
+     * @param {string} metadata.description - 快照的描述。
+     * @param {string} metadata.analysisType - 分析类型，例如 '实体时间轴', '关系网络' 等。
+     * @param {string} metadata.targetEntity - 与此快照相关的目标实体 ID。
+     */
+    captureAndSaveSnapshot: async function(elementId, metadata) {
+        const elementToCapture = document.getElementById(elementId);
+        if (!elementToCapture) {
+            this.showToast('错误：找不到要截图的元素', 'error');
+            console.error(`Snapshot Error: Element with ID "${elementId}" not found.`);
+            return;
+        }
+        if (typeof html2canvas === 'undefined') {
+            this.showToast('错误：截图库 (html2canvas) 未加载', 'error');
+            console.error("Snapshot Error: html2canvas library is not loaded.");
+            return;
+        }
+
+        this.showToast('正在生成快照...', 'info');
+
+        try {
+            // 使用 html2canvas 生成 canvas
+            const canvas = await html2canvas(elementToCapture, {
+                backgroundColor: '#161B22', // 设置与深色主题匹配的背景色
+                useCORS: true,
+                scale: 1.5 // 提高截图清晰度
+            });
+
+            // 将 canvas 转换为 Base64 格式的图片数据
+            const imageDataUrl = canvas.toDataURL('image/png');
+
+            const snapshotData = {
+                ...metadata,
+                imageData: imageDataUrl,
+                createdAt: new Date().toISOString()
+            };
+
+            // 调用后端的保存服务
+            const response = await App.callApi('FindingsService', 'saveSnapshot', [snapshotData]);
+            
+            if (response.success) {
+                this.showToast('快照保存成功！', 'success');
+            } else {
+                throw new Error(response.error || '后端保存失败');
+            }
+
+        } catch (error) {
+            console.error("Failed to capture or save snapshot:", error);
+            this.showToast(`快照保存失败: ${error.message}`, 'error');
+        }
+    },
+    // --- 结束新增函数 ---
+    // --- 新增：通用的详情侧边栏服务 ---
+    /**
+     * 显示一个包含详细信息的侧边栏。
+     * @param {string} title - 侧边栏的标题。
+     * @param {object} details - 一个包含要显示信息的对象。
+     * @param {string} [sourceUrl] - (可选) 原始来源链接。
+     */
+    showDetailsSidePanel: function(title, details, sourceUrl) {
+        // 我们可以复用仪表盘的侧边栏 DOM 结构
+        const panel = document.getElementById('dashboard-side-panel');
+        const overlay = document.getElementById('side-panel-overlay');
+        if (!panel || !overlay) {
+            console.error("Side panel elements not found in DOM.");
+            return;
+        }
+
+        panel.style.transform = "translateX(0%)";
+        overlay.classList.remove('hidden');
+
+        const closePanel = () => {
+            panel.style.transform = "translateX(100%)";
+            overlay.classList.add('hidden');
+        };
+
+        let detailsHtml = Object.entries(details).map(([key, value]) => {
+            // 将驼峰式或下划线式的 key 转换为更易读的标题
+            const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+            return `
+                <div class="mb-4">
+                    <p class="text-sm font-semibold text-gray-500 dark:text-gray-400">${formattedKey}</p>
+                    <p class="text-gray-800 dark:text-gray-200">${value || 'N/A'}</p>
+                </div>
+            `;
+        }).join('');
+
+        panel.innerHTML = `
+          <div class="flex flex-col h-full bg-white dark:bg-[#1F2937] text-gray-800 dark:text-white border-l border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700/50">
+              <h3 class="text-lg font-bold truncate pr-4">${title}</h3>
+              <button id="close-panel-btn" class="text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white text-2xl flex-shrink-0">&times;</button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6">${detailsHtml}</div>
+            ${(sourceUrl && sourceUrl !== '#') ? `
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-gray-900/50">
+              <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="block w-full text-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                <i class="fa fa-external-link mr-2"></i>查看原文
+              </a>
+            </div>
+            ` : ''}
+          </div>
+        `;
+        
+        document.getElementById('close-panel-btn').onclick = closePanel;
+        overlay.onclick = closePanel;
+    }
+  };
+
+  function showHistoryDetailModal(executionId) {
+    App.currentDetailType = 'historyDetail';
+    App.allModalData = [];
+    App.currentPage = 1;
+    App.ui.showDetailListModal(`任务详情: ${executionId}`, 'all');
+    document.getElementById('detailTable').innerHTML = '<tbody><tr><td class="text-center p-4">正在加载...</td></tr></tbody>';
+    const footer = document.querySelector('#detailModal .modal-footer');
+    if (footer) {
+        footer.style.display = 'none';
+    }
+    App.callApi('CollectionStatsService', 'getWorkflowExecutionDetail', [executionId])
+      .then(detail => {
+        if (detail && !detail.error) {
+          App.allModalData = Object.entries(detail).map(([key, value]) => ({
+            key: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            value: value != null ? value : 'N/A'
+          }));
+          App.ui.renderPagedKpiDetails();
+          if (footer) {
+            footer.style.display = 'none';
+          }
+        } else {
+          App.allModalData = [{ key: '错误信息', value: detail.error || '未能获取详情。' }];
+          App.ui.renderPagedKpiDetails();
+          if (footer) {
+            footer.style.display = 'none';
+          }
+        }
+      })
+      .catch(error => {
+        App.allModalData = [{ key: '严重错误', value: error.message }];
+        App.ui.renderPagedKpiDetails();
+        if (footer) {
+            footer.style.display = 'none';
+        }
+      });
+  }
+</script>

@@ -1,0 +1,55 @@
+<script>
+  // file: frontend/state_api.js.html
+  Object.assign(App, {
+  _version: '1.3_split_init', // 更新版本号以供验证
+  _initialized: false,
+  FORCE_MOCK_IN_GAS: false,
+  
+  allModalData: [], 
+  currentPage: 1, 
+  itemsPerPage: 15, 
+  currentDetailType: null,
+  reportsHistoryCurrentPage: 1, 
+  reportsHistoryItemsPerPage: 15, 
+  reportsHistoryTotalPages: 1, 
+  reportsHistoryTotalRecords: 0,
+  insightsCurrentPage: 1, 
+  insightsItemsPerPage: 10, 
+  insightsTotalPages: 1, 
+  insightsTotalRecords: 0,
+  cachedData: {},
+
+  callApi: function(svc, mtd, args = []) {
+    if (window.IS_LOCAL_ENV === true || (window.IS_LOCAL_ENV === false && App.FORCE_MOCK_IN_GAS === true)) {
+      const logPrefix = window.IS_LOCAL_ENV ? '[LOCAL_MOCK]' : '[GAS_MOCK]';
+      console.log(`%c${logPrefix} Calling: ${svc}.${mtd}`, 'color: #8e44ad; font-weight: bold;', args);
+      return new Promise((resolve, reject) => {
+        const service = MOCK_API.getService(svc);
+        if (service && typeof service[mtd] === 'function') {
+          try {
+            Promise.resolve(service[mtd](args)).then(resolve).catch(reject);
+          } catch (error) {
+            reject(error);
+          }
+        } else {
+          reject(new Error(`Mock method '${mtd}' not found on service '${svc}'`));
+        }
+      });
+    }
+    return new Promise(async (resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(response => { try { resolve(JSON.parse(response)); } catch (e) { resolve(response); } })
+        .withFailureHandler(reject)
+        .callApi(svc, mtd, args);
+    });
+  },
+
+  ui: {},
+  pageInitializers: {}
+});
+
+let currentUserAuthInfo = null;
+
+console.log('state_api.js.html executed, App object extended.');
+
+</script>

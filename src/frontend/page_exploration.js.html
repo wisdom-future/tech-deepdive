@@ -1,0 +1,1059 @@
+<script>
+/**
+ * @file frontend/page_exploration.js.html
+ * @description Handles the Exploration page logic, including the multi-modal HUD, sub-tabs, and new exploration views.
+ * @version 2.2 (Implemented Galaxy Map Drill-Down)
+ */
+
+const SpacetimeRenderer = {
+  // Three.js 核心对象
+  scene: null,
+  camera: null,
+  renderer: null,
+  controls: null,
+
+  // UI 及交互对象
+  tooltip: null,
+  container: null,
+  initialized: false,
+  raycaster: new THREE.Raycaster(),
+  mouse: new THREE.Vector2(),
+  INTERSECTED: null, // 当前被鼠标悬停的对象
+
+  // 状态管理
+  _fullData: null, // 存储从API获取的完整星系数据
+  _currentView: 'galaxy', // 当前视图模式: 'galaxy' 或 'cluster'
+  _currentClusterId: null, // 当前聚焦的星团ID
+
+  /**
+   * 初始化渲染器。此方法只应执行一次。
+   * 它会设置场景、相机、渲染器、光照和事件监听。
+   */
+  init: function() {
+    if (this.initialized) return;
+
+    // 健壮性检查，确保所有必需的库都已加载
+    if (typeof THREE === 'undefined' || typeof THREE.OrbitControls === 'undefined' || typeof TWEEN === 'undefined') {
+        console.error("Required 3D libraries (THREE, OrbitControls, TWEEN) not loaded. Aborting SpacetimeRenderer.init().");
+        const container = document.getElementById('spacetime-container');
+        if(container) container.innerHTML = `<div class="flex items-center justify-center h-full text-red-500">加载3D库失败，请检查CDN链接并刷新页面。</div>`;
+        return;
+    }
+
+    this.container = document.getElementById('spacetime-container');
+    this.tooltip = document.getElementById('spacetime-tooltip');
+
+    if (!this.container || !this.tooltip) {
+        console.error("Spacetime container or tooltip not found! Cannot initialize SpacetimeRenderer.");
+        return;
+    }
+
+    // 1. 场景设置
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x0D1117);
+    this.scene.fog = new THREE.FogExp2(0x0D1117, 0.005); // 使用指数雾，效果更自然
+
+    // 2. 相机设置
+    this.camera = new THREE.PerspectiveCamera(75, this.container.clientWidth / this.container.clientHeight, 0.1, 1000);
+    this.camera.position.set(0, 50, 200); // 调整相机初始位置，提供更好的俯瞰视角
+
+    // 3. 渲染器设置
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.renderer.setPixelRatio(window.devicePixelRatio); // 适配高分屏
+    
+    // 清空容器，防止因热重载等原因重复添加canvas
+    while (this.container.firstChild && this.container.firstChild.tagName !== 'BUTTON' && this.container.firstChild.id !== 'spacetime-tooltip') {
+        this.container.removeChild(this.container.firstChild);
+    }
+    this.container.appendChild(this.renderer.domElement);
+
+    // 4. 控制器设置
+    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.05;
+    this.controls.minDistance = 50;
+    this.controls.maxDistance = 400;
+    this.controls.autoRotate = true; // 增加自动旋转效果
+    this.controls.autoRotateSpeed = 0.2;
+
+    // 5. 光照设置
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const pointLight = new THREE.PointLight(0xffffff, 0.8);
+    this.scene.add(pointLight);
+    this.camera.add(pointLight); // 让光源跟随相机，确保前方物体总能被照亮
+
+    // 6. 启动动画循环
+    const animate = () => {
+      requestAnimationFrame(animate);
+      TWEEN.update(); // 更新TWEEN动画状态
+      if (this.controls) this.controls.update();
+      this._handleIntersections();
+      this.renderer.render(this.scene, this.camera);
+    };
+    animate();
+
+    // 7. 绑定事件监听
+    window.addEventListener('resize', this.onWindowResize.bind(this));
+    this.container.addEventListener('mousemove', this._onMouseMove.bind(this));
+    this.container.addEventListener('click', this._onMouseClick.bind(this));
+    
+    document.getElementById('galaxy-back-btn')?.addEventListener('click', () => this.displayGalaxyView());
+
+    this.initialized = true;
+    console.log("SpacetimeRenderer initialized successfully.");
+  },
+
+    // --- 新增：创建星空背景的函数 ---
+  _createStarfield: function() {
+      const starGeometry = new THREE.BufferGeometry();
+      const starMaterial = new THREE.PointsMaterial({
+          color: 0xffffff,
+          size: 0.5,
+          transparent: true,
+          opacity: 0.6
+      });
+      const starVertices = [];
+      for (let i = 0; i < 10000; i++) {
+          const x = (Math.random() - 0.5) * 2000;
+          const y = (Math.random() - 0.5) * 2000;
+          const z = (Math.random() - 0.5) * 2000;
+          starVertices.push(x, y, z);
+      }
+      starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+      const stars = new THREE.Points(starGeometry, starMaterial);
+      this.scene.add(stars);
+  },
+
+  /**
+   * 公共入口：接收数据并显示默认的星系视图。
+   * @param {object} data - 包含 nodes 和 edges 的完整数据集。
+   */
+  display: function(data) {
+    this.init();
+    if (!this.initialized) return;
+    this._fullData = data;
+    this.displayGalaxyView();
+  },
+
+  /**
+   * 显示宏观的星系视图。
+   * 会渲染所有的“星团”和“粒子”，以及星团间的连线。
+   */
+  displayGalaxyView: function() {
+    this._currentView = 'galaxy';
+    this._currentClusterId = null;
+    document.getElementById('galaxy-back-btn').classList.add('hidden');
+    
+    const nodesToRender = this._fullData.nodes; // 显示所有节点
+    const edgesToRender = this._fullData.edges; // 显示所有边
+    this._renderScene(nodesToRender, edgesToRender);
+    
+    this._focusOn(new THREE.Vector3(0, 0, 150), new THREE.Vector3(0, 0, 0));
+  },
+
+  /**
+   * 显示聚焦的星团视图。
+   * 只会渲染指定星团内部的“粒子”。
+   * @param {string} clusterId - 要钻取进入的星团ID。
+   */
+  displayClusterView: function(clusterId) {
+    this._currentView = 'cluster';
+    this._currentClusterId = clusterId;
+    document.getElementById('galaxy-back-btn').classList.remove('hidden');
+    
+    const clusterNode = this._fullData.nodes.find(n => n.id === clusterId);
+    const particleNodes = this._fullData.nodes.filter(n => n.parentId === clusterId);
+    this._renderScene(particleNodes); // 只渲染该星团内部的粒子，不渲染边
+    
+    if (clusterNode) {
+      this._focusOn(new THREE.Vector3(clusterNode.x, clusterNode.y, clusterNode.z + 50), new THREE.Vector3(clusterNode.x, clusterNode.y, clusterNode.z));
+    }
+  },
+
+  /**
+   * 核心渲染函数，根据传入的节点和边数据更新场景。
+   * @param {Array} nodesToRender - 需要被渲染的节点数组。
+   * @param {Array} [edgesToRender=[]] - 需要被渲染的边数组。
+   */
+  _renderScene: function(nodesToRender, edgesToRender = []) {
+    // 1. 清理旧场景中的动态对象
+    const objectsToRemove = this.scene.children.filter(obj => obj.isMesh || obj.isSprite || obj.isLine);
+    objectsToRemove.forEach(obj => {
+        this.scene.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+    });
+
+    // 2. 处理无数据情况
+    if (!nodesToRender || nodesToRender.length === 0) {
+      const sprite = new SpriteText("此视图下暂无数据", 5, 'rgba(255,255,255,0.5)');
+      this.scene.add(sprite);
+      return;
+    }
+
+    // 3. 渲染节点
+    nodesToRender.forEach(node => {
+        // --- 视觉增强：用 Sprite 创建发光的光晕效果 ---
+        const haloTexture = new THREE.CanvasTexture(this._createHaloCanvas(node.color || '#ffffff'));
+        const haloMaterial = new THREE.SpriteMaterial({ map: haloTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+        const halo = new THREE.Sprite(haloMaterial);
+        halo.scale.set(node.size * 4, node.size * 4, 1); // 光晕比节点大
+        halo.position.set(node.x, node.y, node.z);
+        halo.userData.isDynamic = true;
+        this.scene.add(halo);
+
+        // 创建核心节点球体
+        const geometry = new THREE.SphereGeometry(node.size, 32, 32);
+        const material = new THREE.MeshPhongMaterial({
+            color: new THREE.Color(node.color || 0x007bff),
+            emissive: new THREE.Color(node.color || 0x007bff).multiplyScalar(0.3),
+            transparent: true, opacity: 0.9,
+            shininess: 80
+        });
+        const sphere = new THREE.Mesh(geometry, material);
+        sphere.position.set(node.x, node.y, node.z);
+        sphere.userData = { ...node, isDynamic: true };
+        this.scene.add(sphere);
+
+        // 创建文字标签
+        const textSprite = new SpriteText(node.name, 2, '#FFFFFF');
+        textSprite.position.set(node.x, node.y + node.size + 3, node.z);
+        textSprite.userData.isDynamic = true;
+        this.scene.add(textSprite);
+    });
+
+    // 4. 渲染边
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xADD8E6, transparent: true, opacity: 0.2 });
+    edgesToRender.forEach(edge => {
+        const sourceNode = this._fullData.nodes.find(n => n.id === edge.source);
+        const targetNode = this._fullData.nodes.find(n => n.id === edge.target);
+        if (sourceNode && targetNode) {
+            const path = new THREE.LineCurve3(new THREE.Vector3(sourceNode.x, sourceNode.y, sourceNode.z), new THREE.Vector3(targetNode.x, targetNode.y, targetNode.z));
+            const tubeGeometry = new THREE.TubeGeometry(path, 2, 0.1, 8, false);
+            const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0x4A5568, transparent: true, opacity: 0.3 });
+            const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
+            tube.userData.isDynamic = true;
+            this.scene.add(tube);
+        }
+    });
+  },
+
+  // --- 新增：创建光晕纹理的辅助函数 ---
+  _createHaloCanvas: function(color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const context = canvas.getContext('2d');
+      const gradient = context.createRadialGradient(canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, canvas.width / 2);
+      gradient.addColorStop(0, `rgba(${new THREE.Color(color).r*255}, ${new THREE.Color(color).g*255}, ${new THREE.Color(color).b*255}, 0.5)`);
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas;
+  },
+
+  /**
+   * 处理点击事件，根据点击对象的类型执行不同操作。
+   */
+  _onMouseClick: function() {
+    if (this.INTERSECTED) {
+      const nodeData = this.INTERSECTED.userData;
+      if (nodeData.type === 'cluster') {
+        this.displayClusterView(nodeData.id);
+      } else if (nodeData.type === 'particle') {
+        this._showParticleDetails(nodeData);
+      }
+    }
+  },
+
+  /**
+   * 显示粒子详情（当前为临时实现）。
+   * @param {object} particleData - 粒子节点的数据。
+   */
+  _showParticleDetails: function(particleData) {
+    uiUtils.showToast(`粒子: ${particleData.name}`, 'info');
+    if (particleData.url && particleData.url !== '#') {
+       setTimeout(()=> window.open(particleData.url, '_blank'), 300);
+    }
+  },
+  
+  /**
+   * 使用 TWEEN.js 实现平滑的镜头动画。
+   * @param {THREE.Vector3} newCameraPosition - 相机的新目标位置。
+   * @param {THREE.Vector3} newTargetPosition - 控制器的新目标中心点。
+   */
+  _focusOn: function(newCameraPosition, newTargetPosition) {
+    new TWEEN.Tween(this.camera.position)
+        .to(newCameraPosition, 1000)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+
+    new TWEEN.Tween(this.controls.target)
+        .to(newTargetPosition, 1000)
+        .easing(TWEEN.Easing.Cubic.Out)
+        .start();
+  },
+
+  /**
+   * 响应窗口大小变化。
+   */
+  onWindowResize: function() {
+    if (this.container && this.camera && this.renderer) {
+      this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    }
+  },
+
+  /**
+   * 更新鼠标在标准化设备坐标中的位置。
+   */
+  _onMouseMove: function(event) {
+    const rect = this.container.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.tooltip.style.left = (event.clientX + 15) + 'px';
+    this.tooltip.style.top = (event.clientY + 15) + 'px';
+  },
+
+  /**
+   * 处理鼠标悬停交互，高亮节点并显示/隐藏提示。
+   */
+  _handleIntersections: function() {
+    if (!this.scene || !this.camera || !this.raycaster) return;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.scene.children.filter(obj => obj.isMesh), true);
+
+    if (intersects.length > 0) {
+      const newIntersected = intersects[0].object;
+      if (this.INTERSECTED !== newIntersected) {
+        if (this.INTERSECTED) {
+          this.INTERSECTED.material.emissive.setHex(this.INTERSECTED.currentHex);
+          this.INTERSECTED.scale.set(1, 1, 1);
+        }
+        this.INTERSECTED = newIntersected;
+        this.INTERSECTED.currentHex = this.INTERSECTED.material.emissive.getHex();
+        this.INTERSECTED.material.emissive.setHex(0x555555);
+        this.INTERSECTED.scale.set(1.1, 1.1, 1.1);
+
+        this.tooltip.innerHTML = `<strong>${this.INTERSECTED.userData.name}</strong><br/>类型: ${this.INTERSECTED.userData.type}<br/>摘要: ${this.INTERSECTED.userData.summary.substring(0, Math.min(this.INTERSECTED.userData.summary.length, 50))}...`;
+        this.tooltip.style.display = 'block';
+        this.container.style.cursor = 'pointer';
+      }
+    } else {
+      if (this.INTERSECTED) {
+        this.INTERSECTED.material.emissive.setHex(this.INTERSECTED.currentHex);
+        this.INTERSECTED.scale.set(1, 1, 1);
+      }
+      this.INTERSECTED = null;
+      this.tooltip.style.display = 'none';
+      this.container.style.cursor = 'grab';
+    }
+  },
+};
+
+const ExplorationPage = (() => {
+  let _isInitialized = false;
+  let _currentInputMode = 'keyword';
+  let _currentActiveTabContentManager = null;
+
+  const INPUT_MODES = {
+    keyword: { icon: '🔍', label: '关键词', placeholder: '输入关键词，如 AI...', buttonText: '探索', inputType: 'text' },
+    url: { icon: '🔗', label: 'URL', placeholder: '粘贴一个网页链接 (URL)...', buttonText: '分析', inputType: 'url' },
+    file: { icon: '📄', label: '文件', placeholder: '点击选择或拖拽文件 (.txt, .pdf, .mp4)', buttonText: '上传', inputType: 'file' }
+  };
+
+  function init() {
+    if (_isInitialized) {
+        console.log("ExplorationPage already initialized.");
+        return;
+    }
+    
+    _createHud();
+    _bindHudEventListeners();
+    _switchInputMode('keyword');
+
+    _setupExploreTabs();
+
+    _isInitialized = true;
+    console.log("ExplorationPage initialized successfully.");
+
+    const initialTabLink = document.querySelector('.explore-tab-link[data-tab="galaxy"]');
+    if (initialTabLink) initialTabLink.click();
+  }
+
+    /**
+   * 创建并插入探索HUD的HTML结构。
+   * 它应该被附加到 `body` 元素，以确保其全局定位。
+   */
+  function _createHud() {
+    // --- 核心修正：如果HUD已存在，则不再创建 ---
+    if (document.getElementById('exploration-hud')) {
+        return;
+    }
+    
+    const hudContainer = document.createElement('div');
+    hudContainer.id = 'exploration-hud';
+    hudContainer.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-4xl p-2 rounded-2xl shadow-2xl z-50 backdrop-blur-md transition-all duration-300';
+    hudContainer.style.backgroundColor = 'rgba(23, 37, 60, 0.85)';
+    hudContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.1)';
+    
+    hudContainer.innerHTML = `
+      <div class="flex items-center gap-2">
+        <div id="hud-mode-switcher" class="relative">
+          <button id="hud-mode-btn" class="flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold bg-black/20 text-white hover:bg-black/40 transition-colors flex items-center">
+            <span id="hud-mode-icon" class="mr-2 text-lg"></span>
+            <span id="hud-mode-label" class="font-bold"></span> 
+            <i class="fa fa-chevron-down ml-2 text-xs opacity-70"></i>
+          </button>
+          <div id="hud-mode-dropdown" class="absolute bottom-full mb-2 w-48 bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg hidden overflow-hidden" style="animation: fadeInScale 0.2s ease-out;">
+            ${Object.keys(INPUT_MODES).map(key => `
+              <a href="#" class="hud-mode-option flex items-center gap-3 px-4 py-3 text-white hover:bg-blue-500/50 transition-colors" data-mode="${key}">
+                <span class="text-lg">${INPUT_MODES[key].icon}</span>
+                <span class="font-semibold">${INPUT_MODES[key].label}</span>
+              </a>
+            `).join('')}
+          </div>
+        </div>
+        <div id="hud-input-area" class="flex-grow relative"></div>
+        <div id="hud-action-area">
+          <button id="hud-action-btn" class="px-8 py-2.5 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"></button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(hudContainer);
+  }
+
+
+  function _bindHudEventListeners() {
+    const modeBtn = document.getElementById('hud-mode-btn');
+    const modeDropdown = document.getElementById('hud-mode-dropdown');
+    
+    modeBtn.addEventListener('click', () => modeDropdown.classList.toggle('hidden'));
+    document.addEventListener('click', (e) => {
+      if (!modeBtn.parentElement.contains(e.target)) {
+        modeDropdown.classList.add('hidden');
+      }
+    });
+
+    document.querySelectorAll('.hud-mode-option').forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.preventDefault();
+        _switchInputMode(option.dataset.mode);
+        modeDropdown.classList.add('hidden');
+      });
+    });
+
+    document.getElementById('hud-action-btn').addEventListener('click', _handleActionClick);
+  }
+
+  function _switchInputMode(mode) {
+    _currentInputMode = mode;
+    const config = INPUT_MODES[mode];
+    
+    document.getElementById('hud-mode-icon').textContent = config.icon;
+    document.getElementById('hud-mode-label').textContent = config.label;
+    document.getElementById('hud-action-btn').textContent = config.buttonText;
+
+    const inputArea = document.getElementById('hud-input-area');
+    inputArea.innerHTML = '';
+
+    if (config.inputType === 'text' || config.inputType === 'url') {
+      const input = document.createElement('input');
+      input.type = config.inputType;
+      input.id = 'hud-main-input';
+      input.className = 'w-full bg-gray-900/50 text-white border border-gray-600 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-primary focus:border-primary outline-none placeholder-gray-500';
+      input.placeholder = config.placeholder;
+      inputArea.appendChild(input);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') _handleActionClick();
+      });
+    } else if (config.inputType === 'file') {
+      const dropZone = document.createElement('div');
+      dropZone.id = 'hud-file-drop-zone';
+      dropZone.className = 'w-full bg-gray-900/50 text-gray-400 border-2 border-dashed border-gray-600 rounded-lg px-4 py-2.5 text-center cursor-pointer hover:border-primary hover:text-white transition-colors';
+      dropZone.innerHTML = `<span id="drop-zone-label">${config.placeholder}</span>`;
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.id = 'hud-file-input';
+      fileInput.className = 'hidden';
+      fileInput.accept = '.txt,.pdf,.mp4';
+      
+      dropZone.appendChild(fileInput);
+      inputArea.appendChild(dropZone);
+
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-primary', 'text-white'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-primary', 'text-white'));
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-primary', 'text-white');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          fileInput.files = e.dataTransfer.files;
+          document.getElementById('drop-zone-label').textContent = fileInput.files[0].name;
+        }
+      });
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+          document.getElementById('drop-zone-label').textContent = fileInput.files[0].name;
+        }
+      });
+    }
+  }
+
+  async function _handleActionClick() {
+    const actionBtn = document.getElementById('hud-action-btn');
+    actionBtn.disabled = true;
+    
+    if (!_currentActiveTabContentManager) {
+        uiUtils.showToast('页面未完全加载，请稍后再试。', 'error');
+        actionBtn.disabled = false;
+        return;
+    }
+
+    try {
+        switch (_currentInputMode) {
+          case 'keyword':
+            const keyword = document.getElementById('hud-main-input').value;
+            if (!keyword) { uiUtils.showToast('请输入关键词', 'error'); break; }
+            if (_currentActiveTabContentManager.handleKeywordSearch) {
+                await _currentActiveTabContentManager.handleKeywordSearch(keyword);
+            } else {
+                uiUtils.showToast('当前视图不支持关键词搜索。', 'info');
+            }
+            break;
+          case 'url':
+            const url = document.getElementById('hud-main-input').value;
+            if (!url || !url.startsWith('http')) { uiUtils.showToast('请输入有效的URL', 'error'); break; }
+            if (_currentActiveTabContentManager.handleUrlAnalysis) {
+                await _currentActiveTabContentManager.handleUrlAnalysis(url);
+            } else {
+                 uiUtils.showToast('当前视图不支持URL分析。', 'info');
+            }
+            break;
+          case 'file':
+            const fileInput = document.getElementById('hud-file-input');
+            if (!fileInput.files || fileInput.files.length === 0) { uiUtils.showToast('请选择一个文件', 'error'); break; }
+            if (_currentActiveTabContentManager.handleFileUpload) {
+                await _currentActiveTabContentManager.handleFileUpload(fileInput.files[0]);
+            } else {
+                 uiUtils.showToast('当前视图不支持文件上传。', 'info');
+            }
+            break;
+        }
+    } catch (e) {
+        console.error("HUD action failed:", e);
+        uiUtils.showToast(`操作失败: ${e.message}`, 'error');
+    } finally {
+        actionBtn.disabled = false;
+    }
+  }
+
+  function _setupExploreTabs() {
+    document.querySelectorAll('.explore-tab-link').forEach(tabLink => {
+      tabLink.addEventListener('click', async (event) => {
+        event.preventDefault();
+
+        const targetTabId = event.currentTarget.dataset.tab;
+
+        document.querySelectorAll('.explore-tab-link').forEach(link => {
+          link.classList.remove('active', 'border-primary', 'text-primary');
+          link.classList.add('border-transparent', 'text-gray-300');
+        });
+
+        document.querySelectorAll('.explore-tab-content').forEach(content => {
+          content.classList.add('hidden');
+        });
+
+        event.currentTarget.classList.add('active', 'border-primary', 'text-primary');
+        event.currentTarget.classList.remove('border-transparent', 'text-gray-300');
+
+        const contentToShow = document.getElementById(`explore-${targetTabId}-content`);
+        if (contentToShow) {
+          contentToShow.classList.remove('hidden');
+        }
+        console.log(`Switched to exploration sub-tab: ${targetTabId}`);
+
+        switch (targetTabId) {
+          case 'galaxy':
+            _currentActiveTabContentManager = await _initGalaxyContent();
+            break;
+          case 'feeds':
+            _currentActiveTabContentManager = await _initFeedsContent();
+            break;
+          case 'explorer':
+            _currentActiveTabContentManager = await _initExplorerContent();
+            break;
+          default:
+            console.error(`未知或未实现的探索子标签: ${targetTabId}`);
+            _currentActiveTabContentManager = null;
+        }
+      });
+    });
+  }
+
+  async function _initGalaxyContent() {
+    console.log("Initializing Galaxy Map Content...");
+    const container = document.getElementById('spacetime-container');
+    const loadingSpinner = container.querySelector('.absolute.inset-0');
+    if (loadingSpinner) loadingSpinner.style.display = 'flex';
+
+    try {
+      SpacetimeRenderer.init(); 
+      if (!SpacetimeRenderer.initialized) {
+          throw new Error("SpacetimeRenderer failed to initialize.");
+      }
+      const galaxyData = await App.callApi('ExplorationService', 'getGalaxyMapData');
+      SpacetimeRenderer.display(galaxyData);
+
+      return {
+        handleKeywordSearch: async (keyword) => {
+          uiUtils.showToast(`正在全域星图中搜索并高亮 "${keyword}"...`, 'info');
+          const filteredData = await App.callApi('ExplorationService', 'filterGalaxyMap', [keyword]);
+          SpacetimeRenderer.display(filteredData);
+        },
+        handleUrlAnalysis: async (url) => {
+             uiUtils.showToast(`全域星图开始分析URL: ${url}`, 'info');
+             const result = await App.callApi('ExplorationService', 'analyzeUrl', [url]);
+             const currentData = await App.callApi('ExplorationService', 'getGalaxyMapData');
+             const newParticle = {
+                id: `url_particle_${Date.now()}`,
+                name: result.finalRecord.title.substring(0, Math.min(result.finalRecord.title.length, 20)) + '...',
+                type: 'particle', category: 'URL Analysis', heat: 0.7, relevance: 0.7,
+                summary: result.finalRecord.ai_summary,
+                x: Math.random() * 100 - 50, y: Math.random() * 100 - 50, z: Math.random() * 100 - 50,
+                size: 4, color: '#FFD700', url: url
+             };
+             currentData.nodes.push(newParticle);
+             SpacetimeRenderer.display(currentData);
+             uiUtils.showToast('URL分析结果已添加到全域星图。', 'success');
+        },
+        handleFileUpload: async (file) => {
+            uiUtils.showToast(`全域星图开始上传文件: ${file.name}`, 'info');
+            const { uploadId } = await App.callApi('ExplorationService', 'startFileUpload', [file.name, file.type]);
+            const { jobId } = await App.callApi('ExplorationService', 'finishFileUpload', [uploadId]);
+            let analysisResult = null;
+            const pollInterval = setInterval(async () => {
+                const statusResult = await App.callApi('ExplorationService', 'getAnalysisStatus', [jobId]);
+                if (statusResult.status === 'Completed') {
+                    clearInterval(pollInterval);
+                    analysisResult = statusResult.result;
+                    const currentData = await App.callApi('ExplorationService', 'getGalaxyMapData');
+                    const newParticle = {
+                        id: `file_particle_${Date.now()}`,
+                        name: analysisResult.title.substring(0, Math.min(analysisResult.title.length, 20)) + '...',
+                        type: 'particle', category: 'File Analysis', heat: 0.75, relevance: 0.8,
+                        summary: analysisResult.ai_summary,
+                        x: Math.random() * 100 - 50, y: Math.random() * 100 - 50, z: Math.random() * 100 - 50,
+                        size: 4.5, color: '#DAA520', url: '#'
+                    };
+                    currentData.nodes.push(newParticle);
+                    SpacetimeRenderer.display(currentData);
+                    uiUtils.showToast('文件分析结果已添加到全域星图。', 'success');
+                } else if (statusResult.status === 'Failed' || statusResult.status === 'NotFound') {
+                    clearInterval(pollInterval);
+                    uiUtils.showToast('文件分析失败。', 'error');
+                }
+            }, 1500);
+        }
+      };
+    } catch (error) {
+      console.error("Failed to load Galaxy Map data:", error);
+      container.innerHTML = `<div class="flex items-center justify-center h-full text-red-500">加载全域星图失败: ${error.message}</div>`;
+      return null;
+    } finally {
+      if (loadingSpinner) loadingSpinner.style.display = 'none';
+    }
+  }
+
+  async function _initFeedsContent() {
+    console.log("Initializing Topic Feeds Content...");
+    const topicSelector = document.getElementById('feeds-topic-selector');
+    const feedsMatrixContainer = document.getElementById('feeds-matrix-container');
+
+    _bindMatrixContainerEvents(feedsMatrixContainer);
+
+    feedsMatrixContainer.innerHTML = `
+      <div class="col-span-full flex items-center justify-center h-full bg-gray-900/50 rounded-xl text-gray-400 text-lg border border-gray-700">
+        <i class="fa fa-spinner fa-spin mr-3"></i> 正在加载主题...
+      </div>
+    `;
+
+    try {
+      const popularTopics = await App.callApi('ExplorationService', 'getPopularTopics');
+      if (topicSelector.tomselect) {
+          topicSelector.tomselect.destroy();
+      }
+      const tomSelectInstance = new TomSelect(topicSelector, {
+        options: popularTopics,
+        valueField: 'id',
+        labelField: 'name',
+        searchField: 'name',
+        plugins: ['remove_button'],
+        maxItems: 4,
+        placeholder: '搜索或选择主题...'
+      });
+
+      tomSelectInstance.on('change', async (selectedTopicIds) => {
+        await _renderFeedsMatrix(selectedTopicIds);
+      });
+
+      const initialSelectedTopics = tomSelectInstance.getValue();
+      await _renderFeedsMatrix(initialSelectedTopics);
+
+      return {
+        handleKeywordSearch: async (keyword) => {
+          uiUtils.showToast(`正在信息流中搜索并高亮 "${keyword}"...`, 'info');
+          _filterFeedsClientSide(keyword);
+        },
+        handleUrlAnalysis: async (url) => {
+            uiUtils.showToast(`主题信息流不支持直接URL分析，请切换到全域星图。`, 'info');
+        },
+        handleFileUpload: async (file) => {
+            uiUtils.showToast(`主题信息流不支持直接文件上传，请切换到全域星图。`, 'info');
+        }
+      };
+    } catch (error) {
+      console.error("Failed to load Topic Feeds data:", error);
+      feedsMatrixContainer.innerHTML = `<div class="col-span-full text-red-500 text-center py-16">加载主题信息流失败: ${error.message}</div>`;
+      return null;
+    }
+  }
+
+  function _bindMatrixContainerEvents(container) {
+    if (!container) return;
+    // 确保只绑定一次，防止重复监听
+    if (container.dataset.eventsBound) return;
+
+    container.addEventListener('click', async (e) => {
+        // 从被点击的元素开始，向上查找最近的 .feed-item-card
+        const card = e.target.closest('.feed-item-card');
+        
+        if (card) {
+            e.preventDefault(); // 如果卡片是<a>标签，阻止其默认跳转行为
+            
+            // 读取 data-feed-item-id 属性。HTML中的 kebab-case 会被自动转换为 camelCase
+            const feedId = card.dataset.feedItemId; 
+            
+            if (!feedId) {
+                console.error("Card clicked, but data-feed-item-id attribute is missing or empty.", card);
+                return;
+            }
+
+            console.log(`Card clicked, feedId: ${feedId}`); // 调试日志
+
+            try {
+                uiUtils.showToast('正在加载详情...', 'info');
+                const details = await App.callApi('ExplorationService', 'getFeedItemDetails', [feedId]);
+                
+                if (details && !details.error) {
+                    // 调用通用的侧边栏服务来显示详情
+                    uiUtils.showDetailsSidePanel(details.title, details, details.sourceUrl);
+                } else {
+                    throw new Error(details.error || `未找到 ID 为 ${feedId} 的信息`);
+                }
+            } catch (error) {
+                console.error("Failed to get feed item details:", error);
+                uiUtils.showToast(`加载详情失败: ${error.message}`, 'error');
+            }
+        }
+    });
+
+    // 为容器添加一个标记，表示事件已经绑定
+    container.dataset.eventsBound = 'true';
+  }
+
+  async function _renderFeedsMatrix(selectedTopicIds) {
+    const feedsMatrixContainer = document.getElementById('feeds-matrix-container');
+    if (!feedsMatrixContainer) return;
+
+    // 清空现有内容并显示加载动画
+    feedsMatrixContainer.innerHTML = `
+      <div class="col-span-full flex items-center justify-center h-full bg-gray-900/50 rounded-xl text-gray-400 text-lg border border-gray-700">
+        <i class="fa fa-spinner fa-spin mr-3"></i> 正在加载信息流...
+      </div>
+    `;
+
+    if (!selectedTopicIds || selectedTopicIds.length === 0) {
+        feedsMatrixContainer.innerHTML = `
+          <div class="col-span-full flex items-center justify-center h-full bg-gray-900/50 rounded-xl text-gray-400 text-lg border border-gray-700">
+            👋 请从左侧选择主题以加载信息流。
+          </div>
+        `;
+        return;
+    }
+
+    try {
+      const { feeds } = await App.callApi('ExplorationService', 'getFeedDataByTopics', [selectedTopicIds]); 
+
+      feedsMatrixContainer.innerHTML = ''; // 准备渲染真实内容前，再次清空
+      
+      let gridColsClass = 'lg:grid-cols-1';
+      if (selectedTopicIds.length === 2) gridColsClass = 'lg:grid-cols-2';
+      else if (selectedTopicIds.length === 3) gridColsClass = 'lg:grid-cols-3';
+      else if (selectedTopicIds.length >= 4) gridColsClass = 'lg:grid-cols-4';
+      feedsMatrixContainer.className = `lg:flex-1 grid gap-6 min-h-[400px] grid-cols-1 md:grid-cols-2 ${gridColsClass}`; 
+
+      selectedTopicIds.forEach(topicId => {
+        const topicName = document.querySelector(`#feeds-topic-selector option[value="${topicId}"]`)?.textContent || topicId;
+        const feedItems = feeds[topicId] || [];
+        const feedColumn = document.createElement('div');
+        
+        feedColumn.className = 'flex flex-col bg-gray-800/50 rounded-xl shadow-lg border border-gray-700 p-4';
+        feedColumn.innerHTML = `
+          <h4 class="font-bold text-lg text-primary mb-3 flex-shrink-0">${topicName}</h4>
+          <div class="flex-1 overflow-y-auto space-y-3 pr-2 -mr-2">
+            ${feedItems.length > 0 ? feedItems.map(item => `
+              <div class="bg-gray-900/50 p-3 rounded-lg border border-transparent hover:border-blue-700 cursor-pointer transition-colors duration-300 feed-item-card" 
+                   data-feed-item-id="${item.id}">
+                <p class="font-semibold text-gray-200">${item.title}</p>
+                <p class="text-sm text-gray-400 mt-1 line-clamp-2">${item.summary}</p>
+                <div class="flex justify-between items-center text-xs text-gray-500 mt-2">
+                  <span>${item.sourceType}</span>
+                  <span>${formatDateForDisplay(item.publicationDate)}</span>
+                </div>
+              </div>
+            `).join('') : '<p class="text-gray-500 text-sm text-center py-8">暂无相关信息。</p>'}
+          </div>
+        `;
+        feedsMatrixContainer.appendChild(feedColumn);
+      });
+
+    } catch (error) {
+      console.error("Failed to render Feeds Matrix:", error);
+      feedsMatrixContainer.innerHTML = `<div class="col-span-full text-red-500 text-center py-16">加载信息流失败: ${error.message}</div>`;
+    }
+  }
+
+  function _filterFeedsClientSide(keyword) {
+    const normalizedKeyword = keyword.toLowerCase();
+    let foundMatch = false;
+    document.querySelectorAll('#feeds-matrix-container .feed-item-card').forEach(itemEl => {
+        const title = itemEl.querySelector('p:first-child').textContent;
+        const summary = itemEl.querySelector('p:nth-child(2)').textContent;
+        if (title.toLowerCase().includes(normalizedKeyword) || summary.toLowerCase().includes(normalizedKeyword)) {
+            itemEl.classList.add('border-blue-500', 'ring-2', 'ring-blue-500');
+            foundMatch = true;
+        } else {
+            itemEl.classList.remove('border-blue-500', 'ring-2', 'ring-blue-500');
+        }
+    });
+    if (!foundMatch && normalizedKeyword) {
+        uiUtils.showToast(`未在当前信息流中找到与 "${keyword}" 相关的项。`, 'info');
+    }
+  }
+
+  async function _initExplorerContent() {
+    console.log("Initializing Entity Explorer Content...");
+    const entityGrid = document.getElementById('explorer-entity-grid');
+    const applyFilterBtn = document.getElementById('explorer-apply-filter-btn');
+    const resetFilterBtn = document.getElementById('explorer-reset-filter-btn');
+    const entityTypeSelect = document.getElementById('explorer-entity-type');
+    const industryInput = document.getElementById('explorer-industry');
+    const statusSelect = document.getElementById('explorer-status');
+    const locationInput = document.getElementById('explorer-location');
+
+    if (entityGrid && !entityGrid.dataset.eventsBound) {
+      entityGrid.addEventListener('click', async (e) => {
+          const card = e.target.closest('.interactive-card');
+          if (card) {
+              const entityId = card.dataset.entityId;
+              if (!entityId) return;
+
+              try {
+                  const details = await App.callApi('DashboardService', 'getSidePanelData', [entityId]);
+                  // 复用 Dashboard 的侧边栏来显示详情
+                  uiUtils.showDetailsSidePanel(details.entity_name, details, details.source_url);
+              } catch (error) {
+                  uiUtils.showToast(`加载实体详情失败: ${error.message}`, 'error');
+              }
+          }
+      });
+      entityGrid.dataset.eventsBound = 'true';
+    }
+
+    try {
+      const filterOptions = await App.callApi('ExplorationService', 'getEntityFilterOptions');
+      entityTypeSelect.innerHTML = '<option value="">所有类型</option>';
+      filterOptions.entityTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        entityTypeSelect.appendChild(option);
+      });
+    } catch (error) {
+      console.error("Failed to load entity filter options:", error);
+    }
+
+    applyFilterBtn.onclick = async () => {
+      await _applyEntityFilters();
+    };
+    resetFilterBtn.onclick = async () => {
+      entityTypeSelect.value = '';
+      industryInput.value = '';
+      statusSelect.value = '';
+      locationInput.value = '';
+      await _applyEntityFilters();
+    };
+
+    await _applyEntityFilters();
+
+    return {
+      handleKeywordSearch: async (keyword) => {
+        industryInput.value = keyword;
+        await _applyEntityFilters();
+        uiUtils.showToast(`已在实体浏览器中搜索 "${keyword}"`, 'info');
+      },
+      handleUrlAnalysis: async (url) => {
+            uiUtils.showToast(`实体浏览器不支持直接URL分析，请切换到全域星图。`, 'info');
+        },
+      handleFileUpload: async (file) => {
+            uiUtils.showToast(`实体浏览器不支持直接文件上传，请切换到全域星图。`, 'info');
+        }
+    };
+  }
+
+  async function _applyEntityFilters() {
+    const entityGrid = document.getElementById('explorer-entity-grid');
+    const entityType = document.getElementById('explorer-entity-type').value;
+    const industry = document.getElementById('explorer-industry').value;
+    const status = document.getElementById('explorer-status').value;
+    const location = document.getElementById('explorer-location').value;
+    const pagination = { page: 1, limit: 9 };
+
+    entityGrid.innerHTML = `
+      <div class="col-span-full text-center py-16 text-gray-400">
+        <i class="fa fa-spinner fa-spin text-5xl mb-4"></i>
+        <p class="text-lg">正在加载实体...</p>
+      </div>
+    `;
+
+    try {
+      const filters = { type: entityType, industry: industry, status: status, location: location };
+      const { records, totalRecords } = await App.callApi('ExplorationService', 'getEntities', [filters, pagination, { field: 'influenceScore', order: 'desc' }]);
+
+      entityGrid.innerHTML = '';
+
+      if (records.length === 0) {
+        entityGrid.innerHTML = `
+          <div class="col-span-full text-center py-16 text-gray-400">
+            <i class="fa fa-frown-o text-5xl mb-4"></i>
+            <p class="text-lg">没有找到符合条件的实体。</p>
+          </div>
+        `;
+        return;
+      }
+
+      records.forEach(entity => {
+        const card = document.createElement('div');
+        // **** 视觉重构应用点 ****
+        card.className = 'interactive-card panel p-4 flex flex-col cursor-pointer'; // 使用 panel 和 interactive-card
+        card.dataset.entityId = entity.id; // 添加 data-entity-id
+
+        card.innerHTML = `
+          <div class="flex-grow">
+            <h4 class="font-bold text-lg text-primary mb-2">${entity.name}</h4>
+            <p class="text-sm text-text-medium mb-3 line-clamp-2 min-h-[40px]">${entity.summary}</p>
+            <div class="flex flex-wrap gap-1.5 text-xs mt-auto">
+              <span class="inline-flex items-center bg-gray-700 text-gray-300 px-2 py-1 rounded-full font-medium">
+                <i class="fa fa-cube mr-1.5"></i>${entity.type}
+              </span>
+              <span class="inline-flex items-center bg-gray-700 text-gray-300 px-2 py-1 rounded-full font-medium">
+                <i class="fa fa-industry mr-1.5"></i>${entity.industry.split(',')[0].trim()}
+              </span>
+              <span class="badge ${entity.status === 'active' ? 'badge-success' : 'badge-inactive'}">${entity.status === 'active' ? '活跃' : '非活跃'}</span>
+            </div>
+          </div>
+          <div class="w-full h-12 mt-4 flex-shrink-0" id="micro-chart-${entity.id}"></div>
+        `;
+        entityGrid.appendChild(card);
+
+        if (entity.microChartData && entity.microChartData.length > 0) {
+          const chartDom = document.getElementById(`micro-chart-${entity.id}`);
+          if (chartDom && !echarts.getInstanceByDom(chartDom)) {
+              const microChart = echarts.init(chartDom);
+              const option = {
+                grid: { top: 5, left: 5, right: 5, bottom: 5, containLabel: true },
+                xAxis: { type: 'category', show: false },
+                yAxis: { type: 'value', show: false },
+                series: [{
+                  data: entity.microChartData,
+                  type: 'line',
+                  smooth: true,
+                  showSymbol: false,
+                  lineStyle: { width: 2, color: '#007bff' },
+                  areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                      offset: 0, color: 'rgba(0, 123, 255, 0.4)'
+                    }, {
+                      offset: 1, color: 'rgba(0, 123, 255, 0)'
+                    }])
+                  }
+                }],
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }
+              };
+              microChart.setOption(option);
+          }
+        }
+      });
+
+      _explorerPaginationLogic(totalRecords, pagination.limit, pagination.page);
+
+    } catch (error) {
+      console.error("Failed to apply entity filters:", error);
+      entityGrid.innerHTML = `<div class="col-span-full text-red-500 text-center py-16">加载实体失败: ${error.message}</div>`;
+    }
+  }
+
+  function _explorerPaginationLogic(totalRecords, itemsPerPage, currentPage) {
+      const paginationContainer = document.getElementById('explorer-pagination');
+      if (!paginationContainer) return;
+      paginationContainer.innerHTML = '';
+      const totalPages = Math.ceil(totalRecords / itemsPerPage);
+
+      if (totalPages <= 1) return;
+
+      const prevBtn = document.createElement('button');
+      prevBtn.className = 'px-3 py-1 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 disabled:opacity-50';
+      prevBtn.textContent = '上一页';
+      prevBtn.disabled = currentPage === 1;
+      prevBtn.onclick = () => { uiUtils.showToast('分页功能待实现', 'info'); };
+
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'px-3 py-1 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 disabled:opacity-50';
+      nextBtn.textContent = '下一页';
+      nextBtn.disabled = currentPage >= totalPages;
+      nextBtn.onclick = () => { uiUtils.showToast('分页功能待实现', 'info'); };
+
+      const infoSpan = document.createElement('span');
+      infoSpan.className = 'text-gray-400 text-sm';
+      infoSpan.textContent = `第 ${currentPage} / ${totalPages} 页 (共 ${totalRecords} 条)`;
+
+      paginationContainer.appendChild(prevBtn);
+      paginationContainer.appendChild(infoSpan);
+      paginationContainer.appendChild(nextBtn);
+  }
+
+  function formatDateForDisplay(dateString) {
+    if (!dateString) return 'N/A';
+    try {
+      const dateObj = new Date(dateString);
+      if (isNaN(dateObj.getTime())) return 'Invalid Date';
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (e) {
+      console.error("Error formatting date:", dateString, e);
+      return 'Format Error';
+    }
+  }
+
+  return {
+    init: init
+  };
+})();
+</script>

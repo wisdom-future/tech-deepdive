@@ -1,0 +1,219 @@
+<script>
+/**
+ * @file frontend/page_system.js.html
+ * @description Handles the System page, with robust event delegation and auth handling.
+ * @version 2.5 (Final Architecture Fix)
+ */
+
+const SystemPage = (() => {
+    let _isInitialized = false;
+
+    // 将 CONFIG_CARDS 定义在模块内部，作为唯一的、真实的数据来源
+    const CONFIG_CARDS = [
+        { key: 'technology_registry', title: '技术领域注册表', icon: 'fa-microchip', color: 'text-blue-400', kpiKey: 'techCount', detailTpl: (s) => `最近更新: <span class="font-semibold text-text-light">${s.latestTech || 'N/A'}</span>` },
+        { key: 'competitor_registry', title: '标杆企业注册表', icon: 'fa-building', color: 'text-green-400', kpiKey: 'companyCount', detailTpl: (s) => `<span class="font-semibold text-warning">${s.highPriorityCompanies || 0}</span> 家需高度关注` },
+        { key: 'conference_registry', title: '产业顶会注册表', icon: 'fa-university', color: 'text-purple-400', kpiKey: 'conferenceCount', detailTpl: (s) => `即将举行: <span class="font-semibold text-text-light">${s.upcomingConference || 'N/A'}</span>` },
+        { key: 'external_data_sources', title: '外部数据源管理', icon: 'fa-link', color: 'text-orange-400', kpiKey: 'dataSourceCount', detailTpl: (s) => `<span class="font-semibold ${s.errorDataSources > 0 ? 'text-error' : 'text-success'}">${s.errorDataSources || 0}</span> 个源异常` },
+        { key: 'user_accounts', title: '用户与角色管理', icon: 'fa-users', color: 'text-red-400', kpiKey: 'userCount', detailTpl: (s) => `<span class="font-semibold text-text-light">${s.adminCount || 0}</span> 位管理员` },
+        { key: 'automation_tasks', title: '自动化任务中心', icon: 'fa-cogs', color: 'text-cyan-400', kpiKey: 'taskCount', detailTpl: (s) => `<span class="font-semibold ${s.failedTasks > 0 ? 'text-error' : 'text-success'}">${s.failedTasks || 0}</span> 个任务失败` },
+        { key: 'report_templates', title: '报告模板管理', icon: 'fa-file-text-o', color: 'text-gray-400', kpiKey: 'templateCount', detailTpl: (s) => `最常用: <span class="font-semibold text-text-light">${s.popularTemplate || 'N/A'}</span>` },
+    ];
+    
+    async function init() {
+        if (!_isInitialized) {
+            _bindEventListeners();
+            _isInitialized = true;
+        }
+        await _renderCards();
+    }
+
+    async function _renderCards() {
+        const gridContainer = document.getElementById('system-cards-grid');
+        if (!gridContainer) return;
+
+        const renderCardHtml = (card) => `
+            <div class="interactive-panel p-5 flex flex-col min-h-[160px] cursor-pointer" data-key="${card.key}" data-title="${card.title}">
+                <div class="flex items-start justify-between mb-4">
+                    <i class="fa ${card.icon} fa-2x ${card.color} p-1"></i>
+                    <div class="text-right">
+                        <p class="text-4xl font-semibold text-text-light" id="kpi-${card.key}">...</p>
+                        <p class="text-sm text-text-medium -mt-1" id="kpi-unit-${card.key}">...</p>
+                    </div>
+                </div>
+                <div class="mt-auto">
+                    <h4 class="font-bold text-base text-text-light truncate">${card.title}</h4>
+                    <p class="text-sm text-text-medium" id="detail-${card.key}">...</p>
+                </div>
+            </div>
+        `;
+
+        gridContainer.className = 'space-y-6';
+        gridContainer.innerHTML = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                ${CONFIG_CARDS.slice(0, 3).map(renderCardHtml).join('')}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                ${CONFIG_CARDS.slice(3).map(renderCardHtml).join('')}
+            </div>
+        `;
+
+        gridContainer.querySelectorAll('.interactive-panel').forEach(card => {
+            card.addEventListener('click', () => {
+                _openManagementModal(card.dataset.key, card.dataset.title);
+            });
+        });
+
+        try {
+            const snapshot = await App.callApi('SystemAdminService', 'getSystemSnapshot');
+            const kpiUnits = {
+                techCount: '项技术', companyCount: '家企业', conferenceCount: '场会议',
+                dataSourceCount: '个数据源', userCount: '个用户', taskCount: '个任务',
+                templateCount: '个模板'
+            };
+            CONFIG_CARDS.forEach(card => {
+                const kpiEl = document.getElementById(`kpi-${card.key}`);
+                const unitEl = document.getElementById(`kpi-unit-${card.key}`);
+                const detailEl = document.getElementById(`detail-${card.key}`);
+                if (kpiEl) kpiEl.textContent = `${snapshot[card.kpiKey] || 0}`;
+                if (unitEl) unitEl.textContent = kpiUnits[card.kpiKey] || '';
+                if (detailEl && card.detailTpl) detailEl.innerHTML = card.detailTpl(snapshot);
+            });
+        } catch (e) {
+            console.error("加载系统快照失败:", e);
+        }
+    }
+
+    function _bindEventListeners() {
+        if (_isInitialized) return; 
+        document.getElementById('close-management-modal')?.addEventListener('click', _closeManagementModal);
+        document.getElementById('management-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'management-modal') _closeManagementModal();
+        });
+        _isInitialized = true;
+    }
+
+    async function _openManagementModal(registryKey, title) {
+        const modal = document.getElementById('management-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content-area');
+        if (!modal || !modalTitle || !modalContent) return;
+
+        modalTitle.textContent = `管理: ${title}`;
+        modalContent.innerHTML = `<div class="text-center py-16"><i class="fa fa-spinner fa-spin text-3xl"></i></div>`;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        await _renderRegistryTable(registryKey, modalContent);
+    }
+    
+    function _closeManagementModal() {
+        document.getElementById('management-modal')?.classList.add('hidden');
+    }
+
+    async function _renderRegistryTable(registryKey, container) {
+        try {
+            const { records } = await App.callApi('SystemAdminService', 'getRegistry', [registryKey, {}]);
+            if (!records) throw new Error('无效的注册表数据');
+
+            const columns = records.length > 0 ? Object.keys(records[0]).filter(c => c !== 'id') : [];
+            const isAdmin = currentUserAuthInfo?.role_id === 'admin'; // <--- 移除 'App.'
+
+            container.innerHTML = `
+                <div class="flex justify-end mb-4">
+                    ${isAdmin ? `<button class="btn-primary" id="add-new-item-btn"><i class="fa fa-plus mr-2"></i>新增条目</button>` : ''}
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-text-medium">
+                        <thead class="text-xs text-text-dark uppercase bg-bg-soft-dark">
+                            <tr>
+                                ${columns.map(col => `<th class="px-6 py-3">${col.replace(/_/g, ' ')}</th>`).join('')}
+                                ${isAdmin ? `<th class="px-6 py-3 text-right">操作</th>` : ''}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${records.map(item => `
+                                <tr class="bg-bg-dark border-b border-border-dark hover:bg-bg-soft-dark">
+                                    ${columns.map(col => {
+                                        const value = item[col];
+                                        let cellContent = value;
+                                        if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                                            cellContent = `<a href="${value}" target="_blank" class="text-primary hover:underline flex items-center"><span>${value.length > 30 ? value.substring(0, 30) + '...' : value}</span><i class="fa fa-external-link ml-2 text-xs"></i></a>`;
+                                        }
+                                        return `<td class="px-6 py-4">${cellContent}</td>`;
+                                    }).join('')}
+                                    ${isAdmin ? `
+                                    <td class="px-6 py-4 text-right">
+                                        <div style="white-space: nowrap;">
+                                            <a href="#" class="font-medium text-primary hover:underline edit-item-btn" data-id="${item.id}">编辑</a>
+                                            <a href="#" class="font-medium text-error hover:underline ml-4 delete-item-btn" data-id="${item.id}">删除</a>
+                                        </div>
+                                    </td>` : ''}
+                                </tr>
+                            `).join('')}
+                            ${records.length === 0 ? `<tr><td colspan="${columns.length + (isAdmin ? 1:0)}" class="text-center py-8">此注册表暂无数据</td></tr>` : ''}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            if (isAdmin) {
+                container.querySelector('#add-new-item-btn')?.addEventListener('click', () => _renderEditForm(registryKey, null, container));
+                container.querySelectorAll('.edit-item-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const item = await App.callApi('SystemAdminService', 'getRegistryItem', [registryKey, e.target.dataset.id]);
+                    _renderEditForm(registryKey, item, container);
+                }));
+                container.querySelectorAll('.delete-item-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    if (confirm('确定要删除此条目吗？')) {
+                        await App.callApi('SystemAdminService', 'deleteRegistryItem', [registryKey, e.target.dataset.id]);
+                        uiUtils.showToast('删除成功！', 'success');
+                        await _renderRegistryTable(registryKey, container);
+                    }
+                }));
+            }
+        } catch (e) {
+            container.innerHTML = `<div class="p-6 text-center text-error">加载注册表失败: ${e.message}</div>`;
+        }
+    }
+
+    function _renderEditForm(registryKey, item, container) {
+        const isNew = item === null;
+        const currentItem = item || {};
+        const columns = Object.keys(MOCK_DATA.system[registryKey]?.[0] || {}).filter(c => c !== 'id');
+
+        container.innerHTML = `
+            <h4 class="text-lg font-bold mb-6">${isNew ? '新增' : '编辑'}条目</h4>
+            <form id="registry-edit-form" class="space-y-4">
+                ${columns.map(col => `
+                    <div>
+                        <label for="form-input-${col}" class="block mb-1 text-sm font-medium text-text-medium">${col.replace(/_/g, ' ')}</label>
+                        <input type="text" id="form-input-${col}" name="${col}" value="${currentItem[col] || ''}" class="input-dark">
+                    </div>
+                `).join('')}
+                <div class="flex justify-end gap-4 pt-6">
+                    <button type="button" class="btn-secondary" id="cancel-edit-btn">取消</button>
+                    <button type="submit" class="btn-primary">保存更改</button>
+                </div>
+            </form>
+        `;
+
+        container.querySelector('#cancel-edit-btn').addEventListener('click', () => _renderRegistryTable(registryKey, container));
+        
+        container.querySelector('#registry-edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const updatedItem = { ...currentItem };
+            for (let [key, value] of formData.entries()) {
+                updatedItem[key] = value;
+            }
+            
+            await App.callApi('SystemAdminService', 'saveRegistryItem', [registryKey, updatedItem]);
+            uiUtils.showToast('保存成功！', 'success');
+            await _renderRegistryTable(registryKey, container);
+        });
+    }
+
+    return { init };
+})();
+</script>
